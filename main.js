@@ -245,19 +245,17 @@ function startLocalServer() {
       return json({ ok: true, agent: true, tier: userTier, version: '1.0' });
     }
 
-    // ── Auth: Device-Token ODER Browser-User-JWT akzeptieren ─────────────
-    // userToken  = Electron-Device-Token (für App-interne Calls)
-    // user JWT   = Browser-Login-Token   (type:'user', von /api/users/login)
+    // ── Auth: nur Browser-User-JWT (type:'user') erlaubt ─────────────────
+    // Der lokale Spiegel-Server wird ausschließlich vom Browser-Frontend
+    // aufgerufen. Der Electron-Prozess selbst spricht direkt mit Vercel.
+    // Device-Token (userToken) hat kein 'id'-Feld → hier nicht verwendet.
     const tok = (req.headers.authorization || '').replace('Bearer ', '');
     if (!tok) return json({ error: 'Unauthorized' }, 401);
 
     const payload = decodeJWT(tok);
-    const isDeviceToken = tok === userToken;
-    const isUserToken   = payload?.type === 'user' && !!payload?.id;
-    if (!isDeviceToken && !isUserToken) return json({ error: 'Unauthorized' }, 401);
+    if (payload?.type !== 'user' || !payload?.id) return json({ error: 'Unauthorized' }, 401);
 
     const userId = payload?.id;
-    if (!userId) return json({ error: 'Invalid token' }, 401);
 
     // ── GET /api/users/device-status ─────────────────────────────────────
     if (pathname === '/api/users/device-status' && req.method === 'GET') {
