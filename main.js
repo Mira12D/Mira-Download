@@ -365,6 +365,78 @@ function startLocalServer() {
       return json({ success: true, task_id: task.id, direct: true });
     }
 
+    // ── GET /api/artifacts ───────────────────────────────────────────────
+    if (pathname === '/api/artifacts' && req.method === 'GET') {
+      const rows = await directSupabase('GET', `/artifacts?user_id=eq.${userId}&select=id,name,type,rows,pages,preview_data,created_at,updated_at&order=updated_at.desc&limit=50`);
+      if (rows) return json({ success: true, artifacts: rows });
+      try {
+        const r = await fetch(`${API}/api/artifacts`, { headers: { 'Authorization': `Bearer ${tok}` } });
+        return json(await r.json());
+      } catch(e) { return json({ success: true, artifacts: [] }); }
+    }
+
+    // ── /api/artifacts/:id ───────────────────────────────────────────────
+    const artifactMatch = pathname.match(/^\/api\/artifacts\/([^/]+)$/);
+    if (artifactMatch) {
+      const aId = artifactMatch[1];
+
+      if (req.method === 'GET') {
+        const rows = await directSupabase('GET', `/artifacts?id=eq.${aId}&user_id=eq.${userId}&limit=1`);
+        if (rows?.[0]) return json({ success: true, artifact: rows[0] });
+        try {
+          const r = await fetch(`${API}/api/artifacts/${aId}`, { headers: { 'Authorization': `Bearer ${tok}` } });
+          return json(await r.json());
+        } catch(e) { return json({ success: false, error: 'Not found' }, 404); }
+      }
+
+      if (req.method === 'POST') {
+        const row = await directSupabase('POST', `/artifacts`, {
+          user_id: userId, ...body,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+        if (row?.[0]) return json({ success: true, artifact: row[0] });
+      }
+
+      if (req.method === 'PATCH') {
+        const row = await directSupabase('PATCH', `/artifacts?id=eq.${aId}&user_id=eq.${userId}`, {
+          ...body, updated_at: new Date().toISOString()
+        });
+        if (row?.[0]) return json({ success: true, artifact: row[0] });
+        try {
+          const r = await fetch(`${API}/api/artifacts/${aId}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          return json(await r.json());
+        } catch(e) { return json({ success: false, error: e.message }, 500); }
+      }
+
+      if (req.method === 'DELETE') {
+        await directSupabase('DELETE', `/artifacts?id=eq.${aId}&user_id=eq.${userId}`);
+        return json({ success: true });
+      }
+    }
+
+    // POST /api/artifacts (ohne :id) ─────────────────────────────────────
+    if (pathname === '/api/artifacts' && req.method === 'POST') {
+      const row = await directSupabase('POST', `/artifacts`, {
+        user_id: userId, ...body,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+      if (row?.[0]) return json({ success: true, artifact: row[0] });
+      try {
+        const r = await fetch(`${API}/api/artifacts`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        return json(await r.json());
+      } catch(e) { return json({ success: false, error: e.message }, 500); }
+    }
+
     // ── Alles andere → Proxy zu Vercel ────────────────────────────────────
     try {
       const proxyRes = await fetch(`${API}${pathname}${url.search}`, {
