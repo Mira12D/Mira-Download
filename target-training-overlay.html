@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>MIRA Klick-Kalibrierung</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #080a10;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      overflow: hidden;
+      width: 100vw;
+      height: 100vh;
+      -webkit-app-region: no-drag;
+      user-select: none;
+    }
+
+    /* Close button */
+    .close-btn {
+      position: fixed;
+      top: 16px; left: 16px;
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.11);
+      color: #e0e0e0;
+      font-size: 16px;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 200;
+      transition: background 0.2s;
+    }
+    .close-btn:hover { background: rgba(255,60,60,0.28); }
+
+    /* HUD top-right */
+    .hud {
+      position: fixed;
+      top: 20px; right: 24px;
+      text-align: right;
+      z-index: 200;
+      pointer-events: none;
+    }
+    .hud-round {
+      font-size: 12px;
+      color: rgba(255,255,255,0.45);
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+    }
+    .hud-round span { color: #34c759; font-weight: 700; }
+    .hud-offset {
+      font-size: 12px;
+      color: rgba(255,255,255,0.3);
+      margin-top: 4px;
+      font-variant-numeric: tabular-nums;
+      letter-spacing: 0.5px;
+    }
+
+    /* Full-screen canvas */
+    #canvas {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100vw; height: 100vh;
+      pointer-events: none;
+    }
+
+    /* Start screen */
+    #start-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 100;
+    }
+    .start-icon {
+      width: 64px; height: 64px;
+      margin-bottom: 20px;
+      opacity: 0.7;
+    }
+    .start-title {
+      font-size: 26px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+      letter-spacing: -0.5px;
+    }
+    .start-sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 36px;
+      text-align: center;
+      max-width: 320px;
+      line-height: 1.6;
+    }
+    .start-btn {
+      background: #34c759;
+      color: #000;
+      border: none;
+      padding: 14px 44px;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: -0.2px;
+      transition: opacity 0.15s;
+    }
+    .start-btn:hover { opacity: 0.82; }
+
+    /* Countdown */
+    #countdown {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+      align-items: center; justify-content: center;
+      z-index: 150;
+      pointer-events: none;
+    }
+    .countdown-num {
+      font-size: 110px;
+      font-weight: 700;
+      color: #34c759;
+      opacity: 0;
+      transition: opacity 0.12s;
+      text-shadow: 0 0 40px rgba(52,199,89,0.4);
+    }
+
+    /* Result screen */
+    #result-screen {
+      position: fixed;
+      top: 0; left: 0;
+      width: 100%; height: 100%;
+      display: none;
+      flex-direction: column;
+      align-items: center; justify-content: center;
+      z-index: 180;
+      background: rgba(8,10,16,0.88);
+      backdrop-filter: blur(18px);
+      -webkit-backdrop-filter: blur(18px);
+    }
+    .result-title {
+      font-size: 22px;
+      font-weight: 600;
+      margin-bottom: 6px;
+      letter-spacing: -0.3px;
+    }
+    .result-sub {
+      font-size: 13px;
+      color: rgba(255,255,255,0.4);
+      margin-bottom: 28px;
+    }
+    .result-stats {
+      background: rgba(255,255,255,0.04);
+      border: 1px solid rgba(255,255,255,0.07);
+      border-radius: 14px;
+      padding: 22px 36px;
+      margin-bottom: 28px;
+      min-width: 300px;
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      font-size: 13px;
+    }
+    .stat-row:last-child { margin-bottom: 0; }
+    .stat-label { color: rgba(255,255,255,0.4); }
+    .stat-value { font-weight: 600; font-variant-numeric: tabular-nums; }
+    .stat-value.good { color: #34c759; }
+    .stat-value.warn { color: #ffd60a; }
+    .stat-value.bad  { color: #ff453a; }
+    .result-btns { display: flex; gap: 12px; }
+    .result-save-btn {
+      background: #34c759;
+      color: #000;
+      border: none;
+      padding: 12px 28px;
+      border-radius: 9px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    .result-save-btn:hover { opacity: 0.82; }
+    .result-close-btn {
+      background: rgba(255,255,255,0.06);
+      color: #e0e0e0;
+      border: 1px solid rgba(255,255,255,0.1);
+      padding: 12px 24px;
+      border-radius: 9px;
+      font-size: 14px;
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    .result-close-btn:hover { background: rgba(255,255,255,0.1); }
+
+    /* Toast */
+    #toast {
+      position: fixed;
+      bottom: 28px; left: 50%;
+      transform: translateX(-50%);
+      background: #1c1f2e;
+      border: 1px solid rgba(255,255,255,0.09);
+      border-radius: 8px;
+      padding: 10px 22px;
+      font-size: 13px;
+      color: #e0e0e0;
+      opacity: 0;
+      transition: opacity 0.25s;
+      z-index: 300;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+  </style>
+</head>
+<body>
+
+  <button class="close-btn" onclick="closeWindow()">×</button>
+
+  <div class="hud">
+    <div class="hud-round">Runde <span id="hud-round">0</span>/10</div>
+    <div class="hud-offset" id="hud-offset">Fehler: X±0  Y±0 px</div>
+  </div>
+
+  <canvas id="canvas"></canvas>
+
+  <!-- Start Screen -->
+  <div id="start-screen">
+    <svg class="start-icon" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+      <circle cx="32" cy="32" r="30" stroke="rgba(255,255,255,0.2)" stroke-width="2"/>
+      <circle cx="32" cy="32" r="22" stroke="rgba(255,255,255,0.15)" stroke-width="2"/>
+      <circle cx="32" cy="32" r="14" stroke="#ff3b30" stroke-width="2"/>
+      <circle cx="32" cy="32" r="6"  fill="#ffd700"/>
+      <line x1="2"  y1="32" x2="20" y2="32" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+      <line x1="44" y1="32" x2="62" y2="32" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+      <line x1="32" y1="2"  x2="32" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+      <line x1="32" y1="44" x2="32" y2="62" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
+    </svg>
+    <div class="start-title">Klick-Kalibrierung</div>
+    <div class="start-sub">
+      MIRA schießt 10 Mal auf Zielscheiben.<br>
+      Die gemessenen Abweichungen korrigieren<br>
+      den Koordinaten-Offset automatisch.
+    </div>
+    <button class="start-btn" onclick="startTraining()">Kalibrierung starten</button>
+  </div>
+
+  <!-- Countdown -->
+  <div id="countdown">
+    <div class="countdown-num" id="countdown-num">3</div>
+  </div>
+
+  <!-- Result Screen -->
+  <div id="result-screen">
+    <div class="result-title">Kalibrierung abgeschlossen</div>
+    <div class="result-sub">10 Schüsse analysiert</div>
+    <div class="result-stats">
+      <div class="stat-row">
+        <span class="stat-label">Durchschnittlicher X-Fehler</span>
+        <span class="stat-value" id="res-ex">–</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Durchschnittlicher Y-Fehler</span>
+        <span class="stat-value" id="res-ey">–</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Treffer (Abweichung ≤ 50 px)</span>
+        <span class="stat-value" id="res-hits">–</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Genauigkeit</span>
+        <span class="stat-value" id="res-acc">–</span>
+      </div>
+    </div>
+    <div class="result-btns">
+      <button class="result-save-btn" id="save-btn" onclick="saveCalibration()">Kalibrierung anpassen</button>
+      <button class="result-close-btn" onclick="closeWindow()">Schließen</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    const canvas = document.getElementById('canvas');
+    const ctx    = canvas.getContext('2d');
+
+    // ── State ──
+    let round   = 0;
+    const TOTAL = 10;
+    let results = [];  // [{errorX, errorY, dist, hit, tx, ty, cx, cy}]
+    let isRunning = false;
+
+    // ── Canvas resize ──
+    function resize() {
+      canvas.width  = window.innerWidth;
+      canvas.height = window.innerHeight;
+      redrawHistory();
+    }
+    resize();
+    window.addEventListener('resize', resize);
+
+    // ── Close ──
+    function closeWindow() { window.close(); }
+
+    // ── Draw concentric target rings ──
+    function drawTarget(cx, cy, alpha = 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      const rings = [
+        { r: 72, color: '#161820' },
+        { r: 58, color: '#d8d8d8' },
+        { r: 44, color: '#1a1c22' },
+        { r: 30, color: '#d8d8d8' },
+        { r: 17, color: '#ff3b30' },
+        { r:  7, color: '#ffd700' },
+      ];
+
+      for (const ring of rings) {
+        ctx.beginPath();
+        ctx.arc(cx, cy, ring.r, 0, Math.PI * 2);
+        ctx.fillStyle = ring.color;
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(0,0,0,0.35)';
+        ctx.lineWidth = 0.8;
+        ctx.stroke();
+      }
+
+      // Crosshair lines
+      ctx.strokeStyle = 'rgba(255,255,255,0.18)';
+      ctx.lineWidth = 1;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(cx - 96, cy);
+      ctx.lineTo(cx + 96, cy);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx, cy - 96);
+      ctx.lineTo(cx, cy + 96);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      ctx.restore();
+    }
+
+    // ── Draw paint splatter ──
+    function drawSplatter(px, py, isHit) {
+      ctx.save();
+      const baseColor = isHit ? '#34c759' : '#ff453a';
+      const numDrops  = isHit ? 32 : 24;
+
+      // Center blob
+      ctx.beginPath();
+      ctx.arc(px, py, 6, 0, Math.PI * 2);
+      ctx.fillStyle = baseColor;
+      ctx.fill();
+
+      // Radial drops
+      for (let i = 0; i < numDrops; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist  = Math.random() * (isHit ? 34 : 26) + 4;
+        const sx    = px + Math.cos(angle) * dist;
+        const sy    = py + Math.sin(angle) * dist;
+        const r     = Math.random() * 4.5 + 0.8;
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fillStyle = baseColor + (isHit ? 'bb' : '99');
+        ctx.fill();
+      }
+
+      // Burst rays for hits
+      if (isHit) {
+        for (let i = 0; i < 10; i++) {
+          const angle = (i / 10) * Math.PI * 2;
+          const len   = 18 + Math.random() * 18;
+          ctx.beginPath();
+          ctx.moveTo(px, py);
+          ctx.lineTo(px + Math.cos(angle) * len, py + Math.sin(angle) * len);
+          ctx.strokeStyle = baseColor + '55';
+          ctx.lineWidth   = 1.8;
+          ctx.stroke();
+        }
+      }
+
+      ctx.restore();
+    }
+
+    // ── Draw distance annotation ──
+    function drawMissLine(tx, ty, cx, cy, dist) {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(tx, ty);
+      ctx.lineTo(cx, cy);
+      ctx.strokeStyle = 'rgba(255,69,58,0.5)';
+      ctx.setLineDash([4, 4]);
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      const mx = (tx + cx) / 2;
+      const my = (ty + cy) / 2 - 10;
+      ctx.fillStyle = '#ff453a';
+      ctx.font = '11px -apple-system, monospace';
+      ctx.textAlign = 'center';
+      ctx.fillText(`${Math.round(dist)} px`, mx, my);
+      ctx.restore();
+    }
+
+    // ── Redraw all history shots ──
+    function redrawHistory() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (const r of results) {
+        drawTarget(r.tx, r.ty, 0.25);
+        drawSplatter(r.cx, r.cy, r.hit);
+        if (!r.hit) drawMissLine(r.tx, r.ty, r.cx, r.cy, r.dist);
+      }
+    }
+
+    // ── Random target position (with margin) ──
+    function randomPos() {
+      const mg = 130;
+      return {
+        x: Math.round(mg + Math.random() * (window.innerWidth  - mg * 2)),
+        y: Math.round(mg + Math.random() * (window.innerHeight - mg * 2)),
+      };
+    }
+
+    // ── Update HUD ──
+    function updateHud() {
+      document.getElementById('hud-round').textContent = round;
+      if (results.length === 0) {
+        document.getElementById('hud-offset').textContent = 'Fehler: X±0  Y±0 px';
+        return;
+      }
+      const avgX = Math.round(results.reduce((s, r) => s + r.errorX, 0) / results.length);
+      const avgY = Math.round(results.reduce((s, r) => s + r.errorY, 0) / results.length);
+      const sign = v => (v >= 0 ? '+' : '') + v;
+      document.getElementById('hud-offset').textContent = `Fehler: X${sign(avgX)}  Y${sign(avgY)} px`;
+    }
+
+    // ── Toast ──
+    function showToast(msg, dur = 3000) {
+      const t = document.getElementById('toast');
+      t.textContent = msg;
+      t.classList.add('show');
+      setTimeout(() => t.classList.remove('show'), dur);
+    }
+
+    // ── Countdown (3…2…1…FEUER!) ──
+    function runCountdown() {
+      return new Promise(resolve => {
+        const el      = document.getElementById('countdown-num');
+        const overlay = document.getElementById('countdown');
+        overlay.style.display = 'flex';
+        let n = 3;
+
+        const tick = () => {
+          el.textContent = n > 0 ? n : 'FEUER!';
+          el.style.color  = n > 0 ? '#34c759' : '#ff453a';
+          el.style.opacity = 1;
+          setTimeout(() => {
+            el.style.opacity = 0;
+            setTimeout(() => {
+              n--;
+              if (n < 0) {
+                overlay.style.display = 'none';
+                el.style.color = '#34c759';
+                resolve();
+              } else {
+                tick();
+              }
+            }, 150);
+          }, n > 0 ? 600 : 450);
+        };
+        tick();
+      });
+    }
+
+    // ── Sleep ──
+    const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+    // ── One shot round ──
+    async function runShot() {
+      const pos = randomPos();
+
+      // Draw target
+      redrawHistory();
+      drawTarget(pos.x, pos.y);
+      await sleep(700);
+
+      // Absolute screen coordinates (window is at 0,0 — full screen)
+      const screenX = (window.screenX || 0) + pos.x;
+      const screenY = (window.screenY || 0) + pos.y;
+
+      const result = await ipcRenderer.invoke('target-training-shoot', {
+        targetLogicalX: screenX,
+        targetLogicalY: screenY,
+      });
+
+      if (result.error) {
+        showToast('Fehler: ' + result.error);
+        return;
+      }
+
+      const { clickWindowX, clickWindowY, errorX, errorY } = result;
+      const dist = Math.hypot(errorX, errorY);
+      const isHit = dist <= 50;
+
+      // Redraw with splatter
+      redrawHistory();
+      drawTarget(pos.x, pos.y, 0.5);
+      drawSplatter(clickWindowX, clickWindowY, isHit);
+      if (!isHit) drawMissLine(pos.x, pos.y, clickWindowX, clickWindowY, dist);
+
+      results.push({ tx: pos.x, ty: pos.y, cx: clickWindowX, cy: clickWindowY, errorX, errorY, dist, hit: isHit });
+      round++;
+      updateHud();
+
+      await sleep(isHit ? 750 : 1100);
+    }
+
+    // ── Main training loop ──
+    async function startTraining() {
+      if (isRunning) return;
+      isRunning = true;
+      document.getElementById('start-screen').style.display = 'none';
+      round = 0;
+      results = [];
+      updateHud();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      await runCountdown();
+
+      for (let i = 0; i < TOTAL; i++) {
+        await sleep(300);
+        await runShot();
+      }
+
+      showResults();
+      isRunning = false;
+    }
+
+    // ── Show result screen ──
+    function showResults() {
+      const avgEX = results.reduce((s, r) => s + r.errorX, 0) / results.length;
+      const avgEY = results.reduce((s, r) => s + r.errorY, 0) / results.length;
+      const hits  = results.filter(r => r.hit).length;
+      const acc   = Math.round((hits / results.length) * 100);
+
+      const sign = v => (v >= 0 ? '+' : '') + Math.round(v);
+
+      const exEl  = document.getElementById('res-ex');
+      const eyEl  = document.getElementById('res-ey');
+      const hitEl = document.getElementById('res-hits');
+      const accEl = document.getElementById('res-acc');
+
+      exEl.textContent  = sign(avgEX) + ' px';
+      eyEl.textContent  = sign(avgEY) + ' px';
+      hitEl.textContent = `${hits} / 10`;
+      accEl.textContent = acc + ' %';
+
+      const scoreClass = v => Math.abs(v) <= 5 ? 'stat-value good' : Math.abs(v) <= 15 ? 'stat-value warn' : 'stat-value bad';
+      exEl.className  = scoreClass(avgEX);
+      eyEl.className  = scoreClass(avgEY);
+      accEl.className = 'stat-value ' + (acc >= 80 ? 'good' : acc >= 50 ? 'warn' : 'bad');
+      hitEl.className = 'stat-value';
+
+      // Hide save button if already perfectly calibrated
+      const needsCorrection = Math.abs(avgEX) > 3 || Math.abs(avgEY) > 3;
+      document.getElementById('save-btn').style.display = needsCorrection ? 'block' : 'none';
+      if (!needsCorrection) {
+        document.getElementById('result-title').textContent = 'Perfekt kalibriert';
+      }
+
+      window._avgErrorX = Math.round(avgEX);
+      window._avgErrorY = Math.round(avgEY);
+
+      document.getElementById('result-screen').style.display = 'flex';
+    }
+
+    // ── Save calibration correction ──
+    async function saveCalibration() {
+      const btn = document.getElementById('save-btn');
+      btn.disabled = true;
+      btn.textContent = 'Speichern...';
+
+      const result = await ipcRenderer.invoke('target-training-save-calibration', {
+        avgErrorX: window._avgErrorX || 0,
+        avgErrorY: window._avgErrorY || 0,
+      });
+
+      if (result.success) {
+        const sign = v => (v >= 0 ? '+' : '') + v;
+        showToast(`Offset korrigiert: X${sign(result.offsetX)}  Y${sign(result.offsetY)} px`);
+        btn.textContent = 'Gespeichert';
+        setTimeout(() => closeWindow(), 2200);
+      } else {
+        showToast('Fehler: ' + result.error);
+        btn.disabled = false;
+        btn.textContent = 'Kalibrierung anpassen';
+      }
+    }
+  </script>
+</body>
+</html>

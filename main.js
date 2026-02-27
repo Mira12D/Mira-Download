@@ -49,6 +49,7 @@ let deviceKnowledgeWindow = null;
 let userProfileWindow     = null;
 let templatesWindow       = null;
 let onboardingWindow      = null;
+let targetTrainingWindow  = null;
 let agentActive = false;
 let userToken = null;
 let userProfileSettings = {};
@@ -567,6 +568,30 @@ function createOnboardingWindow() {
     }
   });
   onboardingWindow.on('closed', () => { onboardingWindow = null; });
+}
+
+function createTargetTrainingWindow() {
+  if (targetTrainingWindow && !targetTrainingWindow.isDestroyed()) {
+    targetTrainingWindow.focus();
+    return;
+  }
+  const display = electronScreen.getPrimaryDisplay();
+  targetTrainingWindow = new BrowserWindow({
+    x:               display.bounds.x,
+    y:               display.bounds.y,
+    width:           display.bounds.width,
+    height:          display.bounds.height,
+    frame:           false,
+    alwaysOnTop:     true,
+    skipTaskbar:     true,
+    backgroundColor: '#080a10',
+    webPreferences: {
+      nodeIntegration:  true,
+      contextIsolation: false,
+    },
+  });
+  targetTrainingWindow.loadFile('target-training-overlay.html');
+  targetTrainingWindow.on('closed', () => { targetTrainingWindow = null; });
 }
 
 // ═══════════════════════════════════════
@@ -4509,6 +4534,78 @@ ipcMain.handle('stop-passive-training', async () => {
 
 ipcMain.handle('get-training-progress', () => {
   return passiveTrainer.getProgress() || { active: false };
+});
+
+// ── Target Training IPC ──────────────────────────────────────────────────
+ipcMain.handle('open-target-training', () => {
+  createTargetTrainingWindow();
+});
+
+ipcMain.handle('target-training-shoot', async (event, { targetLogicalX, targetLogicalY }) => {
+  try {
+    const display  = electronScreen.getPrimaryDisplay();
+    const logicalW = display.bounds.width;
+    const logicalH = display.bounds.height;
+    const physW    = await nutScreen.width();
+    const physH    = await nutScreen.height();
+    const physScaleX = physW / logicalW;
+    const physScaleY = physH / logicalH;
+
+    // Logical screen coords → physical nut.js coords
+    const targetPhysX = Math.round(targetLogicalX * physScaleX);
+    const targetPhysY = Math.round(targetLogicalY * physScaleY);
+
+    // Apply current calibration offset
+    const offsetX = calibration ? (calibration.offsetX || 0) : 0;
+    const offsetY = calibration ? (calibration.offsetY || 0) : 0;
+    const clickX  = targetPhysX + offsetX;
+    const clickY  = targetPhysY + offsetY;
+
+    await mouse.setPosition({ x: clickX, y: clickY });
+    await sleep(150);
+    await mouse.leftClick();
+
+    // Measure where cursor actually landed
+    const actual = await mouse.getPosition();
+
+    // Error in logical pixels (how far off from the target center)
+    const errorX = Math.round((actual.x - targetPhysX) / physScaleX);
+    const errorY = Math.round((actual.y - targetPhysY) / physScaleY);
+
+    // Convert actual position to window-relative logical coords for splatter rendering
+    const bounds = targetTrainingWindow ? targetTrainingWindow.getBounds() : { x: 0, y: 0 };
+    const clickWindowX = Math.round(actual.x / physScaleX) - bounds.x;
+    const clickWindowY = Math.round(actual.y / physScaleY) - bounds.y;
+
+    console.log(`🎯 Training: target=[${targetLogicalX},${targetLogicalY}] click=[${clickX},${clickY}] actual=[${actual.x},${actual.y}] error=[${errorX},${errorY}]`);
+    return { clickWindowX, clickWindowY, errorX, errorY };
+  } catch (e) {
+    console.error('❌ target-training-shoot:', e.message);
+    return { error: e.message };
+  }
+});
+
+ipcMain.handle('target-training-save-calibration', async (event, { avgErrorX, avgErrorY }) => {
+  try {
+    const fs   = require('fs');
+    const path = require('path');
+    const calPath = path.join(__dirname, 'calibration.json');
+    const cal  = calibration || {};
+
+    // Correct systematic error: if cursor always lands +avgErrorX px too far right,
+    // reduce the offset so we undershoot by that amount next time.
+    cal.offsetX = (cal.offsetX || 0) - avgErrorX;
+    cal.offsetY = (cal.offsetY || 0) - avgErrorY;
+    cal.lastTrainingAt = new Date().toISOString();
+
+    fs.writeFileSync(calPath, JSON.stringify(cal, null, 2), 'utf8');
+    calibration = cal;
+    console.log(`🎯 Training-Kalibrierung gespeichert: offsetX=${cal.offsetX} offsetY=${cal.offsetY}`);
+    return { success: true, offsetX: cal.offsetX, offsetY: cal.offsetY };
+  } catch (e) {
+    console.error('❌ target-training-save-calibration:', e.message);
+    return { success: false, error: e.message };
+  }
 });
 
 // ═══════════════════════════════════════
