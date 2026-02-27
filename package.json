@@ -103,10 +103,17 @@
     ],
     "directories": {
       "output": "dist"
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "Musti12D",
+      "repo": "Downloadpage-CookieBanner",
+      "private": false
     }
   },
   "dependencies": {
     "@nut-tree/nut-js": "^4.2.0",
+    "electron-updater": "^6.3.9",
     "docx": "^9.5.3",
     "electron-squirrel-startup": "^1.0.0",
     "electron-store": "^8.2.0",

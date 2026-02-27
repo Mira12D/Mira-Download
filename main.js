@@ -1,4 +1,5 @@
 const { app, BrowserWindow, ipcMain, screen: electronScreen } = require('electron');
+const { autoUpdater } = require('electron-updater');
 const os = require('os');
 const crypto = require('crypto');
 const { mouse, keyboard, screen: nutScreen, Key } = require('@nut-tree/nut-js');
@@ -4514,8 +4515,77 @@ ipcMain.handle('get-training-progress', () => {
 // APP LIFECYCLE
 // ═══════════════════════════════════════
 
+// ═══════════════════════════════════════
+// AUTO-UPDATER (electron-updater + GitHub Releases)
+// ═══════════════════════════════════════
+
+function setupAutoUpdater() {
+  // Im Dev-Modus nicht updaten
+  if (!app.isPackaged) return;
+
+  autoUpdater.autoDownload    = true;   // Download sofort im Hintergrund
+  autoUpdater.autoInstallOnAppQuit = false; // Wir fragen erst nach
+
+  autoUpdater.on('checking-for-update', () => {
+    console.log('🔄 Prüfe auf Updates...');
+  });
+
+  autoUpdater.on('update-available', (info) => {
+    console.log(`🔄 Update verfügbar: ${info.version}`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-status', {
+        type: 'available',
+        version: info.version,
+        message: `🔄 Update ${info.version} verfügbar — wird geladen...`
+      });
+    }
+  });
+
+  autoUpdater.on('update-not-available', () => {
+    console.log('✅ MIRA ist aktuell.');
+  });
+
+  autoUpdater.on('download-progress', (progress) => {
+    const pct = Math.round(progress.percent);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-status', {
+        type: 'downloading',
+        percent: pct,
+        message: `🔄 Update wird geladen... ${pct}%`
+      });
+    }
+  });
+
+  autoUpdater.on('update-downloaded', (info) => {
+    console.log(`✅ Update ${info.version} heruntergeladen — bereit zum Installieren`);
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('update-status', {
+        type: 'ready',
+        version: info.version,
+        message: `✅ Update ${info.version} bereit — Neustart?`
+      });
+    }
+  });
+
+  autoUpdater.on('error', (err) => {
+    // Nur loggen, nicht dem User zeigen (z.B. kein Netz, kein Release vorhanden)
+    console.warn('⚠️ Auto-Update Fehler (nicht kritisch):', err.message);
+  });
+
+  // 3 Sekunden nach Start prüfen (nach Window-Load)
+  setTimeout(() => {
+    autoUpdater.checkForUpdates().catch(() => {});
+  }, 3000);
+}
+
+// IPC: Renderer sagt "jetzt neustarten"
+ipcMain.on('update-install-now', () => {
+  autoUpdater.quitAndInstall(false, true);
+});
+
 app.whenReady().then(async () => {
   createWindow();
+  setupAutoUpdater();
   uIOhook.start();
 
   calibration = loadCalibration();

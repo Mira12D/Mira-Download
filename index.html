@@ -257,6 +257,45 @@
     #toast.error { color: var(--red); border-color: rgba(255,69,58,0.25); }
     #toast.info { color: var(--blue); border-color: rgba(10,132,255,0.25); }
 
+    /* ── AUTO-UPDATE BANNER ── */
+    #update-banner {
+      position: fixed; top: 0; left: 0; right: 0; z-index: 10000;
+      padding: 10px 20px;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+      font-size: 13px; font-weight: 500;
+      transform: translateY(-100%);
+      transition: transform 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+      backdrop-filter: blur(16px);
+    }
+    #update-banner.show { transform: translateY(0); }
+    #update-banner.available  { background: rgba(10,132,255,0.18); border-bottom: 1px solid rgba(10,132,255,0.3); color: #5ac8fa; }
+    #update-banner.downloading{ background: rgba(255,159,10,0.15); border-bottom: 1px solid rgba(255,159,10,0.25); color: #ffd60a; }
+    #update-banner.ready      { background: rgba(52,199,89,0.15);  border-bottom: 1px solid rgba(52,199,89,0.25);  color: #34c759; }
+
+    #update-banner .upd-msg { display: flex; align-items: center; gap: 8px; }
+    #update-banner .upd-progress {
+      height: 3px; border-radius: 2px;
+      background: rgba(255,159,10,0.25); overflow: hidden; width: 120px;
+    }
+    #update-banner .upd-progress-fill {
+      height: 100%; background: #ffd60a;
+      transition: width 0.4s ease; border-radius: 2px;
+    }
+    #update-banner .upd-restart-btn {
+      background: #34c759; color: #000;
+      border: none; border-radius: 7px;
+      padding: 5px 14px; font-size: 12px; font-weight: 700;
+      cursor: pointer; font-family: inherit; white-space: nowrap;
+      transition: background 0.15s;
+    }
+    #update-banner .upd-restart-btn:hover { background: #30d158; }
+    #update-banner .upd-dismiss {
+      background: none; border: none; cursor: pointer;
+      color: inherit; opacity: 0.5; font-size: 16px; padding: 0 4px;
+      transition: opacity 0.15s;
+    }
+    #update-banner .upd-dismiss:hover { opacity: 1; }
+
     /* ── DIVIDER ── */
     .divider { height: 1px; background: var(--border); margin: 24px 0; }
 
@@ -563,6 +602,20 @@
   </style>
 </head>
 <body>
+
+<!-- ── AUTO-UPDATE BANNER ── -->
+<div id="update-banner" style="display:none">
+  <div class="upd-msg">
+    <span id="upd-text">🔄 Update verfügbar...</span>
+    <div class="upd-progress" id="upd-progress-bar" style="display:none">
+      <div class="upd-progress-fill" id="upd-progress-fill"></div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:8px">
+    <button class="upd-restart-btn clickable" id="upd-restart-btn" onclick="ipcRenderer.send('update-install-now')" style="display:none">Jetzt neustarten</button>
+    <button class="upd-dismiss clickable" onclick="document.getElementById('update-banner').style.display='none'">×</button>
+  </div>
+</div>
 
 <!-- ══════════════════════════════════ -->
 <!-- ACTIVATION                         -->
@@ -932,6 +985,25 @@
 
 <script>
   const { ipcRenderer } = require('electron');
+
+  // ── Auto-Update Banner ──
+  ipcRenderer.on('update-status', (event, status) => {
+    const banner = document.getElementById('update-banner');
+    const text = document.getElementById('upd-text');
+    const progressBar = document.getElementById('upd-progress-bar');
+    const progressFill = document.getElementById('upd-progress-fill');
+    const restartBtn = document.getElementById('upd-restart-btn');
+
+    banner.className = `show ${status.type}`;
+    banner.style.display = 'flex';
+    text.textContent = status.message;
+
+    progressBar.style.display = status.type === 'downloading' ? 'block' : 'none';
+    if (status.type === 'downloading' && status.percent != null) {
+      progressFill.style.width = status.percent + '%';
+    }
+    restartBtn.style.display = status.type === 'ready' ? 'inline-block' : 'none';
+  });
 
   let userToken = null;
   let isRecording = false;
