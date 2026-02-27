@@ -25,6 +25,35 @@ using System.Text;
 using System.Text.Json;
 using System.Windows.Automation;
 
+// ── Entry point ───────────────────────────────────────────────────────────────
+if (args.Length < 1)
+{
+    Json.Output(new { error = "usage: ax-helper-win <check-permission|frontmost|focused|find|list|at>" });
+    Environment.Exit(1);
+}
+
+try
+{
+    switch (args[0])
+    {
+        case "check-permission": Commands.CheckPermission(); break;
+        case "frontmost":        Commands.Frontmost();       break;
+        case "focused":          Commands.Focused();         break;
+        case "find":             Commands.Find(args);        break;
+        case "list":             Commands.List(args);        break;
+        case "at":               Commands.At(args);          break;
+        default:
+            Json.Output(new { error = $"unknown command: {args[0]}" });
+            Environment.Exit(1);
+            break;
+    }
+}
+catch (Exception e)
+{
+    Json.Output(new { error = e.Message });
+    Environment.Exit(1);
+}
+
 // ── Win32 interop ──────────────────────────────────────────────────────────────
 static partial class Win32
 {
@@ -448,33 +477,4 @@ static class Commands
         }
         catch { Json.Output(new { found = false }); }
     }
-}
-
-// ── Entry point ───────────────────────────────────────────────────────────────
-if (args.Length < 1)
-{
-    Json.Output(new { error = "usage: ax-helper-win <check-permission|frontmost|focused|find|list|at>" });
-    Environment.Exit(1);
-}
-
-try
-{
-    switch (args[0])
-    {
-        case "check-permission": Commands.CheckPermission(); break;
-        case "frontmost":        Commands.Frontmost();       break;
-        case "focused":          Commands.Focused();         break;
-        case "find":             Commands.Find(args);        break;
-        case "list":             Commands.List(args);        break;
-        case "at":               Commands.At(args);          break;
-        default:
-            Json.Output(new { error = $"unknown command: {args[0]}" });
-            Environment.Exit(1);
-            break;
-    }
-}
-catch (Exception e)
-{
-    Json.Output(new { error = e.Message });
-    Environment.Exit(1);
 }
