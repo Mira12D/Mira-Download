@@ -30,17 +30,24 @@ jobs:
           dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ../resources
         shell: bash
 
+      - name: Setup Python 3.11 (für node-gyp / distutils)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (distutils fix)
+        run: pip install setuptools
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup nut-tree auth
-        run: echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> .npmrc
-
       - name: Install dependencies
         run: npm ci
+        env:
+          NUT_TREE_TOKEN: ${{ secrets.NUT_TREE_TOKEN }}
 
       - name: Build Windows NSIS Installer
         run: npx electron-builder --win --x64
@@ -76,11 +83,10 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Setup nut-tree auth
-        run: echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> .npmrc
-
       - name: Install dependencies
         run: npm ci
+        env:
+          NUT_TREE_TOKEN: ${{ secrets.NUT_TREE_TOKEN }}
 
       - name: Build Mac DMG
         run: npx electron-builder --mac --x64 --arm64
