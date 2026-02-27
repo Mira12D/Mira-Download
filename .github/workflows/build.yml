@@ -36,11 +36,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Configure private npm registry (nut-tree)
-        run: |
-          echo "@nut-tree:registry=https://pkg.nutjs.dev/" >> $env:USERPROFILE\.npmrc
-          echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> $env:USERPROFILE\.npmrc
-        shell: pwsh
+      - name: Setup nut-tree auth
+        run: echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> .npmrc
 
       - name: Install dependencies
         run: npm ci
@@ -79,10 +76,8 @@ jobs:
           node-version: '20'
           cache: 'npm'
 
-      - name: Configure private npm registry (nut-tree)
-        run: |
-          echo "@nut-tree:registry=https://pkg.nutjs.dev/" >> ~/.npmrc
-          echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> ~/.npmrc
+      - name: Setup nut-tree auth
+        run: echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> .npmrc
 
       - name: Install dependencies
         run: npm ci
