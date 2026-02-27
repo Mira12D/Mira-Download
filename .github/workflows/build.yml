@@ -49,8 +49,12 @@ jobs:
         env:
           NUT_TREE_TOKEN: ${{ secrets.NUT_TREE_TOKEN }}
 
-      - name: Rebuild native modules (canvas excluded)
-        run: npx electron-rebuild -f -x canvas
+      - name: Remove canvas (optionale pdfjs-dep, braucht GTK zum Bauen)
+        run: if (Test-Path node_modules\canvas) { Remove-Item -Recurse -Force node_modules\canvas }
+        shell: pwsh
+
+      - name: Rebuild sharp für Electron
+        run: npx electron-rebuild -f -w sharp
 
       - name: Build Windows NSIS Installer
         run: npx electron-builder --win --x64
