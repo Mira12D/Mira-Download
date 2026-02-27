@@ -4,11 +4,11 @@
     <OutputType>Exe</OutputType>
     <!--
       net8.0-windows: enables System.Windows.Automation (UIAutomation) and Win32 interop.
-      UseWindowsForms: pulls in UIAutomationClient + UIAutomationTypes via
-      the Windows Desktop App framework without requiring WPF.
+      UseWPF: required in .NET 8 to pull in UIAutomationClient + UIAutomationTypes.
+      (UseWindowsForms alone does NOT include these assemblies in .NET 8.)
     -->
     <TargetFramework>net8.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
+    <UseWPF>true</UseWPF>
     <AssemblyName>ax-helper-win</AssemblyName>
     <RootNamespace>AxHelperWin</RootNamespace>
     <Nullable>enable</Nullable>
