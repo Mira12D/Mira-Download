@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, screen: electronScreen } = require('electron');
 const { autoUpdater } = require('electron-updater');
+const http = require('http');
 const os = require('os');
 const crypto = require('crypto');
 const { mouse, keyboard, screen: nutScreen, Key } = require('@nut-tree/nut-js');
@@ -54,6 +55,8 @@ let agentActive = false;
 let userToken = null;
 let userProfileSettings = {};
 let _dk = null; // RAM-only decrypted API keys — never written to disk
+let localServer = null;
+const LOCAL_PORT = 3737;
 let userTier = null;
 let tasksRemaining = 0;
 let pollingInterval = null;
@@ -184,7 +187,7 @@ async function directSupabase(method, path, body = null) {
       'Authorization': `Bearer ${_dk.supabaseToken}`,
       'Content-Type': 'application/json',
     };
-    if (method === 'POST') headers['Prefer'] = 'return=representation';
+    if (method === 'POST' || method === 'PATCH') headers['Prefer'] = 'return=representation';
     const res = await fetch(`${_dk.supabaseUrl}/rest/v1${path}`, {
       method,
       headers,
@@ -197,6 +200,197 @@ async function directSupabase(method, path, body = null) {
     clearTimeout(timeout);
     return null;
   }
+}
+
+// ═══════════════════════════════════════
+// LOCAL MIRROR SERVER — localhost:3737
+// Spiegelt Vercel-Endpoints lokal.
+// Browser-Frontend erkennt ihn automatisch und
+// nutzt ihn statt Vercel → kein RTT, direkter Claude/Supabase.
+// ═══════════════════════════════════════
+
+function decodeJWT(tok) {
+  try {
+    return JSON.parse(Buffer.from(tok.split('.')[1], 'base64url').toString());
+  } catch(_) { return null; }
+}
+
+function startLocalServer() {
+  if (localServer) return;
+
+  localServer = http.createServer(async (req, res) => {
+    // ── CORS für Browser-Frontend ──
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+
+    const url     = new URL(req.url, `http://127.0.0.1:${LOCAL_PORT}`);
+    const pathname = url.pathname;
+
+    // Body einlesen (POST/PATCH)
+    let body = {};
+    if (!['GET', 'DELETE'].includes(req.method)) {
+      const raw = await new Promise(r => { let d = ''; req.on('data', c => d += c); req.on('end', () => r(d)); });
+      try { body = JSON.parse(raw); } catch(_) {}
+    }
+
+    const json = (data, code = 200) => {
+      res.writeHead(code, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+    };
+
+    // ── /api/ping — kein Auth nötig ──────────────────────────────────────
+    if (pathname === '/api/ping') {
+      return json({ ok: true, agent: true, tier: userTier, version: '1.0' });
+    }
+
+    // ── Auth: Token muss mit aktiver Session übereinstimmen ──────────────
+    const tok = (req.headers.authorization || '').replace('Bearer ', '');
+    if (!tok || tok !== userToken) return json({ error: 'Unauthorized' }, 401);
+
+    const payload = decodeJWT(tok);
+    const userId  = payload?.id;
+    if (!userId) return json({ error: 'Invalid token' }, 401);
+
+    // ── GET /api/users/device-status ─────────────────────────────────────
+    if (pathname === '/api/users/device-status' && req.method === 'GET') {
+      return json({ connected: true, device: { tier: userTier } });
+    }
+
+    // ── GET /api/users/profile ───────────────────────────────────────────
+    if (pathname === '/api/users/profile' && req.method === 'GET') {
+      const rows = await directSupabase('GET', `/users?id=eq.${userId}&limit=1`);
+      if (rows?.[0]) return json({ success: true, user: rows[0] });
+      try {
+        const r = await fetch(`${API}/api/users/profile`, { headers: { 'Authorization': `Bearer ${tok}` } });
+        return json(await r.json());
+      } catch(e) { return json({ error: 'Profile unavailable' }, 503); }
+    }
+
+    // ── GET /api/users/conversations ─────────────────────────────────────
+    if (pathname === '/api/users/conversations' && req.method === 'GET') {
+      const rows = await directSupabase('GET', `/conversations?user_id=eq.${userId}&select=session_id,preview,updated_at&order=updated_at.desc&limit=50`);
+      if (rows) return json({ success: true, conversations: rows });
+      try {
+        const r = await fetch(`${API}/api/users/conversations`, { headers: { 'Authorization': `Bearer ${tok}` } });
+        return json(await r.json());
+      } catch(e) { return json({ success: true, conversations: [] }); }
+    }
+
+    // ── /api/users/conversation/:sid ─────────────────────────────────────
+    const convMatch = pathname.match(/^\/api\/users\/conversation\/([^/]+)$/);
+    if (convMatch) {
+      const sid = convMatch[1];
+
+      if (req.method === 'GET') {
+        const rows = await directSupabase('GET', `/conversations?session_id=eq.${sid}&user_id=eq.${userId}&select=messages&limit=1`);
+        if (rows) return json({ success: true, messages: rows?.[0]?.messages || [] });
+        try {
+          const r = await fetch(`${API}/api/users/conversation/${sid}`, { headers: { 'Authorization': `Bearer ${tok}` } });
+          return json(await r.json());
+        } catch(e) { return json({ success: true, messages: [] }); }
+      }
+
+      if (req.method === 'DELETE') {
+        await directSupabase('DELETE', `/conversations?session_id=eq.${sid}&user_id=eq.${userId}`);
+        return json({ success: true });
+      }
+    }
+
+    // ── POST /api/users/chat — direkt über Claude, Supabase-Save ─────────
+    if (pathname === '/api/users/chat' && req.method === 'POST') {
+      const { message, session_id } = body;
+      if (!message) return json({ error: 'No message' }, 400);
+
+      // History aus Supabase holen
+      const convRows = await directSupabase('GET', `/conversations?session_id=eq.${session_id}&user_id=eq.${userId}&select=messages&limit=1`);
+      const history  = convRows?.[0]?.messages || [];
+
+      const messages = [
+        ...history.map(m => ({ role: m.role, content: m.content })),
+        { role: 'user', content: message }
+      ];
+
+      // Claude direkt rufen
+      let reply = await directClaude(messages, { model: 'claude-sonnet-4-6', max_tokens: 2000 });
+
+      if (!reply) {
+        // Fallback: Vercel
+        try {
+          const r = await fetch(`${API}/api/users/chat`, {
+            method: 'POST',
+            headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+          return json(await r.json());
+        } catch(e) { return json({ error: 'Chat unavailable' }, 503); }
+      }
+
+      // Conversation in Supabase speichern (upsert)
+      const updatedMsgs = [
+        ...history,
+        { role: 'user',      content: message, created_at: new Date().toISOString() },
+        { role: 'assistant', content: reply,   created_at: new Date().toISOString() }
+      ];
+      const preview = message.slice(0, 80);
+      if (convRows?.[0]) {
+        await directSupabase('PATCH', `/conversations?session_id=eq.${session_id}&user_id=eq.${userId}`,
+          { messages: updatedMsgs, preview, updated_at: new Date().toISOString() });
+      } else {
+        await directSupabase('POST', `/conversations`,
+          { session_id, user_id: userId, messages: updatedMsgs, preview, updated_at: new Date().toISOString() });
+      }
+
+      return json({ success: true, response: reply, session_id, direct: true });
+    }
+
+    // ── POST /api/agent/queue — sofort ausführen, kein Poll-Delay ────────
+    if (pathname === '/api/agent/queue' && req.method === 'POST') {
+      const { command, source } = body;
+      if (!command) return json({ error: 'No command' }, 400);
+
+      const task = {
+        id:      'local_' + Date.now(),
+        command,
+        source:  source || 'web_local',
+        user_id: userId,
+      };
+
+      // Sofort im Hintergrund ausführen
+      setImmediate(() => executeTaskFromQueue(task).catch(e =>
+        console.error('❌ Local task error:', e.message)
+      ));
+
+      return json({ success: true, task_id: task.id, direct: true });
+    }
+
+    // ── Alles andere → Proxy zu Vercel ────────────────────────────────────
+    try {
+      const proxyRes = await fetch(`${API}${pathname}${url.search}`, {
+        method: req.method,
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
+        body: ['GET', 'DELETE'].includes(req.method) ? undefined : JSON.stringify(body),
+      });
+      const proxyText = await proxyRes.text();
+      res.writeHead(proxyRes.status, {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*',
+      });
+      res.end(proxyText);
+    } catch(e) {
+      json({ error: 'Proxy failed', detail: e.message }, 502);
+    }
+  });
+
+  localServer.listen(LOCAL_PORT, '127.0.0.1', () => {
+    console.log(`🌐 Local mirror server aktiv: http://localhost:${LOCAL_PORT}`);
+  });
+
+  localServer.on('error', e => {
+    console.warn(`⚠️ Local server Fehler: ${e.message}`);
+    localServer = null;
+  });
 }
 
 // ═══════════════════════════════════════
@@ -214,6 +408,7 @@ function loadSavedToken() {
     agentActive = true;
     startPolling();
     bootstrap().catch(() => {});
+    startLocalServer();
     // Feature 1: System-Log Monitor mit gespeichertem Token starten
     sysLogMonitor.start({ api: API, token: savedToken });
     loadUserProfileSettings().catch(() => {});
@@ -1828,6 +2023,7 @@ ipcMain.handle('activate-token', async (event, code) => {
       saveToken();
       startPolling();
       bootstrap().catch(() => {});
+      startLocalServer();
       // Feature 1: System-Log Monitor nach Aktivierung starten
       sysLogMonitor.start({ api: API, token: data.token });
       loadUserProfileSettings().catch(() => {});
@@ -1857,6 +2053,7 @@ ipcMain.handle('logout', async () => {
   userPin = null;
   agentActive = false;
   _dk = null; // Wipe RAM keys on logout
+  if (localServer) { localServer.close(); localServer = null; }
   clearToken();
   return { success: true };
 });
