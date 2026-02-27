@@ -5,7 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "postinstall": "electron-rebuild -f -w sharp",
+    "postinstall": "electron-rebuild -f -w sharp,uiohook-napi,@nut-tree/nut-js",
     "build:ax": "swiftc ax-helper.swift -O -o resources/ax-helper && chmod +x resources/ax-helper",
     "build:ax-win": "echo ax-helper-win.ps1 requires no compilation - PowerShell is built into Windows",
     "build": "npm run build:ax && electron-builder",

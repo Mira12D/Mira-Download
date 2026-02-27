@@ -38,6 +38,9 @@ jobs:
       - name: Install setuptools (distutils fix)
         run: pip install setuptools
 
+      - name: Install GTK for canvas
+        run: choco install gtk-runtime -y
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -76,6 +79,14 @@ jobs:
         run: |
           swiftc ax-helper.swift -O -o resources/ax-helper
           chmod +x resources/ax-helper
+
+      - name: Setup Python 3.11 (für node-gyp / distutils)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (distutils fix)
+        run: pip install setuptools
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
