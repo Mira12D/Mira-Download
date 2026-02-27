@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0f1117;
+      color: #e0e0e0;
+      font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', sans-serif;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── Titlebar ── */
+    .titlebar {
+      -webkit-app-region: drag;
+      height: 38px;
+      background: #0a0c10;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 14px 0 80px;
+      flex-shrink: 0;
+      border-bottom: 1px solid #1e2130;
+    }
+    .titlebar-title {
+      font-size: 12px;
+      font-weight: 600;
+      color: #8b8fa8;
+      letter-spacing: 0.5px;
+    }
+    .titlebar-close {
+      -webkit-app-region: no-drag;
+      width: 22px; height: 22px;
+      border-radius: 50%;
+      border: none;
+      background: #2a2d3a;
+      color: #666;
+      font-size: 13px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: background 0.15s;
+    }
+    .titlebar-close:hover { background: #ff4757; color: white; }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex;
+      background: #0a0c10;
+      border-bottom: 1px solid #1e2130;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+    .tab-btn {
+      flex: 1;
+      padding: 10px 0;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      color: #6b6f80;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+      letter-spacing: 0.3px;
+    }
+    .tab-btn:hover { color: #c0c4d0; }
+    .tab-btn.active { color: #34c759; border-bottom-color: #34c759; }
+
+    /* ── Scrollable Content ── */
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 18px 20px 12px;
+      -webkit-app-region: no-drag;
+    }
+    .content::-webkit-scrollbar { width: 5px; }
+    .content::-webkit-scrollbar-track { background: transparent; }
+    .content::-webkit-scrollbar-thumb { background: #2a2d3a; border-radius: 3px; }
+
+    /* ── Tab Panels ── */
+    .tab-panel { display: none; flex-direction: column; gap: 14px; }
+    .tab-panel.active { display: flex; }
+
+    /* ── Field Groups ── */
+    .field-group { display: flex; flex-direction: column; gap: 12px; }
+    .field-row { display: flex; gap: 10px; }
+    .field { display: flex; flex-direction: column; gap: 5px; flex: 1; }
+    .field label {
+      font-size: 10px;
+      font-weight: 600;
+      color: #6b6f80;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+    }
+    .field input, .field textarea, .field select {
+      background: #0d1020;
+      border: 1px solid #1e2130;
+      border-radius: 7px;
+      color: #e0e0e0;
+      font-size: 12px;
+      font-family: inherit;
+      padding: 8px 10px;
+      outline: none;
+      transition: border-color 0.15s;
+      resize: none;
+    }
+    .field input:focus, .field textarea:focus, .field select:focus {
+      border-color: #34c75960;
+    }
+    .field textarea { height: 80px; line-height: 1.5; }
+    .field select { cursor: pointer; }
+
+    /* ── Logo Block ── */
+    .logo-block {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      background: #0d1020;
+      border: 1px solid #1e2130;
+      border-radius: 10px;
+      padding: 12px 14px;
+    }
+    .logo-preview {
+      width: 56px; height: 56px;
+      border-radius: 10px;
+      border: 1px solid #1e2130;
+      background: #161924;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+    .logo-preview img { width: 100%; height: 100%; object-fit: contain; }
+    .logo-placeholder { font-size: 22px; opacity: 0.3; }
+    .logo-info { flex: 1; }
+    .logo-info-title { font-size: 11px; font-weight: 600; color: #c0c4d0; margin-bottom: 3px; }
+    .logo-info-sub { font-size: 10px; color: #6b6f80; line-height: 1.4; }
+    .logo-upload-btn {
+      background: #1e2130;
+      border: 1px solid #2a2d3a;
+      border-radius: 7px;
+      color: #c0c4d0;
+      font-size: 11px;
+      font-family: inherit;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+    .logo-upload-btn:hover { background: #2a2d3a; }
+    #logo-file-input { display: none; }
+
+    /* ── Section Title ── */
+    .section-title {
+      font-size: 10px;
+      font-weight: 600;
+      color: #4b4f60;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      padding-bottom: 4px;
+      border-bottom: 1px solid #1e2130;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 10px 20px 14px;
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      border-top: 1px solid #1e2130;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+    .footer-spacer { flex: 1; }
+    .btn {
+      padding: 9px 18px;
+      border-radius: 8px;
+      border: none;
+      font-size: 12px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-cancel {
+      background: #1a1d28;
+      color: #8b8fa8;
+      border: 1px solid #2a2d3a;
+    }
+    .btn-cancel:hover { background: #2a2d3a; }
+    .btn-save {
+      background: #34c75920;
+      color: #34c759;
+      border: 1px solid #34c75940;
+    }
+    .btn-save:hover { background: #34c75935; }
+    .btn-save:disabled { opacity: 0.4; cursor: default; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 66px;
+      left: 50%;
+      transform: translateX(-50%) translateY(10px);
+      background: #1a1d28;
+      border: 1px solid #2a2d3a;
+      border-radius: 20px;
+      padding: 8px 18px;
+      font-size: 12px;
+      color: #e0e0e0;
+      opacity: 0;
+      transition: opacity 0.2s, transform 0.2s;
+      pointer-events: none;
+      white-space: nowrap;
+      z-index: 100;
+    }
+    .toast.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+    .toast.success { color: #34c759; border-color: #34c75940; }
+    .toast.error   { color: #ff4757; border-color: #ff475740; }
+  </style>
+</head>
+<body>
+
+  <!-- Titlebar -->
+  <div class="titlebar">
+    <span class="titlebar-title">Unternehmensprofil</span>
+    <button class="titlebar-close" onclick="window.close()">✕</button>
+  </div>
+
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('firma')">Firma</button>
+    <button class="tab-btn"        onclick="switchTab('dokumente')">Dokumente</button>
+    <button class="tab-btn"        onclick="switchTab('mail')">Mail</button>
+  </div>
+
+  <!-- Content -->
+  <div class="content">
+
+    <!-- TAB: FIRMA -->
+    <div class="tab-panel active" id="tab-firma">
+
+      <!-- Logo -->
+      <div class="logo-block">
+        <div class="logo-preview" id="logo-preview">
+          <span class="logo-placeholder">🏢</span>
+        </div>
+        <div class="logo-info">
+          <div class="logo-info-title">Firmenlogo</div>
+          <div class="logo-info-sub">PNG, JPG oder SVG · max 2 MB<br>Wird in PDF-Kopfzeilen eingefügt</div>
+        </div>
+        <button class="logo-upload-btn" onclick="document.getElementById('logo-file-input').click()">
+          Hochladen
+        </button>
+        <input type="file" id="logo-file-input" accept="image/*" onchange="handleLogoUpload(this)">
+      </div>
+
+      <div class="field-group">
+        <div class="section-title">Firma</div>
+
+        <div class="field">
+          <label>Firmenname</label>
+          <input type="text" id="company_name" placeholder="Mustermann GmbH">
+        </div>
+
+        <div class="field">
+          <label>Adresse</label>
+          <input type="text" id="company_address" placeholder="Musterstraße 1">
+        </div>
+
+        <div class="field-row">
+          <div class="field" style="flex:0 0 100px">
+            <label>PLZ</label>
+            <input type="text" id="company_zip" placeholder="12345">
+          </div>
+          <div class="field">
+            <label>Ort</label>
+            <input type="text" id="company_city" placeholder="München">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Telefon</label>
+            <input type="text" id="company_phone" placeholder="+49 89 123456">
+          </div>
+          <div class="field">
+            <label>E-Mail</label>
+            <input type="email" id="company_email" placeholder="info@firma.de">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>IBAN</label>
+            <input type="text" id="company_iban" placeholder="DE89 3704 0044 0532 0130 00">
+          </div>
+          <div class="field" style="flex:0 0 160px">
+            <label>USt-ID</label>
+            <input type="text" id="company_ust_id" placeholder="DE123456789">
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: DOKUMENTE -->
+    <div class="tab-panel" id="tab-dokumente">
+      <div class="field-group">
+        <div class="section-title">Brief &amp; Word</div>
+
+        <div class="field">
+          <label>Grußformel</label>
+          <input type="text" id="letter_salutation" placeholder="Mit freundlichen Grüßen">
+        </div>
+
+        <div class="field">
+          <label>Unterschrift / Name</label>
+          <input type="text" id="letter_signature" placeholder="Max Mustermann">
+        </div>
+
+        <div class="field">
+          <label>Schriftart</label>
+          <select id="letter_font">
+            <option value="Arial">Arial</option>
+            <option value="Calibri">Calibri</option>
+            <option value="Times New Roman">Times New Roman</option>
+            <option value="Helvetica">Helvetica</option>
+            <option value="Georgia">Georgia</option>
+          </select>
+        </div>
+
+        <div class="section-title" style="margin-top:6px">Excel</div>
+
+        <div class="field">
+          <label>Spalten-Überschriften (kommagetrennt)</label>
+          <input type="text" id="excel_headers" placeholder="Datum,Absender,Betreff,Netto,MwSt,Brutto,IBAN">
+        </div>
+
+        <div class="field-row">
+          <div class="field" style="flex:0 0 100px">
+            <label>Währung</label>
+            <select id="excel_currency">
+              <option value="€">€ Euro</option>
+              <option value="$">$ Dollar</option>
+              <option value="CHF">CHF Franken</option>
+              <option value="£">£ Pfund</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Datumsformat</label>
+            <select id="excel_date_format">
+              <option value="DD.MM.YYYY">DD.MM.YYYY</option>
+              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB: MAIL -->
+    <div class="tab-panel" id="tab-mail">
+      <div class="field-group">
+        <div class="section-title">E-Mail Signatur</div>
+
+        <div class="field">
+          <label>Signatur (wird automatisch an Mails angehängt)</label>
+          <textarea id="mail_signature" placeholder="Mit freundlichen Grüßen&#10;Max Mustermann&#10;Mustermann GmbH&#10;Tel: +49 89 123456"></textarea>
+        </div>
+
+        <div style="background:#0d1020;border:1px solid #1e2130;border-radius:8px;padding:12px 14px">
+          <div style="font-size:10px;color:#6b6f80;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:6px">Vorschau</div>
+          <div id="mail-sig-preview" style="font-size:11px;color:#c0c4d0;white-space:pre-wrap;line-height:1.6;min-height:40px">
+            —
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <button class="btn btn-cancel" onclick="window.close()">Abbrechen</button>
+    <div class="footer-spacer"></div>
+    <button class="btn btn-save" id="save-btn" onclick="save()">💾 Speichern</button>
+  </div>
+
+  <!-- Toast -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    let settings = {};
+    let logoBase64 = null;
+
+    // ── Init ──────────────────────────────────────────────────────────────
+    async function init() {
+      try {
+        const data = await ipcRenderer.invoke('profile-get-settings');
+        if (data.success) {
+          settings = data.settings || {};
+          populateForm();
+        }
+      } catch(e) {
+        console.warn('⚠️ Profil laden:', e.message);
+      }
+    }
+
+    function populateForm() {
+      const fields = [
+        'company_name','company_address','company_zip','company_city',
+        'company_phone','company_email','company_iban','company_ust_id',
+        'letter_salutation','letter_signature','letter_font',
+        'excel_headers','excel_currency','excel_date_format',
+        'mail_signature'
+      ];
+      fields.forEach(k => {
+        const el = document.getElementById(k);
+        if (!el) return;
+        if (settings[k] !== undefined && settings[k] !== null) el.value = settings[k];
+      });
+
+      if (settings.company_logo_base64) {
+        logoBase64 = settings.company_logo_base64;
+        showLogoPreview(logoBase64);
+      }
+
+      updateMailPreview();
+    }
+
+    // ── Tab Switching ─────────────────────────────────────────────────────
+    function switchTab(tab) {
+      document.querySelectorAll('.tab-btn').forEach((b, i) => {
+        b.classList.toggle('active', ['firma','dokumente','mail'][i] === tab);
+      });
+      document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById('tab-' + tab).classList.add('active');
+    }
+
+    // ── Logo ──────────────────────────────────────────────────────────────
+    function handleLogoUpload(input) {
+      const file = input.files[0];
+      if (!file) return;
+      if (file.size > 2 * 1024 * 1024) {
+        showToast('❌ Datei zu groß (max 2 MB)', 'error'); return;
+      }
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        logoBase64 = e.target.result;
+        showLogoPreview(logoBase64);
+      };
+      reader.readAsDataURL(file);
+    }
+
+    function showLogoPreview(src) {
+      const preview = document.getElementById('logo-preview');
+      preview.innerHTML = `<img src="${src}" alt="Logo">`;
+    }
+
+    // ── Mail Preview ──────────────────────────────────────────────────────
+    function updateMailPreview() {
+      const sig = document.getElementById('mail_signature')?.value || '';
+      document.getElementById('mail-sig-preview').textContent = sig || '—';
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const mailSigEl = document.getElementById('mail_signature');
+      if (mailSigEl) mailSigEl.addEventListener('input', updateMailPreview);
+    });
+
+    // ── Collect Form ──────────────────────────────────────────────────────
+    function collectFormData() {
+      const fields = [
+        'company_name','company_address','company_zip','company_city',
+        'company_phone','company_email','company_iban','company_ust_id',
+        'letter_salutation','letter_signature','letter_font',
+        'excel_headers','excel_currency','excel_date_format',
+        'mail_signature'
+      ];
+      const data = {};
+      fields.forEach(k => {
+        const el = document.getElementById(k);
+        if (el) data[k] = el.value.trim();
+      });
+      if (logoBase64) data.company_logo_base64 = logoBase64;
+      return data;
+    }
+
+    // ── Save ──────────────────────────────────────────────────────────────
+    async function save() {
+      const saveBtn = document.getElementById('save-btn');
+      saveBtn.disabled = true;
+      saveBtn.textContent = 'Speichere...';
+      try {
+        const data = collectFormData();
+        const result = await ipcRenderer.invoke('profile-save-settings', data);
+        if (result.success) {
+          settings = data;
+          showToast('✅ Einstellungen gespeichert', 'success');
+        } else {
+          showToast('❌ ' + (result.error || 'Fehler beim Speichern'), 'error');
+        }
+      } catch(e) {
+        showToast('❌ ' + e.message, 'error');
+      } finally {
+        saveBtn.disabled = false;
+        saveBtn.textContent = '💾 Speichern';
+      }
+    }
+
+    // ── Toast ─────────────────────────────────────────────────────────────
+    let toastTimer = null;
+    function showToast(msg, type = '') {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.className = 'toast visible ' + type;
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.classList.remove('visible'); }, 2800);
+    }
+
+    // ── Start ─────────────────────────────────────────────────────────────
+    init();
+  </script>
+</body>
+</html>

@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0a0a0a;
+      color: white;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      -webkit-app-region: drag;
+    }
+
+    /* ── Drag Header ── */
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 12px 16px 10px;
+      border-bottom: 1px solid #1a1a1a;
+      flex-shrink: 0;
+      -webkit-app-region: drag;
+      -webkit-user-select: none;
+      cursor: grab;
+    }
+    .header-title { color: #00ff88; font-size: 10px; letter-spacing: 3px; text-transform: uppercase; opacity: 0.7; }
+    .header-drag  { color: #2a2a2a; font-size: 9px; }
+    .header:active { cursor: grabbing; }
+
+    /* ── Content ── */
+    .content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      padding: 20px 20px 16px;
+      gap: 14px;
+      -webkit-app-region: no-drag;
+      overflow: hidden;
+    }
+
+    /* ── Route Info ── */
+    .route-badge {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 10px;
+      padding: 10px 14px;
+    }
+    .route-dot { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88; flex-shrink: 0; }
+    .route-name { font-size: 13px; color: #fff; font-weight: 500; flex: 1; }
+    .route-count { font-size: 10px; color: #444; }
+
+    /* ── Progress ── */
+    .progress-bar { height: 2px; background: #1a1a1a; border-radius: 2px; overflow: hidden; }
+    .progress-fill { height: 100%; background: linear-gradient(90deg, #00ff88, #00aaff); border-radius: 2px; transition: width 0.4s ease; }
+
+    /* ── Step Card ── */
+    .step-card {
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 12px;
+      padding: 16px;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .step-label { font-size: 9px; color: #444; letter-spacing: 1.5px; text-transform: uppercase; }
+    .step-command { font-size: 14px; color: #fff; font-weight: 500; line-height: 1.4; }
+    .step-pos {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #0d0d0d;
+      border: 1px solid #1a1a1a;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 11px;
+      color: #555;
+    }
+    .pos-dot { width: 6px; height: 6px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88; animation: pulse 1.2s infinite; flex-shrink: 0; }
+    @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.7)} }
+    .pos-val { color: #00ff88; margin-left: 4px; }
+
+    /* ── Frage ── */
+    .question-row { display: flex; flex-direction: column; gap: 6px; }
+    .question-text { font-size: 12px; color: #666; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1;
+      padding: 11px;
+      border-radius: 9px;
+      border: none;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .btn-ok   { background: #00ff8820; color: #00ff88; border: 1px solid #00ff8840; }
+    .btn-ok:hover   { background: #00ff8835; }
+    .btn-bad  { background: #ff453a20; color: #ff453a; border: 1px solid #ff453a40; }
+    .btn-bad:hover  { background: #ff453a35; }
+    .btn-next { background: #0a84ff20; color: #0a84ff; border: 1px solid #0a84ff40; }
+    .btn-next:hover { background: #0a84ff35; }
+    .btn-cancel { background: #1a1a1a; color: #444; border: 1px solid #222; flex: 0 0 auto; padding: 11px 16px; }
+
+    /* ── Correction Mode ── */
+    .correction-box {
+      background: #1a0a0a;
+      border: 1px solid #ff453a40;
+      border-radius: 10px;
+      padding: 14px;
+      display: none;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .correction-box.visible { display: flex; }
+    .corr-label { font-size: 11px; color: #ff453a; }
+    .corr-pos { font-size: 12px; color: #fff; font-family: inherit; }
+    .corr-hint { font-size: 10px; color: #444; }
+
+    /* ── Done / Loading ── */
+    .center-state {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      flex: 1;
+      gap: 10px;
+      text-align: center;
+    }
+    .center-state.visible { display: flex; }
+    .state-icon  { font-size: 32px; }
+    .state-title { font-size: 14px; color: #fff; font-weight: 500; }
+    .state-sub   { font-size: 11px; color: #444; line-height: 1.5; }
+
+    /* ── Footer ── */
+    .footer {
+      padding: 8px 20px 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+    .footer-step { font-size: 10px; color: #333; }
+    .footer-cancel { font-size: 10px; color: #333; cursor: pointer; letter-spacing: 1px; text-transform: uppercase; transition: color 0.15s; }
+    .footer-cancel:hover { color: #ff453a; }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <span class="header-title">⬡ MIRA — Route Training</span>
+    <span class="header-drag">⠿ ziehen</span>
+  </div>
+
+  <div class="content">
+
+    <!-- Loading State -->
+    <div class="center-state visible" id="state-loading">
+      <div class="state-icon">⟳</div>
+      <div class="state-title">Lade Route...</div>
+      <div class="state-sub">MIRA sucht die aufgenommene Route</div>
+    </div>
+
+    <!-- Error State -->
+    <div class="center-state" id="state-error">
+      <div class="state-icon">✕</div>
+      <div class="state-title">Route nicht gefunden</div>
+      <div class="state-sub" id="error-msg">Keine passende Route gefunden.</div>
+    </div>
+
+    <!-- Ready State -->
+    <div class="center-state" id="state-ready">
+      <div class="state-icon">▶</div>
+      <div class="state-title" id="ready-title">Route bereit</div>
+      <div class="state-sub" id="ready-sub">MIRA spielt jeden Schritt ab und fragt ob es korrekt war.</div>
+      <button class="btn btn-next" style="margin-top:8px;flex:none;padding:12px 28px" onclick="startTraining()">Training starten</button>
+    </div>
+
+    <!-- Step State -->
+    <div id="state-step" style="display:none;flex-direction:column;gap:14px;flex:1">
+      <div class="route-badge">
+        <div class="route-dot"></div>
+        <div class="route-name" id="step-route-name">—</div>
+        <div class="route-count" id="step-counter">—</div>
+      </div>
+
+      <div class="progress-bar">
+        <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+      </div>
+
+      <div class="step-card">
+        <div class="step-label">Schritt</div>
+        <div class="step-command" id="step-command">—</div>
+        <div class="step-pos">
+          <div class="pos-dot"></div>
+          Maus positioniert bei: <span class="pos-val" id="step-coords">—</span>
+        </div>
+
+        <div class="question-row">
+          <div class="question-text">War das korrekt?</div>
+          <div class="btn-row">
+            <button class="btn btn-ok"  onclick="sendFeedback('correct')">✓ Ja, korrekt</button>
+            <button class="btn btn-bad" onclick="startCorrection()">✗ Falsch</button>
+          </div>
+        </div>
+
+        <!-- Correction Mode -->
+        <div class="correction-box" id="correction-box">
+          <div class="corr-label">📍 Zeig die richtige Position</div>
+          <div class="corr-hint">Bewege die Maus zur richtigen Stelle und drücke <strong>Space</strong></div>
+          <div class="corr-pos">Maus: <span id="corr-coords">[—, —]</span></div>
+          <div class="btn-row" style="margin-top:4px">
+            <button class="btn btn-bad" onclick="confirmCorrection()">✓ Diese Position speichern (Space)</button>
+            <button class="btn btn-cancel" onclick="cancelCorrection()">Abbruch</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Done State -->
+    <div class="center-state" id="state-done">
+      <div class="state-icon">✦</div>
+      <div class="state-title" id="done-title">Training abgeschlossen!</div>
+      <div class="state-sub" id="done-sub">Alle Schritte wurden gespeichert.</div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    <div class="footer-step" id="footer-step"></div>
+    <div class="footer-cancel" onclick="cancelTraining()">Abbrechen</div>
+  </div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    let routeData   = null;
+    let correcting  = false;
+    let corrInterval = null;
+    let corrPos     = { x: 0, y: 0 };
+
+    // ── Helper: State wechseln ──
+    function showState(id) {
+      ['state-loading','state-error','state-ready','state-done'].forEach(s => {
+        const el = document.getElementById(s);
+        if (el) el.classList.remove('visible');
+      });
+      const stepEl = document.getElementById('state-step');
+      if (stepEl) stepEl.style.display = 'none';
+
+      if (id === 'state-step') {
+        stepEl.style.display = 'flex';
+      } else {
+        const target = document.getElementById(id);
+        if (target) target.classList.add('visible');
+      }
+    }
+
+    // ── Empfange training-init vom Main Process ──
+    ipcRenderer.on('training-init', (event, data) => {
+      if (!data || !data.success) {
+        document.getElementById('error-msg').textContent = data?.error || 'Route nicht gefunden.';
+        showState('state-error');
+        return;
+      }
+      routeData = data;
+      document.getElementById('ready-title').textContent = `"${data.route_name}"`;
+      document.getElementById('ready-sub').textContent =
+        `${data.steps?.length || 0} Schritte aufgenommen. MIRA spielt jeden Schritt ab und fragt ob es korrekt war.`;
+      showState('state-ready');
+    });
+
+    // ── Training starten ──
+    async function startTraining() {
+      showState('state-loading');
+      await nextStep();
+    }
+
+    // ── Nächster Schritt ausführen ──
+    async function nextStep() {
+      const result = await ipcRenderer.invoke('training-next-step');
+
+      if (!result.success) {
+        if (result.done) {
+          showDone();
+        } else {
+          document.getElementById('error-msg').textContent = result.error || 'Fehler beim nächsten Schritt.';
+          showState('state-error');
+        }
+        return;
+      }
+
+      // Step UI befüllen
+      document.getElementById('step-route-name').textContent = routeData?.route_name || '—';
+      document.getElementById('step-counter').textContent = `${result.step_index} / ${result.total}`;
+      document.getElementById('step-command').textContent = result.command || '—';
+      document.getElementById('step-coords').textContent =
+        result.clicked_at ? `[${result.clicked_at[0]}, ${result.clicked_at[1]}]` : '—';
+
+      const pct = ((result.step_index - 1) / result.total) * 100;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('footer-step').textContent = `Schritt ${result.step_index} von ${result.total}`;
+
+      document.getElementById('correction-box').classList.remove('visible');
+      showState('state-step');
+    }
+
+    // ── Feedback senden ──
+    async function sendFeedback(feedback, correct_x, correct_y) {
+      stopCorrInterval();
+      const result = await ipcRenderer.invoke('training-feedback', { feedback, correct_x, correct_y });
+      if (result.done) {
+        showDone(result.message);
+      } else {
+        await nextStep();
+      }
+    }
+
+    // ── Korrektur starten ──
+    function startCorrection() {
+      correcting = true;
+      document.getElementById('correction-box').classList.add('visible');
+      corrInterval = setInterval(async () => {
+        if (!correcting) return;
+        const pos = await ipcRenderer.invoke('training-get-mouse-pos');
+        corrPos = pos;
+        document.getElementById('corr-coords').textContent = `[${pos.x}, ${pos.y}]`;
+      }, 150);
+    }
+
+    function stopCorrInterval() {
+      if (corrInterval) { clearInterval(corrInterval); corrInterval = null; }
+      correcting = false;
+    }
+
+    function cancelCorrection() {
+      stopCorrInterval();
+      document.getElementById('correction-box').classList.remove('visible');
+    }
+
+    async function confirmCorrection() {
+      const x = corrPos.x, y = corrPos.y;
+      stopCorrInterval();
+      await sendFeedback('wrong', x, y);
+    }
+
+    // Space = Korrektur bestätigen
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space' && correcting) {
+        e.preventDefault();
+        confirmCorrection();
+      }
+    });
+
+    // ── Done ──
+    function showDone(msg) {
+      document.getElementById('done-title').textContent = 'Training abgeschlossen! ✦';
+      document.getElementById('done-sub').textContent = msg || `Route "${routeData?.route_name || ''}" wurde trainiert.`;
+      document.getElementById('progress-fill').style.width = '100%';
+      showState('state-done');
+      setTimeout(() => window.close(), 3000);
+    }
+
+    // ── Cancel ──
+    async function cancelTraining() {
+      stopCorrInterval();
+      await ipcRenderer.invoke('training-cancel');
+      window.close();
+    }
+  </script>
+</body>
+</html>

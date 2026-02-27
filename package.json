@@ -1,0 +1,127 @@
+{
+  "name": "mira-agent",
+  "version": "1.0.0",
+  "description": "MIRA Agent - Virtueller Mitarbeiter",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "postinstall": "electron-rebuild -f -w sharp",
+    "build:ax": "swiftc ax-helper.swift -O -o resources/ax-helper && chmod +x resources/ax-helper",
+    "build:ax-win": "echo ax-helper-win.ps1 requires no compilation - PowerShell is built into Windows",
+    "build": "npm run build:ax && electron-builder",
+    "build:mac": "node scripts/build-all.js --mac",
+    "build:win": "node scripts/build-all.js --win",
+    "build:all": "node scripts/build-all.js"
+  },
+  "build": {
+    "appId": "space.getmira.agent",
+    "productName": "MIRA Agent",
+    "npmRebuild": true,
+    "asar": true,
+    "asarUnpack": [
+      "**/node_modules/sharp/**",
+      "**/node_modules/@img/**",
+      "**/node_modules/@nut-tree/**",
+      "**/node_modules/uiohook-napi/**"
+    ],
+    "mac": {
+      "icon": "icon.icns",
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": ["x64", "arm64"]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/ax-helper",
+          "to": "ax-helper"
+        },
+        {
+          "from": "node_modules/@img/sharp-libvips-darwin-arm64",
+          "to": "sharp-libvips-darwin-arm64",
+          "filter": ["**/*"]
+        },
+        {
+          "from": "node_modules/@img/sharp-libvips-darwin-x64",
+          "to": "sharp-libvips-darwin-x64",
+          "filter": ["**/*"]
+        }
+      ]
+    },
+    "win": {
+      "icon": "icon.ico",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": ["x64"]
+        }
+      ],
+      "extraResources": [
+        {
+          "from": "resources/ax-helper-win.ps1",
+          "to": "ax-helper-win.ps1"
+        },
+        {
+          "from": "node_modules/@img/sharp-libvips-win32-x64",
+          "to": "sharp-libvips-win32-x64",
+          "filter": ["**/*"]
+        }
+      ]
+    },
+    "files": [
+      "main.js",
+      "index.html",
+      "route-overlay.html",
+      "calibration-overlay.html",
+      "training-overlay.html",
+      "pc-training-overlay.html",
+      "mira-setup-overlay.html",
+      "zone-capture.html",
+      "screen-calibrator.js",
+      "desktop-map.js",
+      "ax-layer.js",
+      "context-manager.js",
+      "coord-cache.js",
+      "mail-monitor.js",
+      "system-log-monitor.js",
+      "recovery-engine.js",
+      "mira-brain.js",
+      "mira-planner.js",
+      "passive-trainer.js",
+      "knowledge-base-overlay.html",
+      "onboarding-overlay.html",
+      "templates-overlay.html",
+      "device-knowledge-overlay.html",
+      "user-profile-overlay.html",
+      "icon.icns",
+      "icon.ico",
+      "icon.png",
+      "package.json",
+      "node_modules/**/*"
+    ],
+    "directories": {
+      "output": "dist"
+    }
+  },
+  "dependencies": {
+    "@nut-tree/nut-js": "^4.2.0",
+    "docx": "^9.5.3",
+    "electron-squirrel-startup": "^1.0.0",
+    "electron-store": "^8.2.0",
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.11.0",
+    "node-fetch": "^2.7.0",
+    "pdfjs-dist": "^3.11.174",
+    "pdfkit": "^0.17.2",
+    "screenshot-desktop": "^1.12.7",
+    "sharp": "^0.34.5",
+    "uiohook-napi": "^1.5.4"
+  },
+  "devDependencies": {
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1",
+    "electron-rebuild": "^3.2.9"
+  }
+}

@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: transparent;
+      color: white;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      pointer-events: none;
+    }
+
+    #panel {
+      position: fixed;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      background: #0a0a0a;
+      padding: 12px 0 16px;
+      border-radius: 16px;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.9);
+      pointer-events: all;
+    }
+
+    .header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      padding: 10px 16px 10px;
+      border-bottom: 1px solid #1a1a1a;
+      cursor: grab;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    .header-title {
+      color: #00ff88;
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      opacity: 0.7;
+    }
+    .header-drag-hint {
+      color: #333;
+      font-size: 9px;
+      letter-spacing: 1px;
+    }
+    .header:active { cursor: grabbing; }
+    
+
+    .card {
+      background: #111;
+      border: 1px solid #1a1a1a;
+      border-radius: 12px;
+      padding: 24px 28px;
+      width: 440px;
+    }
+
+    /* Progress */
+    .progress-bar {
+      height: 2px;
+      background: #1a1a1a;
+      border-radius: 2px;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #00ff88, #00aaff);
+      border-radius: 2px;
+      transition: width 0.5s ease;
+    }
+
+    /* Category Badge */
+    .category-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: #1a1a1a;
+      border: 1px solid #222;
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 10px;
+      color: #555;
+      letter-spacing: 1px;
+      margin-bottom: 14px;
+    }
+    .category-dot {
+      width: 5px;
+      height: 5px;
+      border-radius: 50%;
+      background: #00ff88;
+    }
+
+    /* Question */
+    .question {
+      font-size: 15px;
+      color: #fff;
+      font-weight: 500;
+      margin-bottom: 6px;
+      line-height: 1.4;
+    }
+    .question-sub {
+      font-size: 11px;
+      color: #444;
+      margin-bottom: 18px;
+      line-height: 1.5;
+    }
+
+    /* Method Choice */
+    .method-choice {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .method-btn {
+      flex: 1;
+      padding: 10px;
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 8px;
+      color: #555;
+      font-size: 11px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+      text-align: center;
+    }
+    .method-btn:hover { border-color: #333; color: #888; }
+    .method-btn.active {
+      border-color: #00ff8840;
+      background: #00ff8810;
+      color: #00ff88;
+    }
+
+    /* URL Input */
+    .url-input-wrap {
+      display: none;
+      margin-bottom: 16px;
+    }
+    .url-input-wrap.visible { display: block; }
+    .url-input {
+      width: 100%;
+      background: #0d0d0d;
+      border: 1px solid #222;
+      border-radius: 8px;
+      padding: 10px 12px;
+      color: #fff;
+      font-family: inherit;
+      font-size: 12px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .url-input:focus { border-color: #00ff8840; }
+    .url-input::placeholder { color: #333; }
+
+    /* Click Zone */
+    .click-zone {
+      display: none;
+      background: #0d0d0d;
+      border: 1px solid #1a1a1a;
+      border-radius: 10px;
+      padding: 14px 16px;
+      margin-bottom: 16px;
+    }
+    .click-zone.visible { display: flex; align-items: center; gap: 12px; }
+    .click-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: #00ff88;
+      box-shadow: 0 0 12px #00ff88;
+      animation: pulse 1.5s infinite;
+      flex-shrink: 0;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(0.7); }
+    }
+    .click-text { font-size: 11px; color: #555; }
+    .click-coords { color: #00ff88; font-size: 11px; margin-top: 2px; }
+
+    /* Action Buttons */
+    .action-row { display: flex; gap: 8px; }
+    .btn {
+      flex: 1;
+      padding: 11px;
+      border: none;
+      border-radius: 9px;
+      font-size: 12px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .btn-capture {
+      background: #00ff8820;
+      color: #00ff88;
+      border: 1px solid #00ff8840;
+    }
+    .btn-capture:hover { background: #00ff8830; }
+    .btn-capture:disabled { opacity: 0.3; cursor: not-allowed; }
+    .btn-skip {
+      background: #1a1a1a;
+      color: #444;
+      border: 1px solid #222;
+      flex: 0 0 80px;
+    }
+    .btn-skip:hover { color: #666; }
+
+    /* Captured State */
+    .captured-state {
+      display: none;
+      align-items: center;
+      gap: 10px;
+      background: #0d1a12;
+      border: 1px solid #00ff8830;
+      border-radius: 9px;
+      padding: 11px 14px;
+      margin-bottom: 16px;
+    }
+    .captured-state.visible { display: flex; }
+    .captured-check { color: #00ff88; font-size: 14px; }
+    .captured-info { flex: 1; }
+    .captured-label { font-size: 11px; color: #00ff88; }
+    .captured-pos { font-size: 10px; color: #444; margin-top: 2px; }
+    .btn-next {
+      background: #00ff8820;
+      color: #00ff88;
+      border: 1px solid #00ff8840;
+      border-radius: 8px;
+      padding: 8px 16px;
+      font-family: inherit;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.15s;
+      white-space: nowrap;
+    }
+    .btn-next:hover { background: #00ff8830; }
+
+    /* Done State */
+    .done-state {
+      display: none;
+      text-align: center;
+      padding: 12px 0;
+    }
+    .done-state.visible { display: block; }
+    .done-icon { font-size: 28px; margin-bottom: 10px; }
+    .done-title { color: #00ff88; font-size: 14px; margin-bottom: 4px; }
+    .done-sub { color: #444; font-size: 11px; }
+
+    /* Counter */
+    .counter {
+      color: #333;
+      font-size: 10px;
+      letter-spacing: 1px;
+    }
+
+    .cancel {
+      color: #444;
+      font-size: 10px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      transition: color 0.15s;
+    }
+    .cancel:hover { color: #aaa; }
+  </style>
+</head>
+<body>
+<div id="panel"
+  onmouseenter="ipcRenderer.send('pc-training-release-mouse')"
+  onmouseleave="ipcRenderer.send('pc-training-needs-mouse')"
+>
+
+  <div class="header">
+    <span class="header-title">⬡ MIRA — PC Vorstellung</span>
+    <span class="header-drag-hint">⠿ ziehen</span>
+  </div>
+
+  <div class="card">
+    <div class="progress-bar">
+      <div class="progress-fill" id="progress-fill" style="width:0%"></div>
+    </div>
+
+    <!-- Main State -->
+    <div id="main-state">
+      <div class="category-badge">
+        <div class="category-dot"></div>
+        <span id="category-label">BROWSER</span>
+      </div>
+
+      <div class="question" id="question-text">Wo ist dein Browser?</div>
+      <div class="question-sub" id="question-sub">Klick auf das Browser-Symbol im Dock oder der Taskleiste</div>
+
+      <!-- Method Choice (für Mail/Office) -->
+      <div class="method-choice" id="method-choice" style="display:none">
+        <button class="method-btn" id="method-app" onclick="selectMethod('app')">📱 Als App im Dock</button>
+        <button class="method-btn" id="method-url" onclick="selectMethod('url')">🌐 Über den Browser</button>
+      </div>
+
+      <!-- URL Input -->
+      <div class="url-input-wrap" id="url-input-wrap">
+        <input class="url-input" id="url-input" type="text" placeholder="z.B. outlook.com oder mail.google.com" />
+      </div>
+
+      <!-- Click Zone -->
+      <div class="click-zone" id="click-zone">
+        <div class="click-dot"></div>
+        <div>
+          <div class="click-text">Maus-Position</div>
+          <div class="click-coords" id="click-coords">[—, —]</div>
+        </div>
+      </div>
+
+      <!-- Captured -->
+      <div class="captured-state" id="captured-state">
+        <div class="captured-check">✓</div>
+        <div class="captured-info">
+          <div class="captured-label" id="captured-label">Position gespeichert</div>
+          <div class="captured-pos" id="captured-pos">[—, —]</div>
+        </div>
+        <button class="btn-next" onclick="nextQuestion()">Weiter →</button>
+      </div>
+
+      <!-- Action Row -->
+      <div class="action-row" id="action-row">
+        <button class="btn btn-capture" id="btn-capture" onclick="capturePosition()">
+          📍 Position einfrieren (Space)
+        </button>
+        <button class="btn btn-skip" onclick="skipQuestion()">Überspringen</button>
+      </div>
+    </div>
+
+    <!-- Done State -->
+    <div class="done-state" id="done-state">
+      <div class="done-icon">✦</div>
+      <div class="done-title">MIRA kennt deinen PC!</div>
+      <div class="done-sub" id="done-sub">0 Elemente gespeichert</div>
+    </div>
+  </div>
+
+  <div class="counter" id="counter">1 / 20</div>
+  <div style="display:flex;gap:16px;align-items:center">
+    <div class="cancel" onclick="goBack()">← Zurück</div>
+    <div class="cancel" onclick="saveAndClose()" style="color:#00ff8880">💾 Speichern & Beenden</div>
+    <div class="cancel" onclick="cancelTraining()">Abbrechen</div>
+  </div>
+
+</div><!-- #panel -->
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    // ═══════════════════════════════════════
+    // FRAGEN DEFINIEREN
+    // ═══════════════════════════════════════
+    const questions = [
+      // ── BROWSER ──
+      { id: 'browser',           category: 'BROWSER',     method: 'click',  question: 'Wo ist dein Browser?',                  sub: 'Klick auf das Browser-Symbol im Dock oder der Taskleiste' },
+      { id: 'url_leiste',        category: 'BROWSER',     method: 'click',  question: 'Wo ist die URL-Leiste?',                sub: 'Öffne den Browser und klick in die Adresszeile oben' },
+      { id: 'neuer_tab',         category: 'BROWSER',     method: 'click',  question: 'Wo öffnest du einen neuen Tab?',        sub: 'Klick auf das + Symbol oder zeig wo du einen neuen Tab öffnest' },
+      { id: 'zurueck_btn',       category: 'BROWSER',     method: 'click',  question: 'Wo ist der Zurück-Button im Browser?',  sub: 'Klick auf den Pfeil links oben im Browser' },
+
+      // ── SUCHE ──
+      { id: 'google_suche',      category: 'SUCHE',       method: 'click',  question: 'Wo ist die Google Suchleiste?',         sub: 'Öffne google.com und klick auf das Suchfeld' },
+      { id: 'youtube_suche',     category: 'SUCHE',       method: 'click',  question: 'Wo ist die YouTube Suchleiste?',        sub: 'Öffne youtube.com und klick auf das Suchfeld' },
+      { id: 'erstes_ergebnis',   category: 'SUCHE',       method: 'click',  question: 'Wo ist das erste Suchergebnis?',        sub: 'Klick auf den ersten Treffer einer Google Suche' },
+      { id: 'erstes_video',      category: 'SUCHE',       method: 'click',  question: 'Wo ist das erste YouTube Video?',       sub: 'Klick auf das erste Video nach einer YouTube Suche' },
+
+      // ── MAIL ──
+      { id: 'mail_öffnen',       category: 'MAIL',        method: 'choice', question: 'Wie öffnest du deine Mails?',           sub: 'Als App (Outlook, Apple Mail) oder über den Browser?' },
+      { id: 'posteingang',       category: 'MAIL',        method: 'click',  question: 'Wo ist dein Posteingang?',              sub: 'Klick auf Posteingang / Inbox in deinem Mail-Programm' },
+      { id: 'erste_mail',        category: 'MAIL',        method: 'click',  question: 'Wo ist die erste Mail in der Liste?',   sub: 'Klick auf die oberste Mail im Posteingang' },
+      { id: 'neue_mail',         category: 'MAIL',        method: 'click',  question: 'Wo ist "Neue Mail schreiben"?',         sub: 'Klick auf Verfassen / Neue Mail / Compose' },
+      { id: 'mail_empfänger',    category: 'MAIL',        method: 'click',  question: 'Wo ist das Empfänger-Feld?',            sub: 'Klick in das An: / To: Feld einer neuen Mail' },
+      { id: 'mail_betreff',      category: 'MAIL',        method: 'click',  question: 'Wo ist das Betreff-Feld?',              sub: 'Klick in das Betreff / Subject Feld' },
+      { id: 'mail_inhalt',       category: 'MAIL',        method: 'click',  question: 'Wo schreibst du den Mail-Inhalt?',      sub: 'Klick in den Textbereich der Mail' },
+      { id: 'mail_senden',       category: 'MAIL',        method: 'click',  question: 'Wo ist der Senden-Button?',             sub: 'Klick auf Senden / Send in einer geöffneten Mail' },
+      { id: 'mail_löschen',      category: 'MAIL',        method: 'click',  question: 'Wo ist der Löschen-Button?',            sub: 'Klick auf Löschen / Papierkorb in deinem Mail-Programm' },
+      { id: 'mail_anhang',       category: 'MAIL',        method: 'click',  question: 'Wo hängst du eine Datei an?',           sub: 'Klick auf das Büroklammer / Anhang Symbol' },
+
+      // ── DATEIEN ──
+      { id: 'finder',            category: 'DATEIEN',     method: 'click',  question: 'Wo ist dein Datei-Browser?',            sub: 'Klick auf Finder (Mac) oder Explorer (Windows) im Dock' },
+      { id: 'desktop',           category: 'DATEIEN',     method: 'click',  question: 'Wo ist dein Desktop?',                  sub: 'Klick auf eine freie Stelle auf dem Desktop' },
+      { id: 'downloads',         category: 'DATEIEN',     method: 'click',  question: 'Wo ist dein Downloads-Ordner?',         sub: 'Klick auf Downloads im Dock, Finder oder Explorer' },
+      { id: 'dokumente',         category: 'DATEIEN',     method: 'click',  question: 'Wo sind deine Dokumente?',              sub: 'Klick auf den Dokumente-Ordner' },
+
+      // ── OFFICE ──
+      { id: 'excel_öffnen',      category: 'OFFICE',      method: 'choice', question: 'Wie öffnest du Excel oder Tabellen?',   sub: 'Als App (Excel, Numbers) oder über den Browser (Google Sheets)?' },
+      { id: 'word_öffnen',       category: 'OFFICE',      method: 'choice', question: 'Wie öffnest du Word oder Dokumente?',   sub: 'Als App (Word, Pages) oder über den Browser (Google Docs)?' },
+      { id: 'pdf_öffnen',        category: 'OFFICE',      method: 'click',  question: 'Womit öffnest du PDFs?',                sub: 'Klick auf dein PDF-Programm (Preview, Acrobat, etc.)' },
+      { id: 'speichern_dialog',  category: 'OFFICE',      method: 'click',  question: 'Wo ist "Speichern unter"?',             sub: 'Öffne den Speichern-Dialog (CMD+S oder STRG+S) und klick Speichern' },
+
+      // ── KOMMUNIKATION ──
+      { id: 'teams_öffnen',      category: 'KOMMUNIKATION', method: 'choice', question: 'Nutzt du Microsoft Teams?',           sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
+      { id: 'zoom_öffnen',       category: 'KOMMUNIKATION', method: 'choice', question: 'Nutzt du Zoom?',                     sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
+      { id: 'whatsapp_öffnen',   category: 'KOMMUNIKATION', method: 'choice', question: 'Nutzt du WhatsApp?',                 sub: 'Als App oder über web.whatsapp.com? Überspringen wenn nicht genutzt' },
+
+      // ── BUCHHALTUNG / BUSINESS ──
+      { id: 'datev_öffnen',      category: 'BUSINESS',    method: 'choice', question: 'Nutzt du DATEV?',                      sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
+      { id: 'lexware_öffnen',    category: 'BUSINESS',    method: 'choice', question: 'Nutzt du Lexware oder ähnliches?',     sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
+      { id: 'onedrive_öffnen',   category: 'BUSINESS',    method: 'choice', question: 'Nutzt du OneDrive oder SharePoint?',   sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
+
+      // ── SYSTEM ──
+      { id: 'drucker',           category: 'SYSTEM',      method: 'click',  question: 'Wo ist der Drucken-Button?',           sub: 'Öffne den Drucken-Dialog (CMD+P) und klick auf Drucken' },
+      { id: 'einstellungen',     category: 'SYSTEM',      method: 'click',  question: 'Wo sind die Systemeinstellungen?',     sub: 'Klick auf Einstellungen / System Preferences' },
+      { id: 'kalender',          category: 'SYSTEM',      method: 'choice', question: 'Wie öffnest du deinen Kalender?',      sub: 'Als App (Kalender, Outlook) oder über den Browser?' },
+    ];
+
+    let currentIndex = 0;
+    let capturedPos = null;
+    let frozenPos = null;
+    let currentMethod = null;
+    let savedCount = 0;
+    let mouseInterval = null;
+
+    // ═══════════════════════════════════════
+    // DRAG
+    // ═══════════════════════════════════════
+    const panel = document.getElementById('panel');
+    const header = panel.querySelector('.header');
+    let dragging = false, ox = 0, oy = 0;
+
+    header.addEventListener('mousedown', (e) => {
+      if (e.button !== 0) return;
+      dragging = true;
+      ipcRenderer.send('pc-training-release-mouse'); // volle Maus-Kontrolle während Drag
+      const rect = panel.getBoundingClientRect();
+      ox = e.clientX - rect.left;
+      oy = e.clientY - rect.top;
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!dragging) return;
+      panel.style.left = (e.clientX - ox) + 'px';
+      panel.style.top  = (e.clientY - oy) + 'px';
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (!dragging) return;
+      dragging = false;
+    });
+
+    // ═══════════════════════════════════════
+    // INIT
+    // ═══════════════════════════════════════
+    window.addEventListener('DOMContentLoaded', () => {
+      // Zentrieren
+      panel.style.left = Math.max(0, (window.innerWidth  - panel.offsetWidth)  / 2) + 'px';
+      panel.style.top  = Math.max(0, (window.innerHeight - panel.offsetHeight) / 2) + 'px';
+
+      mouseInterval = setInterval(async () => {
+        if (frozenPos) return;
+        const pos = await ipcRenderer.invoke('training-get-mouse-pos');
+        document.getElementById('click-coords').textContent = `[${pos.x}, ${pos.y}]`;
+      }, 200);
+
+      showQuestion(0);
+    });
+
+    // ── Space = Position einfrieren ──
+    window.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        const btnCapture = document.getElementById('btn-capture');
+        if (!btnCapture.disabled && currentMethod !== 'url') {
+          freezePosition();
+        }
+      }
+    });
+
+    // ═══════════════════════════════════════
+    // FRAGE ANZEIGEN
+    // ═══════════════════════════════════════
+    function showQuestion(index) {
+      if (index >= questions.length) {
+        showDone();
+        return;
+      }
+
+      const q = questions[index];
+      capturedPos = null;
+      frozenPos = null;
+      currentMethod = null;
+      // Button zurücksetzen
+      const btnCapture = document.getElementById('btn-capture');
+      btnCapture.textContent = '📍 Position einfrieren (Space)';
+      btnCapture.onclick = capturePosition;
+
+      // Reset UI
+      document.getElementById('question-text').textContent = q.question;
+      document.getElementById('question-sub').textContent = q.sub;
+      document.getElementById('category-label').textContent = q.category;
+      document.getElementById('captured-state').classList.remove('visible');
+      document.getElementById('action-row').style.display = 'flex';
+
+      // Method Choice oder Click
+      const methodChoice = document.getElementById('method-choice');
+      const urlWrap = document.getElementById('url-input-wrap');
+      const clickZone = document.getElementById('click-zone');
+
+      document.getElementById('method-app').classList.remove('active');
+      document.getElementById('method-url').classList.remove('active');
+      document.getElementById('url-input').value = '';
+
+      if (q.method === 'choice') {
+        methodChoice.style.display = 'flex';
+        urlWrap.classList.remove('visible');
+        clickZone.classList.remove('visible');
+        btnCapture.disabled = true;
+      } else {
+        methodChoice.style.display = 'none';
+        urlWrap.classList.remove('visible');
+        clickZone.classList.add('visible');
+        btnCapture.disabled = false;
+      }
+
+      // Progress
+      const pct = (index / questions.length) * 100;
+      document.getElementById('progress-fill').style.width = pct + '%';
+      document.getElementById('counter').textContent = `${index + 1} / ${questions.length}`;
+    }
+
+    // ═══════════════════════════════════════
+    // METHOD CHOICE (App oder URL)
+    // ═══════════════════════════════════════
+    function selectMethod(method) {
+      currentMethod = method;
+      document.getElementById('method-app').classList.toggle('active', method === 'app');
+      document.getElementById('method-url').classList.toggle('active', method === 'url');
+
+      const urlWrap = document.getElementById('url-input-wrap');
+      const clickZone = document.getElementById('click-zone');
+      const btnCapture = document.getElementById('btn-capture');
+
+      if (method === 'url') {
+        urlWrap.classList.add('visible');
+        clickZone.classList.remove('visible');
+        btnCapture.disabled = false;
+        btnCapture.textContent = '💾 URL speichern';
+      } else {
+        urlWrap.classList.remove('visible');
+        clickZone.classList.add('visible');
+        btnCapture.disabled = false;
+        btnCapture.textContent = '📍 Position aufnehmen';
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // POSITION EINFRIEREN (Space)
+    // ═══════════════════════════════════════
+    async function freezePosition() {
+      const pos = await ipcRenderer.invoke('training-get-mouse-pos');
+      frozenPos = pos;
+      document.getElementById('click-coords').textContent = `✓ [${pos.x}, ${pos.y}]`;
+      document.getElementById('click-zone').style.borderColor = '#00ff8840';
+      document.getElementById('btn-capture').textContent = '💾 Speichern';
+      document.getElementById('btn-capture').onclick = savePosition;
+    }
+
+    // ═══════════════════════════════════════
+    // POSITION SPEICHERN
+    // ═══════════════════════════════════════
+    async function capturePosition() {
+      if (currentMethod === 'url') {
+        const url = document.getElementById('url-input').value.trim();
+        if (!url) return;
+        await ipcRenderer.invoke('save-device-knowledge', {
+          konzept: questions[currentIndex].id,
+          methode: 'url',
+          url: url,
+          app_name: null,
+          position_x: null,
+          position_y: null
+        });
+        showCaptured(`URL: ${url}`, null);
+        savedCount++;
+        return;
+      }
+      // Noch nicht eingefroren — erst einfrieren
+      await freezePosition();
+    }
+
+    async function savePosition() {
+      if (!frozenPos) return;
+      const q = questions[currentIndex];
+      await ipcRenderer.invoke('save-device-knowledge', {
+        konzept: q.id,
+        methode: currentMethod || 'click',
+        url: null,
+        app_name: null,
+        position_x: frozenPos.x,
+        position_y: frozenPos.y
+      });
+      showCaptured(`Gespeichert`, `[${frozenPos.x}, ${frozenPos.y}]`);
+      frozenPos = null;
+      savedCount++;
+    }
+
+    function showCaptured(label, pos) {
+      document.getElementById('captured-label').textContent = label;
+      document.getElementById('captured-pos').textContent = pos || '';
+      document.getElementById('captured-state').classList.add('visible');
+      document.getElementById('action-row').style.display = 'none';
+    }
+
+    // ═══════════════════════════════════════
+    // NAVIGATION
+    // ═══════════════════════════════════════
+    function nextQuestion() {
+      currentIndex++;
+      showQuestion(currentIndex);
+      window.focus();
+    }
+
+    function skipQuestion() {
+      currentIndex++;
+      showQuestion(currentIndex);
+      window.focus();
+    }
+
+    // ═══════════════════════════════════════
+    // DONE
+    // ═══════════════════════════════════════
+    function showDone() {
+      if (mouseInterval) clearInterval(mouseInterval);
+      document.getElementById('progress-fill').style.width = '100%';
+      document.getElementById('main-state').style.display = 'none';
+      document.getElementById('done-state').classList.add('visible');
+      document.getElementById('counter').textContent = '';
+      document.getElementById('done-sub').textContent = `${savedCount} Elemente gespeichert`;
+      setTimeout(() => window.close(), 3000);
+    }
+
+    function goBack() {
+      if (currentIndex <= 0) return;
+      currentIndex--;
+      frozenPos = null;
+      showQuestion(currentIndex);
+      setTimeout(() => window.focus(), 100);
+    }
+
+    function saveAndClose() {
+      if (mouseInterval) clearInterval(mouseInterval);
+      console.log(`💾 Beendet bei Frage ${currentIndex + 1} — ${savedCount} gespeichert`);
+      window.close();
+    }
+
+    function cancelTraining() {
+      if (mouseInterval) clearInterval(mouseInterval);
+      window.close();
+    }
+  </script>
+</body>
+</html>

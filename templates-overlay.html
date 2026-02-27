@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>MIRA Templates</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070708;
+      --bg2: #0d0d0f;
+      --surface: #111114;
+      --surface2: #18181c;
+      --border: rgba(255,255,255,0.06);
+      --border2: rgba(255,255,255,0.1);
+      --text: #f2f2f7;
+      --text2: #8e8e9a;
+      --text3: #3a3a48;
+      --accent: #e8e8ed;
+      --green: #34c759;
+      --green-glow: rgba(52,199,89,0.15);
+      --blue: #0a84ff;
+      --blue-glow: rgba(10,132,255,0.12);
+      --gold: #ffd60a;
+      --gold-glow: rgba(255,214,10,0.12);
+      --red: #ff453a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      padding: 24px 24px 0;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      -webkit-app-region: drag;
+      flex-shrink: 0;
+    }
+    .logo-mark {
+      width: 34px; height: 34px;
+      background: var(--text);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 15px; color: #000;
+      flex-shrink: 0;
+    }
+    .header h1 { font-size: 15px; font-weight: 700; }
+    .header-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+    /* ── Filter bar ── */
+    .filter-bar {
+      padding: 16px 24px 0;
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+    .filter-btn {
+      font-family: 'Sora', sans-serif;
+      font-size: 11px; font-weight: 600;
+      padding: 5px 12px;
+      border-radius: 20px;
+      border: 1px solid var(--border2);
+      background: var(--surface2);
+      color: var(--text2);
+      cursor: pointer;
+      letter-spacing: 0.2px;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { border-color: rgba(255,255,255,0.2); color: var(--text); }
+    .filter-btn.active { background: var(--blue); border-color: var(--blue); color: #fff; }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: var(--border); margin: 16px 24px 0; flex-shrink: 0; }
+
+    /* ── Template list ── */
+    .list-wrap {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px 24px 24px;
+    }
+    .list-wrap::-webkit-scrollbar { width: 4px; }
+    .list-wrap::-webkit-scrollbar-track { background: transparent; }
+    .list-wrap::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+    .empty-state {
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center;
+      height: 200px;
+      color: var(--text3); font-size: 13px; gap: 8px;
+    }
+    .empty-icon { font-size: 28px; opacity: 0.4; }
+
+    .template-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px;
+      margin-bottom: 8px;
+      display: flex;
+      align-items: flex-start;
+      gap: 14px;
+      transition: border-color 0.15s;
+    }
+    .template-card:hover { border-color: var(--border2); }
+
+    .card-icon {
+      width: 36px; height: 36px;
+      background: var(--surface2);
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+      flex-shrink: 0;
+    }
+
+    .card-body { flex: 1; min-width: 0; }
+    .card-name {
+      font-size: 13px; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-desc {
+      font-size: 11px; color: var(--text2); margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .card-meta {
+      display: flex; align-items: center; gap: 8px; margin-top: 8px;
+    }
+    .meta-tag {
+      font-size: 10px; font-weight: 600; letter-spacing: 0.3px;
+      padding: 2px 8px; border-radius: 20px;
+      background: var(--surface2); color: var(--text2);
+      border: 1px solid var(--border);
+    }
+    .meta-tag.app { color: var(--blue); background: var(--blue-glow); border-color: rgba(10,132,255,0.2); }
+    .meta-tag.verified { color: var(--gold); background: var(--gold-glow); border-color: rgba(255,214,10,0.2); }
+    .meta-count { font-size: 10px; color: var(--text3); }
+
+    .card-actions { display: flex; gap: 6px; align-items: flex-start; flex-shrink: 0; }
+    .btn-run {
+      font-family: 'Sora', sans-serif;
+      font-size: 11px; font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 8px;
+      border: none;
+      background: var(--blue);
+      color: #fff;
+      cursor: pointer;
+      transition: opacity 0.15s;
+      white-space: nowrap;
+    }
+    .btn-run:hover { opacity: 0.85; }
+    .btn-run:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Publish bar (bottom) ── */
+    .publish-bar {
+      padding: 12px 24px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: var(--bg2);
+      flex-shrink: 0;
+      -webkit-app-region: no-drag;
+    }
+    .publish-bar select, .publish-bar input {
+      font-family: 'Sora', sans-serif;
+      font-size: 12px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 8px;
+      color: var(--text);
+      padding: 7px 10px;
+      outline: none;
+    }
+    .publish-bar select { cursor: pointer; }
+    .publish-bar input { flex: 1; }
+    .publish-bar input::placeholder { color: var(--text3); }
+    .btn-publish {
+      font-family: 'Sora', sans-serif;
+      font-size: 11px; font-weight: 600;
+      padding: 7px 16px;
+      border-radius: 8px;
+      border: none;
+      background: var(--green);
+      color: #000;
+      cursor: pointer;
+      white-space: nowrap;
+      transition: opacity 0.15s;
+    }
+    .btn-publish:hover { opacity: 0.85; }
+    .btn-publish:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Toast ── */
+    .toast {
+      position: fixed;
+      bottom: 80px; left: 50%; transform: translateX(-50%);
+      background: var(--surface2);
+      border: 1px solid var(--border2);
+      border-radius: 10px;
+      padding: 10px 18px;
+      font-size: 12px; font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      transition: opacity 0.2s;
+      pointer-events: none;
+      z-index: 100;
+    }
+    .toast.show { opacity: 1; }
+    .toast.ok { color: var(--green); border-color: rgba(52,199,89,0.3); }
+    .toast.err { color: var(--red); border-color: rgba(255,69,58,0.3); }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div class="logo-mark">M</div>
+    <div>
+      <div class="header h1" style="font-size:15px;font-weight:700">🌐 Template-Bibliothek</div>
+      <div class="header-sub">Geteilte Routen — funktionieren auf jedem Gerät</div>
+    </div>
+  </div>
+
+  <!-- App filter -->
+  <div class="filter-bar" id="filterBar">
+    <button class="filter-btn active" data-app="" onclick="applyFilter(this)">Alle</button>
+    <button class="filter-btn" data-app="DATEV" onclick="applyFilter(this)">DATEV</button>
+    <button class="filter-btn" data-app="Excel" onclick="applyFilter(this)">Excel</button>
+    <button class="filter-btn" data-app="Outlook" onclick="applyFilter(this)">Outlook</button>
+    <button class="filter-btn" data-app="Safari" onclick="applyFilter(this)">Safari</button>
+    <button class="filter-btn" data-app="Word" onclick="applyFilter(this)">Word</button>
+    <button class="filter-btn" data-app="Sonstige" onclick="applyFilter(this)">Sonstige</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <!-- Template list -->
+  <div class="list-wrap" id="listWrap">
+    <div class="empty-state">
+      <div class="empty-icon">⏳</div>
+      <div>Lade Templates…</div>
+    </div>
+  </div>
+
+  <!-- Publish bar -->
+  <div class="publish-bar">
+    <select id="publishRoute">
+      <option value="">Route auswählen…</option>
+    </select>
+    <select id="publishApp">
+      <option value="">App (optional)</option>
+      <option value="DATEV">DATEV</option>
+      <option value="Excel">Excel</option>
+      <option value="Outlook">Outlook</option>
+      <option value="Safari">Safari</option>
+      <option value="Word">Word</option>
+      <option value="Sonstige">Sonstige</option>
+    </select>
+    <input id="publishDesc" type="text" placeholder="Beschreibung (optional)">
+    <button class="btn-publish" onclick="publishRoute()">🌐 Teilen</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const { ipcRenderer } = require('electron');
+
+    let allTemplates    = [];
+    let currentAppFilter = '';
+    let deviceRoutes    = [];
+
+    // ── Init ──────────────────────────────────────────────────────────────
+
+    async function init() {
+      await Promise.all([loadTemplates(), loadDeviceRoutes()]);
+    }
+
+    async function loadTemplates() {
+      allTemplates = await ipcRenderer.invoke('templates-list', null);
+      renderList(allTemplates);
+    }
+
+    async function loadDeviceRoutes() {
+      try {
+        const routes = await ipcRenderer.invoke('routes-list');
+        deviceRoutes = routes || [];
+        const sel = document.getElementById('publishRoute');
+        sel.innerHTML = '<option value="">Route auswählen…</option>';
+        for (const r of deviceRoutes) {
+          const opt = document.createElement('option');
+          opt.value = r.id;
+          opt.textContent = r.name;
+          sel.appendChild(opt);
+        }
+      } catch(e) { /* routes-list IPC may not be registered — graceful */ }
+    }
+
+    // ── Filter ────────────────────────────────────────────────────────────
+
+    function applyFilter(btn) {
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      currentAppFilter = btn.dataset.app;
+      const filtered = currentAppFilter
+        ? allTemplates.filter(t => t.app_name === currentAppFilter)
+        : allTemplates;
+      renderList(filtered);
+    }
+
+    // ── Render ────────────────────────────────────────────────────────────
+
+    function appIcon(name) {
+      const icons = {
+        DATEV: '📊', Excel: '📗', Outlook: '📧', Safari: '🧭',
+        Word: '📝', PowerPoint: '📈', Sonstige: '⚙️',
+      };
+      return icons[name] || '⚙️';
+    }
+
+    function renderList(templates) {
+      const wrap = document.getElementById('listWrap');
+      if (!templates.length) {
+        wrap.innerHTML = `
+          <div class="empty-state">
+            <div class="empty-icon">🌐</div>
+            <div>Noch keine Templates — teile die erste Route!</div>
+          </div>`;
+        return;
+      }
+      wrap.innerHTML = templates.map(t => `
+        <div class="template-card">
+          <div class="card-icon">${appIcon(t.app_name)}</div>
+          <div class="card-body">
+            <div class="card-name">${esc(t.name)}</div>
+            <div class="card-desc">${esc(t.description || t.app_name || '—')}</div>
+            <div class="card-meta">
+              ${t.app_name ? `<span class="meta-tag app">${esc(t.app_name)}</span>` : ''}
+              ${t.verified  ? `<span class="meta-tag verified">✓ Verifiziert</span>` : ''}
+              <span class="meta-count">${t.use_count}× ausgeführt · ${t.steps?.length || 0} Steps</span>
+            </div>
+          </div>
+          <div class="card-actions">
+            <button class="btn-run" onclick="runTemplate('${t.id}', this)">▶ Starten</button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // ── Run ───────────────────────────────────────────────────────────────
+
+    async function runTemplate(templateId, btn) {
+      btn.disabled  = true;
+      btn.textContent = '…';
+      try {
+        const res = await ipcRenderer.invoke('run-template', templateId);
+        if (res?.success) {
+          toast('Template in Warteschlange eingereiht', 'ok');
+          // Refresh use_count in list
+          await loadTemplates();
+          if (currentAppFilter) {
+            const filtered = allTemplates.filter(t => t.app_name === currentAppFilter);
+            renderList(filtered);
+          }
+        } else {
+          toast(res?.error || 'Fehler', 'err');
+        }
+      } catch(e) {
+        toast(e.message, 'err');
+      }
+      btn.disabled    = false;
+      btn.textContent = '▶ Starten';
+    }
+
+    // ── Publish ───────────────────────────────────────────────────────────
+
+    async function publishRoute() {
+      const routeId = document.getElementById('publishRoute').value;
+      const appName = document.getElementById('publishApp').value || null;
+      const desc    = document.getElementById('publishDesc').value.trim() || null;
+
+      if (!routeId) { toast('Bitte Route auswählen', 'err'); return; }
+
+      const btn = document.querySelector('.btn-publish');
+      btn.disabled = true; btn.textContent = '…';
+
+      try {
+        const res = await ipcRenderer.invoke('template-publish', { routeId, appName, description: desc });
+        if (res?.success) {
+          toast(`Template geteilt (${res.steps_count} Steps)`, 'ok');
+          document.getElementById('publishRoute').value = '';
+          document.getElementById('publishApp').value   = '';
+          document.getElementById('publishDesc').value  = '';
+          await loadTemplates();
+          renderList(allTemplates);
+        } else {
+          toast(res?.error || 'Fehler', 'err');
+        }
+      } catch(e) {
+        toast(e.message, 'err');
+      }
+      btn.disabled = false; btn.textContent = '🌐 Teilen';
+    }
+
+    // ── Helpers ───────────────────────────────────────────────────────────
+
+    function esc(s) {
+      return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+
+    let _toastTimer;
+    function toast(msg, type = 'ok') {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className   = `toast show ${type}`;
+      clearTimeout(_toastTimer);
+      _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+    }
+
+    // ── Start ─────────────────────────────────────────────────────────────
+    init();
+  </script>
+</body>
+</html>

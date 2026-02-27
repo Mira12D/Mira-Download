@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>MIRA Overlay</title>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'DM Sans', sans-serif; background: transparent; width: 100vw; height: 100vh; overflow: hidden; cursor: crosshair; -webkit-font-smoothing: antialiased; }
+
+    /* KALIBRIERUNG */
+    #mode-calibrate { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
+    #mode-calibrate.active { display: flex; }
+    .cal-title { font-size: 52px; font-weight: 700; color: #fff; letter-spacing: -1.5px; text-shadow: 0 4px 24px rgba(0,0,0,0.9); text-align: center; }
+
+    /* RECORDING */
+    #mode-recording { display: none; position: fixed; inset: 0; }
+    #mode-recording.active { display: block; }
+    .rec-tint { position: fixed; inset: 0; background: rgba(0,0,0,0.12); pointer-events: none; }
+
+    /* Top Bar */
+    .rec-bar { position: fixed; top: 0; left: 0; right: 0; height: 48px; background: rgba(8,8,8,0.94); border-bottom: 1px solid rgba(255,82,82,0.3); backdrop-filter: blur(12px); display: flex; align-items: center; justify-content: space-between; padding: 0 20px; pointer-events: none; z-index: 100; }
+    .rec-left { display: flex; align-items: center; gap: 10px; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    .rec-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff5252; animation: pulse 1.2s infinite; }
+    .rec-label { font-size: 12px; font-weight: 600; color: #fff; }
+    .rec-name { font-size: 11px; color: rgba(255,255,255,0.35); font-family: 'DM Mono', monospace; }
+    .rec-esc { font-size: 11px; color: rgba(255,255,255,0.25); }
+
+    /* Instruction */
+    .instr-card { position: fixed; top: 64px; left: 50%; transform: translateX(-50%); background: rgba(8,8,8,0.9); border: 1px solid rgba(255,255,255,0.08); border-radius: 14px; padding: 16px 22px; backdrop-filter: blur(12px); text-align: center; pointer-events: none; z-index: 90; max-width: 400px; }
+    .instr-main { font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 5px; letter-spacing: -0.3px; }
+    .instr-sub { font-size: 12px; color: rgba(255,255,255,0.4); line-height: 1.5; }
+    .instr-key { display: inline-block; background: rgba(0,230,118,0.12); border: 1px solid rgba(0,230,118,0.3); border-radius: 5px; padding: 2px 8px; font-family: 'DM Mono', monospace; font-size: 12px; font-weight: 700; color: #00e676; }
+
+    /* CMD PANEL */
+    #cmd-panel { display: none; position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 200; width: 420px; }
+    #cmd-panel.active { display: block; }
+    .cmd-card { background: rgba(8,8,8,0.97); border: 1px solid rgba(255,255,255,0.12); border-radius: 18px; padding: 24px; backdrop-filter: blur(20px); box-shadow: 0 32px 80px rgba(0,0,0,0.8); pointer-events: all; }
+    .cmd-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 18px; }
+    .cmd-title { font-size: 15px; font-weight: 700; color: #fff; }
+    .cmd-step-badge { background: rgba(255,171,64,0.15); border: 1px solid rgba(255,171,64,0.3); border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; color: #ffab40; font-family: 'DM Mono', monospace; }
+    .cmd-coord { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 8px; padding: 8px 12px; margin-bottom: 16px; font-size: 11px; font-family: 'DM Mono', monospace; color: rgba(255,255,255,0.35); }
+
+    /* Type buttons */
+    .type-row { display: flex; gap: 6px; margin-bottom: 16px; }
+    .type-btn { flex: 1; padding: 8px 4px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.08); background: transparent; color: rgba(255,255,255,0.4); font-size: 11px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: all 0.15s; text-align: center; pointer-events: all; }
+    .type-btn:hover { border-color: rgba(255,255,255,0.2); color: rgba(255,255,255,0.7); }
+    .type-btn.sel-click { background: rgba(0,230,118,0.12); border-color: rgba(0,230,118,0.35); color: #00e676; }
+    .type-btn.sel-type { background: rgba(68,138,255,0.12); border-color: rgba(68,138,255,0.35); color: #448aff; }
+    .type-btn.sel-extract { background: rgba(255,171,64,0.12); border-color: rgba(255,171,64,0.35); color: #ffab40; }
+    .type-btn.sel-url { background: rgba(156,39,176,0.12); border-color: rgba(156,39,176,0.35); color: #ce93d8; }
+
+    .cmd-input-label { font-size: 10px; color: rgba(255,255,255,0.3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 6px; }
+    .cmd-input { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 9px; padding: 11px 13px; font-size: 13px; color: #fff; font-family: 'DM Sans', sans-serif; transition: border-color 0.2s; pointer-events: all; resize: none; margin-bottom: 10px; }
+    .cmd-input:focus { outline: none; border-color: rgba(68,138,255,0.5); }
+    .cmd-input::placeholder { color: rgba(255,255,255,0.2); }
+    .cmd-hint { font-size: 11px; color: rgba(255,255,255,0.2); line-height: 1.5; margin-bottom: 14px; padding: 8px 12px; background: rgba(255,255,255,0.03); border-radius: 7px; }
+    .cmd-hint strong { color: rgba(255,255,255,0.5); }
+
+    .cmd-btns { display: flex; gap: 8px; }
+    .cmd-btn { flex: 1; padding: 11px; border-radius: 9px; border: none; font-size: 13px; font-weight: 600; cursor: pointer; font-family: 'DM Sans', sans-serif; pointer-events: all; transition: opacity 0.15s; }
+    .cmd-btn:hover { opacity: 0.85; }
+    .cmd-btn-save { background: #00e676; color: #000; }
+    .cmd-btn-skip { background: rgba(255,255,255,0.08); color: rgba(255,255,255,0.6); }
+
+    /* Step Grid */
+    .step-grid { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 6px; pointer-events: none; z-index: 100; }
+    .step-key { width: 40px; height: 40px; border-radius: 9px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; background: rgba(8,8,8,0.88); border: 1px solid rgba(255,255,255,0.07); backdrop-filter: blur(8px); transition: all 0.15s; }
+    .step-key.done { background: rgba(0,230,118,0.12); border-color: rgba(0,230,118,0.35); }
+    .step-key.has-cmd { background: rgba(68,138,255,0.12); border-color: rgba(68,138,255,0.35); }
+    .step-key.active-now { background: rgba(255,171,64,0.18); border-color: rgba(255,171,64,0.5); transform: scale(1.1); }
+    .step-key-num { font-size: 14px; font-weight: 700; color: rgba(255,255,255,0.25); font-family: 'DM Mono', monospace; line-height: 1; }
+    .step-key.done .step-key-num { color: #00e676; }
+    .step-key.has-cmd .step-key-num { color: #448aff; }
+    .step-key.active-now .step-key-num { color: #ffab40; }
+    .step-key-ico { font-size: 9px; line-height: 1; }
+
+    /* Crosshair */
+    .crosshair { position: fixed; width: 40px; height: 40px; pointer-events: none; transform: translate(-50%, -50%); z-index: 9999; }
+    .crosshair::before, .crosshair::after { content: ''; position: absolute; background: rgba(255,255,255,0.65); }
+    .crosshair::before { width: 1px; height: 100%; left: 50%; top: 0; }
+    .crosshair::after { width: 100%; height: 1px; top: 50%; left: 0; }
+    .ch-dot { position: absolute; width: 5px; height: 5px; background: #fff; border-radius: 50%; left: 50%; top: 50%; transform: translate(-50%,-50%); }
+    .coords-badge { position: fixed; bottom: 68px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.65); border: 1px solid rgba(255,255,255,0.07); border-radius: 7px; padding: 5px 12px; font-family: 'DM Mono', monospace; font-size: 10px; color: rgba(255,255,255,0.3); pointer-events: none; }
+
+    #flash { position: fixed; inset: 0; background: rgba(0,230,118,0.07); pointer-events: none; opacity: 0; transition: opacity 0.1s; }
+    #flash.show { opacity: 1; }
+
+    #done-screen { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.75); backdrop-filter: blur(10px); align-items: center; justify-content: center; z-index: 300; }
+    #done-screen.active { display: flex; }
+    .done-card { text-align: center; background: rgba(8,8,8,0.97); border: 1px solid rgba(0,230,118,0.25); border-radius: 20px; padding: 36px 48px; }
+    .done-icon { font-size: 44px; margin-bottom: 10px; }
+    .done-title { font-size: 20px; font-weight: 700; color: #fff; margin-bottom: 5px; }
+    .done-sub { font-size: 12px; color: rgba(255,255,255,0.35); }
+  </style>
+</head>
+<body>
+
+<!-- KALIBRIERUNG (alter flow) -->
+<div id="mode-calibrate">
+  <div style="text-align:center;pointer-events:none">
+    <div class="cal-title" id="cal-element-name">Klicke auf das Element</div>
+    <div style="font-size:17px;color:rgba(255,255,255,0.5);margin-top:10px;text-shadow:0 2px 10px rgba(0,0,0,0.8)">Klicke auf das Element</div>
+  </div>
+</div>
+
+<!-- RECORDING (neuer flow) -->
+<div id="mode-recording">
+  <div class="rec-tint"></div>
+
+  <div class="rec-bar">
+    <div class="rec-left">
+      <div class="rec-dot"></div>
+      <div class="rec-label">MIRA · Aufnahme</div>
+      <div class="rec-name" id="rec-route-name">—</div>
+    </div>
+    <div class="rec-esc">ESC = Abbrechen</div>
+  </div>
+
+  <div class="instr-card">
+    <div class="instr-main" id="instr-main">Gehe auf den Desktop</div>
+    <div class="instr-sub" id="instr-sub">Minimiere alle Fenster → drücke <span class="instr-key">0</span></div>
+  </div>
+
+  <!-- COMMAND PANEL erscheint nach jedem Step -->
+  <div id="cmd-panel">
+    <div class="cmd-card">
+      <div class="cmd-header">
+        <div class="cmd-title">Was soll MIRA hier tun?</div>
+        <div class="cmd-step-badge" id="cmd-step-num">Step 1</div>
+      </div>
+
+      <div class="cmd-coord" id="cmd-coord-display">📍 —</div>
+
+      <div class="type-row">
+        <button class="type-btn sel-click" onclick="selectType('click')" id="type-click">🖱 Klicken</button>
+        <button class="type-btn" onclick="selectType('type')" id="type-type">⌨️ Tippen</button>
+        <button class="type-btn" onclick="selectType('extract')" id="type-extract">🔍 Extrahieren</button>
+        <button class="type-btn" onclick="selectType('url')" id="type-url">🌐 URL</button>
+      </div>
+
+      <div class="cmd-input-label" id="cmd-input-label">Befehl (optional)</div>
+      <textarea class="cmd-input" id="cmd-input" rows="2" placeholder="z.B. klicke auf Gmail Suchfeld"></textarea>
+
+      <div class="cmd-hint" id="cmd-hint"><strong>Nur Klick:</strong> MIRA klickt auf diese Koordinate.</div>
+
+      <div class="cmd-btns">
+        <button class="cmd-btn cmd-btn-skip" onclick="skipCommand()">Überspringen</button>
+        <button class="cmd-btn cmd-btn-save" onclick="saveCommand()">✓ Speichern</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Step Grid 0-9 -->
+  <div class="step-grid">
+    <div class="step-key active-now" id="stepkey-0"><div class="step-key-num">0</div><div class="step-key-ico">🖥</div></div>
+    <div class="step-key" id="stepkey-1"><div class="step-key-num">1</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-2"><div class="step-key-num">2</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-3"><div class="step-key-num">3</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-4"><div class="step-key-num">4</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-5"><div class="step-key-num">5</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-6"><div class="step-key-num">6</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-7"><div class="step-key-num">7</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-8"><div class="step-key-num">8</div><div class="step-key-ico">·</div></div>
+    <div class="step-key" id="stepkey-9"><div class="step-key-num" style="color:rgba(255,82,82,0.4)">9</div><div class="step-key-ico">💾</div></div>
+  </div>
+
+  <div class="crosshair" id="crosshair"><div class="ch-dot"></div></div>
+  <div class="coords-badge" id="coords">X: 0 | Y: 0</div>
+</div>
+
+<div id="done-screen">
+  <div class="done-card">
+    <div class="done-icon">✅</div>
+    <div class="done-title" id="done-title">Route gespeichert!</div>
+    <div class="done-sub" id="done-sub">Fenster schließt...</div>
+  </div>
+</div>
+
+<div id="flash"></div>
+
+<script>
+  const { ipcRenderer } = require('electron');
+
+  const crosshair = document.getElementById('crosshair');
+  const coords = document.getElementById('coords');
+
+  let selectedType = 'click';
+  let pendingStepNum = null;
+  let currentCoordinate = null;
+
+  const TYPE_CONFIG = {
+    click:   { label: 'Beschreibung (optional)',      placeholder: 'z.B. klicke auf Gmail Suchfeld',                hint: '<strong>Klick:</strong> MIRA klickt auf diese Koordinate. Beschreibung ist optional.' },
+    type:    { label: 'Was soll MIRA tippen?',         placeholder: 'z.B. "gib Suchbegriff ein" oder "youtube.de"',  hint: '<strong>Tippen:</strong> MIRA tippt diesen Text. Schreib einen Platzhalter wenn der Wert beim Ausführen vom User kommt.' },
+    extract: { label: 'Was soll extrahiert werden?',   placeholder: 'z.B. extrahiere Rechnungsnummer, Summe, IBAN',  hint: '<strong>Extrahieren:</strong> GPT-4o Mini liest Screenshot und extrahiert die Felder. Werte werden in späteren Steps genutzt.' },
+    url:     { label: 'Welche URL öffnen?',            placeholder: 'z.B. https://gmail.com',                        hint: '<strong>URL:</strong> MIRA öffnet diese URL direkt im Browser.' }
+  };
+
+  const INSTRS = {
+    0:    { main: 'Gehe auf den Desktop',  sub: 'Minimiere alle Fenster → drücke <span class="instr-key">0</span>' },
+    1:    { main: 'Gehe zu Step 1',        sub: 'Maus auf erstes Element → drücke <span class="instr-key">1</span>' },
+    2:    { main: 'Gehe zu Step 2',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">2</span>' },
+    3:    { main: 'Gehe zu Step 3',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">3</span>' },
+    4:    { main: 'Gehe zu Step 4',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">4</span>' },
+    5:    { main: 'Gehe zu Step 5',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">5</span>' },
+    6:    { main: 'Gehe zu Step 6',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">6</span>' },
+    7:    { main: 'Gehe zu Step 7',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">7</span>' },
+    8:    { main: 'Letzter Step (8)',       sub: 'Maus drauf → <span class="instr-key">8</span> → dann <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> speichern' },
+    done: { main: 'Route fertig!',         sub: 'Drücke <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> um zu speichern' }
+  };
+
+  // ── IPC ──
+  ipcRenderer.on('show-prompt', (event, elementName) => {
+    document.getElementById('mode-calibrate').classList.add('active');
+    document.getElementById('mode-recording').classList.remove('active');
+    document.getElementById('cal-element-name').textContent = `Klicke auf: ${elementName}`;
+  });
+
+  ipcRenderer.on('start-recording-overlay', (event, { name }) => {
+    document.getElementById('mode-calibrate').classList.remove('active');
+    document.getElementById('mode-recording').classList.add('active');
+    document.getElementById('done-screen').classList.remove('active');
+    document.getElementById('cmd-panel').classList.remove('active');
+    document.getElementById('rec-route-name').textContent = `"${name}"`;
+    resetGrid();
+    setInstr(0);
+  });
+
+  // main.js sagt: Taste X gedrückt, zeig Command Panel
+  ipcRenderer.on('show-cmd-panel', (event, { stepNum, coordinate }) => {
+    pendingStepNum = stepNum;
+    currentCoordinate = coordinate;
+    document.getElementById('cmd-step-num').textContent = `Step ${stepNum}`;
+    document.getElementById('cmd-coord-display').textContent = `📍 Position: [${coordinate[0]}, ${coordinate[1]}]`;
+    document.getElementById('cmd-input').value = '';
+    selectType('click');
+    document.getElementById('cmd-panel').classList.add('active');
+  });
+
+  ipcRenderer.on('route-step-recorded', (event, { stepNum }) => {
+    markDone(stepNum);
+    document.getElementById('cmd-panel').classList.remove('active');
+    flash();
+    const next = stepNum + 1;
+    if (next <= 8) { setActive(next); setInstr(next); }
+    else setInstr('done');
+  });
+
+  ipcRenderer.on('route-record-done', (event, { name, steps }) => {
+    document.getElementById('mode-recording').classList.remove('active');
+    document.getElementById('done-screen').classList.add('active');
+    document.getElementById('done-title').textContent = `"${name}" gespeichert!`;
+    document.getElementById('done-sub').textContent = `${steps} Steps aufgenommen`;
+    setTimeout(() => document.getElementById('done-screen').classList.remove('active'), 2500);
+  });
+
+  // ── CMD PANEL ──
+  function selectType(type) {
+    selectedType = type;
+    ['click','type','extract','url'].forEach(t => {
+      document.getElementById(`type-${t}`).className = 'type-btn';
+    });
+    document.getElementById(`type-${type}`).className = `type-btn sel-${type}`;
+    const cfg = TYPE_CONFIG[type];
+    document.getElementById('cmd-input-label').textContent = cfg.label;
+    document.getElementById('cmd-input').placeholder = cfg.placeholder;
+    document.getElementById('cmd-hint').innerHTML = cfg.hint;
+  }
+
+  function saveCommand() {
+    const cmd = document.getElementById('cmd-input').value.trim();
+    ipcRenderer.send('cmd-panel-result', {
+      stepNum: pendingStepNum,
+      coordinate: currentCoordinate,
+      type: selectedType,
+      command: cmd || null
+    });
+    document.getElementById('cmd-panel').classList.remove('active');
+  }
+
+  function skipCommand() {
+    ipcRenderer.send('cmd-panel-result', {
+      stepNum: pendingStepNum,
+      coordinate: currentCoordinate,
+      type: 'click',
+      command: null
+    });
+    document.getElementById('cmd-panel').classList.remove('active');
+  }
+
+  // ── GRID ──
+  function resetGrid() {
+    for (let i = 0; i <= 9; i++) {
+      const k = document.getElementById(`stepkey-${i}`);
+      if (!k) continue;
+      k.className = 'step-key';
+      k.querySelector('.step-key-num').style.color = '';
+      k.querySelector('.step-key-ico').textContent = i === 0 ? '🖥' : i === 9 ? '💾' : '·';
+    }
+    document.getElementById('stepkey-0').classList.add('active-now');
+  }
+
+  function markDone(n) {
+    const k = document.getElementById(`stepkey-${n}`);
+    if (!k) return;
+    k.classList.remove('active-now');
+    k.classList.add('done');
+    k.querySelector('.step-key-ico').textContent = '✓';
+  }
+
+  function setActive(n) {
+    const k = document.getElementById(`stepkey-${n}`);
+    if (k) k.classList.add('active-now');
+  }
+
+  function setInstr(key) {
+    const i = INSTRS[key] || INSTRS[0];
+    document.getElementById('instr-main').textContent = i.main;
+    document.getElementById('instr-sub').innerHTML = i.sub;
+  }
+
+  function flash() {
+    const f = document.getElementById('flash');
+    f.classList.add('show');
+    setTimeout(() => f.classList.remove('show'), 140);
+  }
+
+  // ── CROSSHAIR ──
+  document.addEventListener('mousemove', (e) => {
+    crosshair.style.left = e.clientX + 'px';
+    crosshair.style.top = e.clientY + 'px';
+    coords.textContent = `X: ${e.clientX} | Y: ${e.clientY}`;
+  });
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      ipcRenderer.send('recording-cancelled');
+      document.getElementById('mode-calibrate').classList.remove('active');
+      document.getElementById('mode-recording').classList.remove('active');
+      document.getElementById('cmd-panel').classList.remove('active');
+    }
+    if (e.key === 'Enter' && document.getElementById('cmd-panel').classList.contains('active') && !e.shiftKey) {
+      e.preventDefault();
+      saveCommand();
+    }
+  });
+</script>
+</body>
+</html>

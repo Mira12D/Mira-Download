@@ -1,0 +1,150 @@
+name: Build MIRA Agent
+
+on:
+  push:
+    branches:
+      - main          # Trigger: jeder Push auf main
+  workflow_dispatch:  # Manuell triggern möglich
+
+jobs:
+
+  # ─────────────────────────────────────────
+  # WINDOWS: C# Binary + NSIS Installer
+  # ─────────────────────────────────────────
+  build-windows:
+    name: Windows Installer (x64)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build ax-helper-win.exe
+        run: |
+          cd ax-helper-win
+          dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -o ../resources
+        shell: bash
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Configure private npm registry (nut-tree)
+        run: |
+          echo "@nut-tree:registry=https://pkg.nutjs.dev/" >> $env:USERPROFILE\.npmrc
+          echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> $env:USERPROFILE\.npmrc
+        shell: pwsh
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Windows NSIS Installer
+        run: npx electron-builder --win --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Windows Installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIRA-Agent-Windows
+          path: dist/*.exe
+          retention-days: 7
+
+  # ─────────────────────────────────────────
+  # MAC: Swift Binary + DMG (x64 + arm64)
+  # ─────────────────────────────────────────
+  build-mac:
+    name: Mac DMG (x64 + arm64)
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ax-helper (Swift)
+        run: |
+          swiftc ax-helper.swift -O -o resources/ax-helper
+          chmod +x resources/ax-helper
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Configure private npm registry (nut-tree)
+        run: |
+          echo "@nut-tree:registry=https://pkg.nutjs.dev/" >> ~/.npmrc
+          echo "//pkg.nutjs.dev/:_authToken=${{ secrets.NUT_TREE_TOKEN }}" >> ~/.npmrc
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Mac DMG
+        run: npx electron-builder --mac --x64 --arm64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Mac DMG
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIRA-Agent-Mac
+          path: dist/*.dmg
+          retention-days: 7
+
+  # ─────────────────────────────────────────
+  # RELEASE: Beide Artifacts → GitHub Release
+  # ─────────────────────────────────────────
+  release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-mac]
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Get version from package.json
+        id: pkg
+        run: echo "version=$(node -p "require('./package.json').version")" >> $GITHUB_OUTPUT
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MIRA-Agent-Windows
+          path: ./release
+
+      - name: Download Mac artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: MIRA-Agent-Mac
+          path: ./release
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.pkg.outputs.version }}-build.${{ github.run_number }}
+          name: "MIRA Agent v${{ steps.pkg.outputs.version }}"
+          body: |
+            ## MIRA Agent – Automatischer Build
+
+            **Commit:** `${{ github.sha }}`
+            **Branch:** `${{ github.ref_name }}`
+            **Build:** #${{ github.run_number }}
+
+            ### Downloads
+            | Plattform | Datei |
+            |-----------|-------|
+            | 🍎 macOS (Intel + Apple Silicon) | `.dmg` |
+            | 🪟 Windows (x64) | `.exe` Installer |
+          files: ./release/*
+          fail_on_unmatched_files: false

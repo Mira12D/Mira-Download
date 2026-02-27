@@ -1,0 +1,905 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>MIRA Setup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;600;700;800&display=swap');
+
+  :root {
+    --bg: #0a0a0a;
+    --surface: #111111;
+    --border: #1e1e1e;
+    --accent: #e8ff47;
+    --accent2: #47ffb2;
+    --text: #f0f0f0;
+    --muted: #555;
+    --danger: #ff4747;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'DM Mono', monospace;
+    background: var(--bg);
+    color: var(--text);
+    height: 100vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+  }
+
+  #coords {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #000;
+  color: #e8ff47;
+  font-family: monospace;
+  font-size: 11px;
+  padding: 4px 12px;
+  border-radius: 10px;
+  pointer-events: none;
+}
+
+  /* TOPBAR */
+  .topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 20px;
+    border-bottom: 1px solid var(--border);
+    background: var(--surface);
+    flex-shrink: 0;
+    -webkit-app-region: drag;
+  }
+
+  .topbar-left { display: flex; align-items: center; gap: 10px; -webkit-app-region: no-drag; }
+  .mira-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; color: var(--accent); }
+  .setup-badge { font-size: 9px; background: var(--border); color: var(--muted); padding: 2px 7px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase; }
+
+  .close-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    width: 28px; height: 28px; border-radius: 5px; cursor: pointer; font-size: 14px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
+    -webkit-app-region: no-drag;
+  }
+  .close-btn:hover { border-color: var(--danger); color: var(--danger); }
+
+  /* LAYOUT */
+  .main { display: flex; flex: 1; overflow: hidden; }
+
+  /* SIDEBAR */
+  .sidebar {
+    width: 180px; border-right: 1px solid var(--border);
+    padding: 16px 0; display: flex; flex-direction: column; gap: 2px; flex-shrink: 0;
+  }
+
+  .sidebar-label { font-size: 8px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; padding: 0 16px 8px; }
+
+  .step-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 16px;
+    cursor: pointer; transition: all 0.15s; border-left: 2px solid transparent;
+  }
+  .step-item.active { border-left-color: var(--accent); background: rgba(232,255,71,0.04); }
+  .step-item.done { border-left-color: var(--accent2); background: rgba(71,255,178,0.02); }
+  .step-item.locked { opacity: 0.25; cursor: not-allowed; }
+
+  .step-num {
+    width: 20px; height: 20px; border-radius: 50%; border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 9px;
+    flex-shrink: 0; color: var(--muted); transition: all 0.2s;
+  }
+  .step-item.active .step-num { border-color: var(--accent); color: var(--accent); background: rgba(232,255,71,0.1); }
+  .step-item.done .step-num { border-color: var(--accent2); background: var(--accent2); color: #000; font-size: 11px; }
+
+  .step-label { font-size: 10px; color: var(--muted); line-height: 1.3; }
+  .step-item.active .step-label { color: var(--text); }
+  .step-item.done .step-label { color: var(--accent2); }
+
+  /* CONTENT */
+  .content { flex: 1; overflow-y: auto; padding: 24px 32px; display: flex; flex-direction: column; gap: 18px; }
+
+  .step-page { display: none; flex-direction: column; gap: 16px; }
+  .step-page.active { display: flex; animation: fadeIn 0.2s ease; }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .step-tag { font-size: 8px; color: var(--accent); letter-spacing: 2px; text-transform: uppercase; }
+  .step-title { font-family: 'Syne', sans-serif; font-size: 22px; font-weight: 700; }
+  .step-desc { font-size: 11px; color: var(--muted); line-height: 1.7; max-width: 480px; }
+
+  .instruction {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px 18px; display: flex; gap: 12px; align-items: flex-start;
+  }
+  .instruction-icon { font-size: 16px; flex-shrink: 0; margin-top: 1px; }
+  .instruction-text { font-size: 11px; line-height: 1.7; color: #999; }
+  .instruction-text strong { color: var(--text); font-weight: 500; }
+
+  /* OPTIONS */
+  .options-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 8px; }
+
+  .option-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 14px; cursor: pointer; transition: all 0.15s;
+    display: flex; flex-direction: column; gap: 6px; align-items: center; text-align: center;
+  }
+  .option-card:hover { border-color: var(--accent); background: rgba(232,255,71,0.04); }
+  .option-card.selected { border-color: var(--accent); background: rgba(232,255,71,0.07); }
+  .option-card.multi-selected { border-color: var(--accent2); background: rgba(71,255,178,0.07); }
+
+  .option-icon { font-size: 20px; }
+  .option-label { font-size: 10px; color: var(--muted); }
+  .option-card.selected .option-label { color: var(--accent); }
+  .option-card.multi-selected .option-label { color: var(--accent2); }
+
+  /* ZONE CAPTURE */
+  .zone-area {
+    background: var(--surface); border: 1px dashed var(--border);
+    border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 12px;
+  }
+
+  .zone-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+  .zone-info { display: flex; flex-direction: column; gap: 3px; }
+  .zone-name { font-size: 11px; color: var(--text); }
+  .zone-coords { font-size: 9px; color: var(--muted); font-family: 'DM Mono', monospace; }
+
+  .zone-status {
+    font-size: 9px; padding: 3px 8px; border-radius: 20px;
+    border: 1px solid var(--border); color: var(--muted); white-space: nowrap;
+  }
+  .zone-status.captured { border-color: var(--accent2); color: var(--accent2); background: rgba(71,255,178,0.05); }
+
+  .capture-btn {
+    background: none; border: 1px solid var(--border); color: var(--text);
+    padding: 7px 14px; border-radius: 5px; cursor: pointer;
+    font-family: 'DM Mono', monospace; font-size: 10px; transition: all 0.15s; white-space: nowrap;
+  }
+  .capture-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .capture-btn.waiting { border-color: var(--accent); color: var(--accent); animation: blink 0.8s infinite; }
+
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+  .scroll-hint {
+    background: rgba(232,255,71,0.04); border: 1px solid rgba(232,255,71,0.12);
+    border-radius: 6px; padding: 10px 14px; font-size: 10px; color: #888;
+    display: flex; align-items: center; gap: 8px;
+  }
+
+  /* MAIL SLOTS */
+  .mail-slots { display: flex; flex-direction: column; gap: 6px; }
+
+  .mail-slot {
+    display: flex; align-items: center; gap: 12px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 6px; padding: 10px 14px; transition: all 0.2s;
+  }
+  .mail-slot.done { border-color: var(--accent2); background: rgba(71,255,178,0.03); }
+
+  .mail-slot-num {
+    width: 24px; height: 24px; border-radius: 50%; border: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: center; font-size: 10px;
+    color: var(--muted); flex-shrink: 0;
+  }
+  .mail-slot.done .mail-slot-num { background: var(--accent2); border-color: var(--accent2); color: #000; }
+
+  .mail-slot-text { flex: 1; font-size: 10px; color: var(--muted); }
+  .mail-slot.done .mail-slot-text { color: var(--accent2); }
+
+  .mail-slot-action {
+    font-size: 9px; color: var(--muted); border: 1px solid var(--border);
+    padding: 4px 9px; border-radius: 4px; cursor: pointer; transition: all 0.15s;
+  }
+  .mail-slot-action:hover { border-color: var(--accent); color: var(--accent); }
+  .mail-slot-action.capturing { border-color: var(--accent); color: var(--accent); animation: blink 0.8s infinite; }
+
+  .progress-label { font-size: 10px; color: var(--muted); }
+
+  /* TEMPLATES */
+  .template-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  .template-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 14px; display: flex; flex-direction: column; gap: 10px;
+  }
+  .template-card.ready-template { border-color: rgba(71,255,178,0.3); }
+
+  .template-header { display: flex; align-items: center; justify-content: space-between; }
+  .template-num { font-size: 9px; color: var(--muted); letter-spacing: 1px; }
+  .template-status { font-size: 8px; padding: 2px 7px; border-radius: 20px; background: var(--border); color: var(--muted); }
+  .template-status.ready { background: rgba(71,255,178,0.1); color: var(--accent2); }
+
+  .t-input {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+    padding: 8px 10px; color: var(--text); font-family: 'DM Mono', monospace;
+    font-size: 10px; width: 100%; outline: none; transition: border-color 0.15s;
+  }
+  .t-input:focus { border-color: var(--accent); }
+  .t-input::placeholder { color: #333; }
+
+  .t-fields { display: flex; flex-direction: column; gap: 5px; }
+
+  .t-field-row { display: flex; align-items: center; gap: 6px; }
+
+  .t-field-input {
+    flex: 1; background: var(--bg); border: 1px solid var(--border);
+    border-radius: 4px; padding: 5px 8px; color: var(--text);
+    font-family: 'DM Mono', monospace; font-size: 9px; outline: none;
+  }
+  .t-field-input:focus { border-color: var(--accent2); }
+  .t-field-input::placeholder { color: #2a2a2a; }
+
+  .t-field-btn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 4px 8px; border-radius: 3px; cursor: pointer; font-size: 9px;
+    font-family: 'DM Mono', monospace; transition: all 0.15s; white-space: nowrap;
+  }
+  .t-field-btn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .t-field-btn.captured { border-color: var(--accent2); color: var(--accent2); }
+
+  .add-field-btn {
+    background: none; border: 1px dashed #1a1a1a; color: #333;
+    padding: 5px; border-radius: 4px; cursor: pointer; font-size: 9px;
+    font-family: 'DM Mono', monospace; width: 100%; transition: all 0.15s;
+  }
+  .add-field-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* COMPLETE */
+  .complete-screen {
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 16px; height: 100%; text-align: center; padding: 20px;
+  }
+  .complete-icon { font-size: 48px; animation: pop 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+  @keyframes pop { from { transform: scale(0); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .complete-title { font-family: 'Syne', sans-serif; font-size: 28px; font-weight: 800; color: var(--accent); }
+  .complete-sub { font-size: 11px; color: var(--muted); max-width: 360px; line-height: 1.7; }
+
+  .summary-box {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 8px; padding: 16px 20px; width: 100%; max-width: 380px;
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .summary-row { display: flex; align-items: center; justify-content: space-between; font-size: 10px; }
+  .summary-key { color: var(--muted); }
+  .summary-val { color: var(--text); }
+  .summary-val.ok { color: var(--accent2); }
+
+  .saved-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 9px; color: var(--accent2);
+    background: rgba(71,255,178,0.07); border: 1px solid rgba(71,255,178,0.2);
+    padding: 3px 9px; border-radius: 20px;
+  }
+  .saved-dot { width: 4px; height: 4px; border-radius: 50%; background: var(--accent2); animation: blink 2s infinite; }
+
+  .btn-finish {
+    background: var(--accent); border: none; color: #000;
+    padding: 12px 32px; border-radius: 6px; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 13px; transition: all 0.15s;
+  }
+  .btn-finish:hover { background: #d4e840; transform: translateY(-1px); }
+
+  /* BOTTOM */
+  .bottombar {
+    padding: 12px 32px; border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    background: var(--surface); flex-shrink: 0;
+  }
+  .progress-track { display: flex; align-items: center; gap: 5px; }
+  .progress-dot { width: 5px; height: 5px; border-radius: 50%; background: var(--border); transition: all 0.3s; }
+  .progress-dot.done { background: var(--accent2); }
+  .progress-dot.active { background: var(--accent); transform: scale(1.3); }
+
+  .nav-btns { display: flex; gap: 8px; }
+  .btn-back {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    padding: 8px 16px; border-radius: 5px; cursor: pointer;
+    font-family: 'DM Mono', monospace; font-size: 11px; transition: all 0.15s;
+  }
+  .btn-back:hover { border-color: var(--text); color: var(--text); }
+  .btn-next {
+    background: var(--accent); border: none; color: #000;
+    padding: 8px 20px; border-radius: 5px; cursor: pointer;
+    font-family: 'Syne', sans-serif; font-weight: 700; font-size: 11px; transition: all 0.15s;
+  }
+  .btn-next:hover { background: #d4e840; }
+  .btn-next:disabled { opacity: 0.3; cursor: not-allowed; }
+
+  /* CAPTURE SELECTION OVERLAY */
+  #capture-overlay {
+    display: none; position: fixed; inset: 0; z-index: 999; cursor: crosshair;
+    background: rgba(0,0,0,0.4);
+  }
+  #capture-overlay.active { display: block; }
+  #capture-tip {
+    position: absolute; top: 16px; left: 50%; transform: translateX(-50%);
+    background: var(--accent); color: #000; padding: 6px 16px; border-radius: 20px;
+    font-family: 'DM Mono', monospace; font-size: 11px; font-weight: 500;
+    pointer-events: none; white-space: nowrap;
+  }
+  #capture-selection {
+    position: absolute; border: 2px solid var(--accent);
+    background: rgba(232,255,71,0.06); pointer-events: none; display: none;
+  }
+  #capture-coords-live {
+    position: absolute; background: #000; color: var(--accent);
+    font-family: 'DM Mono', monospace; font-size: 10px;
+    padding: 3px 8px; border-radius: 4px; pointer-events: none;
+    display: none; white-space: nowrap;
+  }
+
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="topbar-left">
+    <div class="mira-logo">MIRA</div>
+    <div class="setup-badge">Büro Setup</div>
+  </div>
+  <button class="close-btn" onclick="closeSetup()">✕</button>
+</div>
+
+<!-- MAIN -->
+<div class="main">
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+    <div class="sidebar-label">Schritte</div>
+    <div class="step-item active" id="nav-0" onclick="tryGoToStep(0)">
+      <div class="step-num" id="num-0">1</div>
+      <div class="step-label">Mailprogramm</div>
+    </div>
+    <div class="step-item locked" id="nav-1" onclick="tryGoToStep(1)">
+      <div class="step-num" id="num-1">2</div>
+      <div class="step-label">Mail-Zone markieren</div>
+    </div>
+    <div class="step-item locked" id="nav-2" onclick="tryGoToStep(2)">
+      <div class="step-num" id="num-2">3</div>
+      <div class="step-label">5 Mails trainieren</div>
+    </div>
+    <div class="step-item locked" id="nav-3" onclick="tryGoToStep(3)">
+      <div class="step-num" id="num-3">4</div>
+      <div class="step-label">Suchleiste</div>
+    </div>
+    <div class="step-item locked" id="nav-4" onclick="tryGoToStep(4)">
+      <div class="step-num" id="num-4">5</div>
+      <div class="step-label">Ausgabe-App</div>
+    </div>
+    <div class="step-item locked" id="nav-5" onclick="tryGoToStep(5)">
+      <div class="step-num" id="num-5">6</div>
+      <div class="step-label">Templates</div>
+    </div>
+    <div class="step-item locked" id="nav-6" onclick="tryGoToStep(6)">
+      <div class="step-num" id="num-6">✓</div>
+      <div class="step-label">Fertig</div>
+    </div>
+  </div>
+
+  <!-- CONTENT -->
+  <div class="content">
+
+    <!-- STEP 0: Mailprogramm -->
+    <div class="step-page active" id="step-0">
+      <div class="step-tag">Schritt 1 / 6</div>
+      <div class="step-title">Welches Mailprogramm?</div>
+      <div class="step-desc">Öffne dein Mailprogramm, dann wähle es hier.</div>
+      <div class="options-grid">
+        <div class="option-card" onclick="selectMail('gmail', this)"><div class="option-icon">📧</div><div class="option-label">Gmail</div></div>
+        <div class="option-card" onclick="selectMail('outlook', this)"><div class="option-icon">📮</div><div class="option-label">Outlook</div></div>
+        <div class="option-card" onclick="selectMail('apple_mail', this)"><div class="option-icon">✉️</div><div class="option-label">Apple Mail</div></div>
+        <div class="option-card" onclick="selectMail('thunderbird', this)"><div class="option-icon">🦅</div><div class="option-label">Thunderbird</div></div>
+        <div class="option-card" onclick="selectMail('yahoo', this)"><div class="option-icon">📬</div><div class="option-label">Yahoo</div></div>
+        <div class="option-card" onclick="selectMail('andere', this)"><div class="option-icon">📂</div><div class="option-label">Andere</div></div>
+      </div>
+    </div>
+
+    <!-- STEP 1: Mail-Zone -->
+    <div class="step-page" id="step-1">
+      <div class="step-tag">Schritt 2 / 6</div>
+      <div class="step-title">Mail-Inhalt Zone</div>
+      <div class="step-desc">Öffne eine Mail. Markiere dann den Bereich wo der Text steht.</div>
+      <div class="scroll-hint">
+        <span>🖱️</span>
+        Lange Mails: MIRA scrollt automatisch mit Mausrad und macht mehrere Screenshots.
+      </div>
+      <div class="instruction">
+        <div class="instruction-icon">📌</div>
+        <div class="instruction-text">Klick <strong>"Zone markieren"</strong> → dann ziehe mit der Maus über den Mail-Inhalt-Bereich.</div>
+      </div>
+      <div class="zone-area">
+        <div class="zone-row">
+          <div class="zone-info">
+            <div class="zone-name">Mail-Inhalt Fläche</div>
+            <div class="zone-coords" id="mail-zone-coords">Noch nicht markiert</div>
+          </div>
+          <div class="zone-status" id="mail-zone-status">ausstehend</div>
+          <button class="capture-btn" id="mail-zone-btn" onclick="startZoneCapture('mail_content_zone', 'mail-zone-coords', 'mail-zone-status', 'mail-zone-btn')">
+            Zone markieren
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 2: 5 Mails -->
+    <div class="step-page" id="step-2">
+      <div class="step-tag">Schritt 3 / 6</div>
+      <div class="step-title">5 Mails trainieren</div>
+      <div class="step-desc">Öffne 5 verschiedene Mails — MIRA macht jeweils einen Screenshot und lernt die Zone sicher zu erkennen.</div>
+      <div class="instruction">
+        <div class="instruction-icon">📖</div>
+        <div class="instruction-text">Öffne <strong>Mail 1</strong> → klick "Screenshot". Dann Mail 2 → Screenshot. Bis Mail 5. Je verschiedener, desto besser.</div>
+      </div>
+      <div class="mail-slots" id="mail-slots"></div>
+      <div class="progress-label" id="mail-progress">0 / 5 Mails trainiert (mind. 3 nötig)</div>
+    </div>
+
+    <!-- STEP 3: Suchleiste -->
+    <div class="step-page" id="step-3">
+      <div class="step-tag">Schritt 4 / 6</div>
+      <div class="step-title">Suchleiste markieren</div>
+      <div class="step-desc">Damit MIRA nach bestimmten Mails suchen kann — z.B. "alle Rechnungen heute".</div>
+      <div class="instruction">
+        <div class="instruction-icon">🔍</div>
+        <div class="instruction-text">Klick die Suchleiste in deinem Mailprogramm an → dann hier <strong>"Markieren"</strong>.</div>
+      </div>
+      <div class="zone-area">
+        <div class="zone-row">
+          <div class="zone-info">
+            <div class="zone-name">Mail-Suchleiste</div>
+            <div class="zone-coords" id="search-zone-coords">Noch nicht markiert</div>
+          </div>
+          <div class="zone-status" id="search-zone-status">ausstehend</div>
+          <button class="capture-btn" id="search-zone-btn" onclick="startZoneCapture('mail_search_zone', 'search-zone-coords', 'search-zone-status', 'search-zone-btn')">
+            Markieren
+          </button>
+        </div>
+      </div>
+      <div style="margin-top:6px; font-size:10px; color:var(--muted); margin-bottom:6px;">Optional:</div>
+      <div class="zone-area">
+        <div class="zone-row">
+          <div class="zone-info">
+            <div class="zone-name">Posteingang Button</div>
+            <div class="zone-coords" id="inbox-zone-coords">Optional</div>
+          </div>
+          <div class="zone-status" id="inbox-zone-status">optional</div>
+          <button class="capture-btn" id="inbox-zone-btn" onclick="startZoneCapture('mail_inbox_zone', 'inbox-zone-coords', 'inbox-zone-status', 'inbox-zone-btn')">
+            Markieren
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 4: Ausgabe -->
+    <div class="step-page" id="step-4">
+      <div class="step-tag">Schritt 5 / 6</div>
+      <div class="step-title">Wohin sollen die Daten?</div>
+      <div class="step-desc">Wo sollen Infos aus Mails landen? Mehrfachauswahl möglich.</div>
+      <div class="options-grid">
+        <div class="option-card" onclick="toggleOutput('excel', this)"><div class="option-icon">📊</div><div class="option-label">Excel</div></div>
+        <div class="option-card" onclick="toggleOutput('google_sheets', this)"><div class="option-icon">🗒️</div><div class="option-label">Google Sheets</div></div>
+        <div class="option-card" onclick="toggleOutput('word', this)"><div class="option-icon">📝</div><div class="option-label">Word</div></div>
+        <div class="option-card" onclick="toggleOutput('google_docs', this)"><div class="option-icon">📄</div><div class="option-label">Google Docs</div></div>
+        <div class="option-card" onclick="toggleOutput('notion', this)"><div class="option-icon">⬛</div><div class="option-label">Notion</div></div>
+        <div class="option-card" onclick="toggleOutput('apple_notes', this)"><div class="option-icon">🍎</div><div class="option-label">Apple Notes</div></div>
+        <div class="option-card" onclick="toggleOutput('onenote', this)"><div class="option-icon">📓</div><div class="option-label">OneNote</div></div>
+        <div class="option-card" onclick="toggleOutput('andere', this)"><div class="option-icon">➕</div><div class="option-label">Andere</div></div>
+      </div>
+      <div class="instruction">
+        <div class="instruction-icon">⚡</div>
+        <div class="instruction-text"><strong>Excel & Word:</strong> Electron greift direkt in Datei — 100% zuverlässig.<br><strong>Andere:</strong> MIRA steuert via Screenshot + Klicken.</div>
+      </div>
+    </div>
+
+    <!-- STEP 5: Templates -->
+    <div class="step-page" id="step-5">
+      <div class="step-tag">Schritt 6 / 6</div>
+      <div class="step-title">Deine Templates</div>
+      <div class="step-desc">Bis zu 4 Templates. Name + Felder definieren. Jederzeit änderbar.</div>
+      <div class="template-grid" id="template-grid"></div>
+    </div>
+
+    <!-- STEP 6: Fertig -->
+    <div class="step-page" id="step-6">
+      <div class="complete-screen">
+        <div class="complete-icon">⚡</div>
+        <div class="complete-title">MIRA ist bereit.</div>
+        <div class="complete-sub">Setup gespeichert in device_knowledge. Training Overlay bleibt verfügbar für Feintuning.</div>
+        <div class="summary-box" id="summary-box"></div>
+        <div class="saved-pill"><div class="saved-dot"></div>device_knowledge gespeichert</div>
+        <button class="btn-finish" onclick="finishSetup()">Setup abschließen</button>
+      </div>
+    </div>
+
+  </div><!-- /content -->
+</div><!-- /main -->
+
+<!-- BOTTOMBAR -->
+<div class="bottombar">
+  <div class="progress-track" id="progress-track"></div>
+  <div class="nav-btns">
+    <button class="btn-back" id="btn-back" onclick="prevStep()" style="display:none">← Zurück</button>
+    <button class="btn-next" id="btn-next" onclick="nextStep()" disabled>Weiter →</button>
+  </div>
+</div>
+
+<!-- CAPTURE OVERLAY (für Flächen-Markierung) -->
+<div id="capture-overlay">
+  <div id="capture-tip">Fläche markieren — Maus ziehen, dann loslassen</div>
+  <div id="capture-selection"></div>
+  <div id="capture-coords-live"></div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+
+// ==================== STATE ====================
+const S = {
+  step: 0,
+  totalSteps: 7,
+  completed: new Set(),
+  // data
+  mailApp: null,
+  zones: {},
+  mailTraining: Array(5).fill(null),
+  outputs: new Set(),
+  templates: [
+    { name: '', fields: [{label:'',zone:null},{label:'',zone:null}] },
+    { name: '', fields: [{label:'',zone:null},{label:'',zone:null}] },
+    { name: '', fields: [{label:'',zone:null},{label:'',zone:null}] },
+    { name: '', fields: [{label:'',zone:null},{label:'',zone:null}] },
+  ],
+  // capture
+  capturing: false,
+  captureKey: null,
+  captureCallbacks: null,
+  dragStart: null,
+};
+
+// ==================== INIT ====================
+function init() {
+  buildProgress();
+  buildMailSlots();
+  buildTemplates();
+  updateNav();
+}
+
+function buildProgress() {
+  const track = document.getElementById('progress-track');
+  track.innerHTML = '';
+  for (let i = 0; i < S.totalSteps; i++) {
+    const d = document.createElement('div');
+    d.className = 'progress-dot' + (i === 0 ? ' active' : '');
+    d.id = `dot-${i}`;
+    track.appendChild(d);
+  }
+}
+
+function buildMailSlots() {
+  const c = document.getElementById('mail-slots');
+  c.innerHTML = '';
+  for (let i = 0; i < 5; i++) {
+    c.innerHTML += `
+      <div class="mail-slot" id="ms-${i}">
+        <div class="mail-slot-num" id="ms-num-${i}">${i+1}</div>
+        <div class="mail-slot-text" id="ms-txt-${i}">Mail ${i+1} öffnen, dann Screenshot machen</div>
+        <div class="mail-slot-action" id="ms-btn-${i}" onclick="captureMailTraining(${i})">Screenshot</div>
+      </div>`;
+  }
+}
+
+function buildTemplates() {
+  const g = document.getElementById('template-grid');
+  g.innerHTML = '';
+  S.templates.forEach((t, i) => {
+    g.innerHTML += `
+      <div class="template-card" id="tc-${i}">
+        <div class="template-header">
+          <div class="template-num">TEMPLATE ${i+1}</div>
+          <div class="template-status" id="ts-${i}">leer</div>
+        </div>
+        <input class="t-input" placeholder="Name (z.B. Klageschrift, Rechnung...)"
+          oninput="updateTName(${i}, this.value)" id="tn-${i}"/>
+        <div class="t-fields" id="tf-${i}">
+          ${renderTemplateFields(i)}
+        </div>
+        <button class="add-field-btn" onclick="addTField(${i})">+ Feld hinzufügen</button>
+      </div>`;
+  });
+}
+
+function renderTemplateFields(ti) {
+  return S.templates[ti].fields.map((f, fi) => `
+    <div class="t-field-row" id="tfr-${ti}-${fi}">
+      <input class="t-field-input" placeholder="Feld (z.B. Mandant, Betrag...)"
+        value="${f.label}" oninput="updateTField(${ti}, ${fi}, this.value)"/>
+      <button class="t-field-btn ${f.zone ? 'captured' : ''}" onclick="captureTFieldZone(${ti}, ${fi})">
+        ${f.zone ? '✓' : 'markieren'}
+      </button>
+    </div>`).join('');
+}
+
+// ==================== NAVIGATION ====================
+function tryGoToStep(step) {
+  const nav = document.getElementById(`nav-${step}`);
+  if (nav.classList.contains('locked')) return;
+  goToStep(step);
+}
+
+function goToStep(step) {
+  document.querySelectorAll('.step-page').forEach(p => p.classList.remove('active'));
+  document.getElementById(`step-${step}`).classList.add('active');
+  document.querySelectorAll('.step-item').forEach(i => i.classList.remove('active'));
+  document.getElementById(`nav-${step}`).classList.add('active');
+  S.step = step;
+  updateNav();
+  updateProgressDots();
+  if (step === 6) buildSummary();
+}
+
+function nextStep() {
+  S.completed.add(S.step);
+  updateSidebarDone(S.step);
+  const next = S.step + 1;
+  document.getElementById(`nav-${next}`).classList.remove('locked');
+  goToStep(next);
+}
+
+function prevStep() {
+  if (S.step > 0) goToStep(S.step - 1);
+}
+
+function updateNav() {
+  const back = document.getElementById('btn-back');
+  const next = document.getElementById('btn-next');
+  back.style.display = S.step > 0 ? 'block' : 'none';
+  if (S.step === 6) {
+    next.style.display = 'none';
+  } else {
+    next.style.display = 'block';
+    next.disabled = !canProceed(S.step);
+    next.textContent = S.step === 5 ? 'Abschließen →' : 'Weiter →';
+  }
+}
+
+function canProceed(step) {
+  if (step === 0) return S.mailApp !== null;
+  if (step === 1) return !!S.zones['mail_content_zone'];
+  if (step === 2) return S.mailTraining.filter(Boolean).length >= 3;
+  if (step === 3) return !!S.zones['mail_search_zone'];
+  if (step === 4) return S.outputs.size > 0;
+  return true;
+}
+
+function updateProgressDots() {
+  for (let i = 0; i < S.totalSteps; i++) {
+    const d = document.getElementById(`dot-${i}`);
+    d.className = 'progress-dot';
+    if (S.completed.has(i)) d.classList.add('done');
+    else if (i === S.step) d.classList.add('active');
+  }
+}
+
+function updateSidebarDone(step) {
+  const item = document.getElementById(`nav-${step}`);
+  const num = document.getElementById(`num-${step}`);
+  item.classList.remove('active', 'locked');
+  item.classList.add('done');
+  num.textContent = '✓';
+}
+
+// ==================== STEP 0: MAIL APP ====================
+function selectMail(app, el) {
+  document.querySelectorAll('#step-0 .option-card').forEach(c => c.classList.remove('selected'));
+  el.classList.add('selected');
+  S.mailApp = app;
+  saveKnowledge('mail_app', { value: app, source: 'wizard' });
+  updateNav();
+}
+
+// ==================== ZONE CAPTURE ====================
+async function startZoneCapture(key, coordId, statusId, btnId, callback) {
+  const btn = document.getElementById(btnId);
+  if (btn) { btn.classList.add('waiting'); btn.textContent = 'Markiere...'; }
+
+  const zone = await ipcRenderer.invoke('setup-capture-zone');
+
+  if (!zone) {
+    if (btn) { btn.classList.remove('waiting'); btn.textContent = 'Zone markieren'; }
+    return;
+  }
+
+  S.zones[key] = zone;
+  if (coordId) document.getElementById(coordId).textContent = `x1:${zone.x1} y1:${zone.y1} → x2:${zone.x2} y2:${zone.y2}`;
+  if (statusId) {
+    const el = document.getElementById(statusId);
+    el.textContent = 'gespeichert ✓';
+    el.className = 'zone-status captured';
+  }
+  if (btn) { btn.classList.remove('waiting'); btn.textContent = 'Neu markieren'; }
+  if (callback) callback(zone);
+
+  saveKnowledge(key, { zone, source: 'wizard' });
+  updateNav();
+}
+
+function closeCapture() {
+  document.getElementById('capture-overlay').classList.remove('active');
+  document.getElementById('capture-selection').style.display = 'none';
+  document.getElementById('capture-coords-live').style.display = 'none';
+  S.capturing = false;
+  S.dragStart = null;
+}
+
+function cancelCapture() {
+  const cb = S.captureCallbacks;
+  if (cb && cb.btnId) {
+    const btn = document.getElementById(cb.btnId);
+    btn.classList.remove('waiting');
+    btn.textContent = 'Zone markieren';
+  }
+  closeCapture();
+}
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && S.capturing) cancelCapture();
+});
+
+// ==================== STEP 2: MAIL TRAINING ====================
+async function captureMailTraining(index) {
+  const btn = document.getElementById(`ms-btn-${index}`);
+  btn.classList.add('capturing');
+  btn.textContent = 'Wird aufgenommen...';
+
+  // Screenshot via Electron
+  const sc = await ipcRenderer.invoke('setup-screenshot');
+
+  S.mailTraining[index] = {
+    screenshot: sc,
+    zone: S.zones['mail_content_zone'] || null,
+    timestamp: new Date().toISOString()
+  };
+
+  // Speichern
+  await saveKnowledge(`mail_training_${index}`, {
+    zone: S.zones['mail_content_zone'],
+    timestamp: S.mailTraining[index].timestamp,
+    source: 'wizard'
+  });
+
+  const slot = document.getElementById(`ms-${index}`);
+  const num = document.getElementById(`ms-num-${index}`);
+  const txt = document.getElementById(`ms-txt-${index}`);
+
+  slot.classList.add('done');
+  num.textContent = '✓';
+  txt.textContent = `Mail ${index+1} — trainiert ${new Date().toLocaleTimeString('de-DE')}`;
+  btn.classList.remove('capturing');
+  btn.textContent = 'Nochmal';
+
+  const done = S.mailTraining.filter(Boolean).length;
+  document.getElementById('mail-progress').textContent = `${done} / 5 Mails trainiert${done < 3 ? ' (mind. 3 nötig)' : ' ✓'}`;
+
+  updateNav();
+}
+
+// ==================== STEP 4: OUTPUT ====================
+function toggleOutput(app, el) {
+  if (S.outputs.has(app)) {
+    S.outputs.delete(app);
+    el.classList.remove('multi-selected');
+  } else {
+    S.outputs.add(app);
+    el.classList.add('multi-selected');
+  }
+  saveKnowledge('output_apps', { apps: [...S.outputs], source: 'wizard' });
+  updateNav();
+}
+
+// ==================== STEP 5: TEMPLATES ====================
+function updateTName(i, val) {
+  S.templates[i].name = val;
+  checkTemplateStatus(i);
+}
+
+function updateTField(ti, fi, val) {
+  S.templates[ti].fields[fi].label = val;
+  checkTemplateStatus(ti);
+}
+
+function checkTemplateStatus(i) {
+  const t = S.templates[i];
+  const hasName = t.name.trim().length > 0;
+  const hasField = t.fields.some(f => f.label.trim().length > 0);
+  const status = document.getElementById(`ts-${i}`);
+  const card = document.getElementById(`tc-${i}`);
+  if (hasName && hasField) {
+    status.textContent = 'bereit ✓';
+    status.className = 'template-status ready';
+    card.classList.add('ready-template');
+    saveKnowledge(`template_${i}`, { name: t.name, fields: t.fields, source: 'wizard' });
+  } else {
+    status.textContent = 'leer';
+    status.className = 'template-status';
+    card.classList.remove('ready-template');
+  }
+}
+
+function addTField(ti) {
+  S.templates[ti].fields.push({ label: '', zone: null });
+  const container = document.getElementById(`tf-${ti}`);
+  const fi = S.templates[ti].fields.length - 1;
+  const row = document.createElement('div');
+  row.className = 't-field-row';
+  row.id = `tfr-${ti}-${fi}`;
+  row.innerHTML = `
+    <input class="t-field-input" placeholder="Feld..."
+      oninput="updateTField(${ti}, ${fi}, this.value)"/>
+    <button class="t-field-btn" onclick="captureTFieldZone(${ti}, ${fi})">markieren</button>`;
+  container.appendChild(row);
+}
+
+function captureTFieldZone(ti, fi) {
+  const key = `template_${ti}_field_${fi}_zone`;
+  startZoneCapture(key, null, null, null, (zone) => {
+    S.templates[ti].fields[fi].zone = zone;
+    const btn = document.querySelector(`#tfr-${ti}-${fi} .t-field-btn`);
+    if (btn) { btn.textContent = '✓'; btn.classList.add('captured'); }
+    checkTemplateStatus(ti);
+  });
+}
+
+// ==================== STEP 6: SUMMARY ====================
+function buildSummary() {
+  const readyT = S.templates.filter(t => t.name.trim().length > 0).length;
+  document.getElementById('summary-box').innerHTML = `
+    <div class="summary-row"><span class="summary-key">Mailprogramm</span><span class="summary-val ok">${S.mailApp || '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">Mail-Zone</span><span class="summary-val ${S.zones['mail_content_zone'] ? 'ok' : ''}">${S.zones['mail_content_zone'] ? 'gespeichert ✓' : '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">Mails trainiert</span><span class="summary-val ok">${S.mailTraining.filter(Boolean).length} / 5</span></div>
+    <div class="summary-row"><span class="summary-key">Suchleiste</span><span class="summary-val ${S.zones['mail_search_zone'] ? 'ok' : ''}">${S.zones['mail_search_zone'] ? 'gespeichert ✓' : '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">Ausgabe-Apps</span><span class="summary-val ok">${[...S.outputs].join(', ') || '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">Templates bereit</span><span class="summary-val ok">${readyT}</span></div>`;
+}
+
+// ==================== SAVE ====================
+async function saveKnowledge(key, value) {
+  try {
+    await ipcRenderer.invoke('setup-save-knowledge', { key, value });
+    console.log('✅ device_knowledge →', key);
+  } catch(e) {
+    console.error('save-knowledge Fehler:', e.message);
+  }
+}
+
+async function finishSetup() {
+  await saveKnowledge('setup_wizard_complete', {
+    mail_app: S.mailApp,
+    zones: S.zones,
+    mail_training_count: S.mailTraining.filter(Boolean).length,
+    outputs: [...S.outputs],
+    templates: S.templates.filter(t => t.name.trim().length > 0),
+    completed_at: new Date().toISOString(),
+    source: 'wizard'
+  });
+  ipcRenderer.send('setup-close');
+}
+
+function closeSetup() {
+  ipcRenderer.send('setup-close');
+}
+
+init();
+</script>
+</body>
+</html>

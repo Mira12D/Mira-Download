@@ -1,0 +1,1635 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>MIRA Agent</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #070708;
+      --bg2: #0d0d0f;
+      --surface: #111114;
+      --surface2: #18181c;
+      --border: rgba(255,255,255,0.06);
+      --border2: rgba(255,255,255,0.1);
+      --text: #f2f2f7;
+      --text2: #8e8e9a;
+      --text3: #3a3a48;
+      --accent: #e8e8ed;
+      --green: #34c759;
+      --green-glow: rgba(52,199,89,0.15);
+      --blue: #0a84ff;
+      --blue-glow: rgba(10,132,255,0.12);
+      --red: #ff453a;
+      --gold: #ffd60a;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-app-region: drag;
+      -webkit-font-smoothing: antialiased;
+      overflow-y: auto;
+      min-height: 100vh;
+      position: relative;
+    }
+
+    /* Subtle grain texture */
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+      pointer-events: none; z-index: 0; opacity: 0.4;
+    }
+
+    button, input, select, textarea, .clickable { -webkit-app-region: no-drag; }
+
+    /* ── SCREENS ── */
+    .screen { display: none; width: 100%; min-height: 100vh; flex-direction: column; position: relative; z-index: 1; }
+    .screen.active { display: flex; }
+
+    @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+    .screen.active > * { animation: fadeUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+    .screen.active > *:nth-child(2) { animation-delay: 0.05s; }
+    .screen.active > *:nth-child(3) { animation-delay: 0.1s; }
+
+    /* ── HEADER ── */
+    .header {
+      padding: 32px 28px 0;
+      display: flex; align-items: center; gap: 14px;
+    }
+
+    .logo-mark {
+      width: 38px; height: 38px;
+      background: var(--text);
+      border-radius: 11px;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 17px; color: #000;
+      flex-shrink: 0;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 8px 24px rgba(0,0,0,0.4);
+    }
+
+    .logo-info { flex: 1; }
+    .logo-name { font-size: 14px; font-weight: 700; letter-spacing: -0.2px; }
+    .logo-sub { font-size: 11px; color: var(--text3); margin-top: 1px; font-weight: 400; }
+
+    .header-badge {
+      font-size: 10px; font-weight: 600;
+      color: var(--green); background: var(--green-glow);
+      border: 1px solid rgba(52,199,89,0.2);
+      border-radius: 20px; padding: 4px 10px;
+      letter-spacing: 0.3px;
+      display: none;
+    }
+    .header-badge.show { display: block; }
+
+    /* ── CONTENT ── */
+    .content { flex: 1; padding: 32px 28px 28px; display: flex; flex-direction: column; }
+
+    /* ── ACTIVATION ── */
+    .act-hero {
+      display: flex; flex-direction: column;
+      padding-top: 16px; padding-bottom: 28px;
+    }
+
+    /* ── INFO CARDS (unter act-hero) ── */
+    .info-card {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
+      border: 1px solid var(--border2);
+      border-radius: 20px; padding: 20px 20px 18px;
+      margin-bottom: 12px; position: relative; overflow: hidden;
+    }
+    .info-card::before {
+      content: ''; position: absolute;
+      top: -50px; right: -50px; width: 140px; height: 140px;
+      background: radial-gradient(circle, rgba(255,255,255,0.025) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .info-card-title {
+      font-size: 14px; font-weight: 700; color: var(--text);
+      margin-bottom: 8px; letter-spacing: -0.2px;
+    }
+    .info-card-body {
+      font-size: 12px; color: var(--text2); line-height: 1.65;
+    }
+    .info-card-body em {
+      font-style: normal; color: var(--text);
+      background: rgba(255,255,255,0.06); border-radius: 6px;
+      padding: 2px 7px; display: inline-block; margin-top: 10px;
+      border: 1px solid var(--border2); font-size: 11.5px;
+    }
+
+    /* Platform badges */
+    .platform-row {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 16px;
+    }
+    .platform-badge {
+      flex: 1; display: flex; flex-direction: column; align-items: center;
+      gap: 7px; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border2); border-radius: 14px; padding: 12px 8px;
+    }
+    .platform-badge svg { width: 22px; height: 22px; opacity: 0.9; }
+    .platform-badge span {
+      font-size: 10px; font-weight: 700; letter-spacing: 0.5px;
+      text-transform: uppercase; color: var(--text2);
+    }
+    .platform-plus {
+      font-size: 18px; color: var(--text3); font-weight: 300; flex-shrink: 0;
+    }
+
+    /* Pipeline flow */
+    .pipeline-row {
+      display: flex; align-items: center; gap: 6px;
+      margin-bottom: 16px; overflow: hidden;
+    }
+    .pipeline-node {
+      flex: 1; text-align: center; background: rgba(255,255,255,0.04);
+      border: 1px solid var(--border2); border-radius: 12px;
+      padding: 9px 4px;
+    }
+    .pipeline-node .pn-icon { font-size: 18px; line-height: 1; }
+    .pipeline-node .pn-lbl {
+      font-size: 9px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--text2); margin-top: 4px;
+    }
+    .pipeline-node.center-node {
+      border-color: rgba(52,199,89,0.3);
+      background: rgba(52,199,89,0.06);
+    }
+    .pipeline-node.center-node .pn-lbl { color: var(--green); }
+    .pipeline-arrow {
+      font-size: 12px; color: var(--text3); flex-shrink: 0; opacity: 0.6;
+    }
+
+    .act-eyebrow {
+      font-size: 10px; font-weight: 600; letter-spacing: 2px;
+      color: var(--text3); text-transform: uppercase; margin-bottom: 16px;
+    }
+
+    .act-title {
+      font-size: 32px; font-weight: 800; letter-spacing: -1px;
+      line-height: 1.1; margin-bottom: 10px;
+      background: linear-gradient(160deg, #fff 0%, rgba(255,255,255,0.5) 100%);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+
+    .act-sub {
+      font-size: 13px; color: var(--text2); line-height: 1.6; margin-bottom: 36px;
+      font-weight: 400;
+    }
+
+    .input-wrap { position: relative; margin-bottom: 12px; }
+
+    .input-field {
+      width: 100%; background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 14px; padding: 16px 18px;
+      font-size: 14px; font-weight: 500;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text); letter-spacing: 1.5px;
+      text-transform: uppercase;
+      transition: all 0.2s;
+      box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .input-field:focus {
+      outline: none;
+      border-color: rgba(255,255,255,0.2);
+      background: var(--surface2);
+      box-shadow: 0 0 0 4px rgba(255,255,255,0.04), inset 0 1px 0 rgba(255,255,255,0.04);
+    }
+    .input-field::placeholder { color: var(--text3); text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+    /* ── BUTTONS ── */
+    .btn {
+      width: 100%; border: none; border-radius: 14px;
+      padding: 15px; font-size: 14px; font-weight: 700;
+      cursor: pointer; font-family: 'Sora', sans-serif;
+      transition: all 0.15s; letter-spacing: -0.2px;
+    }
+    .btn:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: var(--text);
+      color: #000;
+      box-shadow: 0 1px 0 rgba(255,255,255,0.1), 0 8px 20px rgba(0,0,0,0.3);
+    }
+    .btn-primary:hover { background: #e5e5ea; box-shadow: 0 8px 30px rgba(255,255,255,0.12); }
+
+    .btn-ghost {
+      background: var(--surface);
+      color: var(--text2);
+      border: 1px solid var(--border);
+      margin-top: 8px;
+    }
+    .btn-ghost:hover { background: var(--surface2); color: var(--text); border-color: var(--border2); }
+
+    .btn-green {
+      background: var(--green); color: #000;
+      box-shadow: 0 8px 24px rgba(52,199,89,0.3);
+    }
+    .btn-green:hover { box-shadow: 0 8px 32px rgba(52,199,89,0.45); }
+
+    .btn-blue {
+      background: var(--blue); color: #fff;
+      box-shadow: 0 8px 24px rgba(10,132,255,0.3);
+    }
+
+    .btn-sm {
+      width: auto; padding: 9px 16px; font-size: 12px;
+      border-radius: 10px;
+    }
+
+    /* ── TOAST ── */
+    #toast {
+      position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(10px);
+      background: var(--surface2); border: 1px solid var(--border2);
+      border-radius: 12px; padding: 11px 20px;
+      font-size: 13px; font-weight: 500; font-family: 'Sora', sans-serif;
+      opacity: 0; transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: none; z-index: 9999; white-space: nowrap;
+      box-shadow: 0 16px 40px rgba(0,0,0,0.5);
+    }
+    #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    #toast.success { color: var(--green); border-color: rgba(52,199,89,0.25); }
+    #toast.error { color: var(--red); border-color: rgba(255,69,58,0.25); }
+    #toast.info { color: var(--blue); border-color: rgba(10,132,255,0.25); }
+
+    /* ── DIVIDER ── */
+    .divider { height: 1px; background: var(--border); margin: 24px 0; }
+
+    /* ── VOICE CARD ── */
+    .voice-card {
+      display: flex; align-items: center; gap: 14px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 14px 16px;
+      cursor: pointer; transition: border-color 0.2s, background 0.2s;
+      position: relative; overflow: hidden;
+      margin-bottom: 8px;
+    }
+    .voice-card:hover { border-color: var(--border2); background: var(--surface2); }
+    .voice-card.listening {
+      border-color: rgba(52,199,89,0.4);
+      background: rgba(52,199,89,0.06);
+    }
+    .voice-icon-wrap {
+      width: 44px; height: 44px; border-radius: 12px;
+      background: var(--surface2); border: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; position: relative; transition: background 0.2s;
+      color: var(--text2);
+    }
+    .voice-card.listening .voice-icon-wrap {
+      background: rgba(52,199,89,0.15);
+      border-color: rgba(52,199,89,0.3);
+      color: var(--green);
+    }
+    .voice-ripple {
+      position: absolute; inset: -6px; border-radius: 18px;
+      border: 1.5px solid var(--green); opacity: 0;
+      animation: none;
+    }
+    .voice-card.listening .voice-ripple {
+      animation: voiceRipple 1.4s ease-out infinite;
+    }
+    @keyframes voiceRipple {
+      0%   { opacity: 0.5; transform: scale(0.9); }
+      100% { opacity: 0; transform: scale(1.35); }
+    }
+    .voice-text-area { flex: 1; min-width: 0; }
+    .voice-label { font-size: 13px; font-weight: 600; color: var(--text); }
+    .voice-sub {
+      font-size: 11px; color: var(--text2); margin-top: 2px;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .voice-status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--text3); flex-shrink: 0; transition: background 0.2s;
+    }
+    .voice-card.listening .voice-status-dot { background: var(--green); }
+
+    @keyframes voicePulse {
+      0%, 100% { transform: scaleY(0.3); }
+      50%       { transform: scaleY(1); }
+    }
+
+    /* ── SECTION LABEL ── */
+    .section-lbl {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--text3); margin-bottom: 12px;
+    }
+
+    /* ── DASHBOARD ── */
+    .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px; padding: 20px;
+      text-align: center;
+      position: relative; overflow: hidden;
+    }
+    .stat-card::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.02) 0%, transparent 60%);
+      pointer-events: none;
+    }
+    .stat-val {
+      font-size: 28px; font-weight: 800; letter-spacing: -1px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .stat-lbl { font-size: 10px; color: var(--text3); margin-top: 4px; text-transform: uppercase; letter-spacing: 0.8px; font-weight: 500; }
+
+    /* Connection card */
+    .conn-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 20px; margin-bottom: 16px;
+      position: relative; overflow: hidden;
+    }
+    .conn-card::before {
+      content: ''; position: absolute;
+      top: -40px; right: -40px;
+      width: 120px; height: 120px;
+      background: radial-gradient(circle, rgba(255,255,255,0.02) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .conn-header { margin-bottom: 16px; }
+    .conn-title { font-size: 12px; font-weight: 600; color: var(--text2); }
+    .conn-sub { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+    .conn-field { margin-bottom: 10px; }
+    .conn-field:last-child { margin-bottom: 0; }
+    .conn-lbl { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.8px; margin-bottom: 5px; font-weight: 600; }
+    .conn-val { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--text2); word-break: break-all; }
+    .conn-val.pin {
+      font-size: 36px; font-weight: 700; color: var(--green);
+      letter-spacing: 8px; text-align: center;
+      text-shadow: 0 0 30px rgba(52,199,89,0.3);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── ROUTE SCREEN ── */
+    .route-new-card {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
+      border: 1px solid var(--border2);
+      border-radius: 20px; padding: 22px; margin-bottom: 20px;
+      position: relative; overflow: hidden;
+    }
+    .route-new-card::before {
+      content: ''; position: absolute;
+      top: -60px; right: -60px; width: 160px; height: 160px;
+      background: radial-gradient(circle, rgba(52,199,89,0.06) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .route-new-title { font-size: 13px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+    .route-new-sub { font-size: 11px; color: var(--text3); margin-bottom: 16px; line-height: 1.5; }
+
+    .route-input {
+      width: 100%; background: var(--bg2);
+      border: 1px solid var(--border2); border-radius: 11px;
+      padding: 13px 15px; font-size: 13px; font-weight: 500;
+      color: var(--text); font-family: 'Sora', sans-serif;
+      transition: all 0.2s; margin-bottom: 10px;
+    }
+    .route-input:focus { outline: none; border-color: rgba(255,255,255,0.18); background: var(--surface); }
+    .route-input::placeholder { color: var(--text3); font-weight: 400; }
+
+    /* Route list */
+    .route-list { display: flex; flex-direction: column; gap: 8px; }
+
+    .route-item {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 18px;
+      display: flex; align-items: center; justify-content: space-between;
+      transition: all 0.2s; position: relative; overflow: hidden;
+    }
+    .route-item:hover { border-color: var(--border2); background: var(--surface2); }
+    .route-item::before {
+      content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+      width: 3px; background: var(--green); border-radius: 0 2px 2px 0;
+      opacity: 0; transition: opacity 0.2s;
+    }
+    .route-item:hover::before { opacity: 1; }
+
+    .route-item-left { flex: 1; min-width: 0; }
+    .route-item-name { font-size: 13px; font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .route-item-meta { font-size: 11px; color: var(--text3); margin-top: 3px; }
+
+    .route-play-btn {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: var(--green-glow); border: 1px solid rgba(52,199,89,0.2);
+      color: var(--green); font-size: 13px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: all 0.15s; font-family: 'Sora', sans-serif;
+    }
+    .route-play-btn:hover { background: var(--green); color: #000; border-color: transparent; transform: scale(1.05); }
+
+
+    .route-item-actions { display: flex; gap: 6px; align-items: center; }
+.route-del-btn { 
+  padding: 7px 10px; border-radius: 8px; border: none;
+  background: rgba(255,69,58,0.12); color: #ff453a;
+  font-size: 13px; cursor: pointer;
+  border: 1px solid rgba(255,69,58,0.25);
+}
+.route-del-btn:hover { background: rgba(255,69,58,0.25); }
+
+    /* ── RUNNING STATE ── */
+    .running-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 18px; padding: 24px; margin-bottom: 16px;
+      text-align: center;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 32px; height: 32px; border: 2px solid var(--border2);
+      border-top-color: var(--green); border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+
+    .running-title { font-size: 15px; font-weight: 700; margin-bottom: 6px; }
+    .running-step { font-size: 12px; color: var(--text2); }
+
+    /* Step progress */
+    .step-dots { display: flex; gap: 6px; justify-content: center; margin-top: 16px; }
+    .step-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--border2); transition: all 0.3s;
+    }
+    .step-dot.done { background: var(--green); }
+    .step-dot.active { background: var(--gold); transform: scale(1.3); }
+
+    /* ── BACK ── */
+    .back-btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; font-weight: 600; color: var(--blue);
+      cursor: pointer; margin-bottom: 24px; background: none; border: none;
+      font-family: 'Sora', sans-serif; padding: 0;
+    }
+    .back-btn:hover { opacity: 0.75; }
+
+    /* ── CALIBRATE SCREEN ── */
+    .cal-hero {
+      flex: 1; display: flex; flex-direction: column; justify-content: center;
+      text-align: center; padding: 0 8px 20px;
+    }
+    .cal-icon {
+      font-size: 48px; margin-bottom: 20px;
+    }
+    .cal-title { font-size: 26px; font-weight: 800; letter-spacing: -0.8px; margin-bottom: 10px; }
+    .cal-sub { font-size: 13px; color: var(--text2); line-height: 1.7; margin-bottom: 32px; }
+
+    .cal-step {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px 18px; margin-bottom: 8px;
+      display: flex; gap: 14px; align-items: flex-start; text-align: left;
+    }
+    .cal-step-num {
+      width: 26px; height: 26px; border-radius: 8px;
+      background: var(--surface2); border: 1px solid var(--border2);
+      font-size: 11px; font-weight: 700; color: var(--text2);
+      display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      font-family: 'JetBrains Mono', monospace;
+    }
+    .cal-step-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
+    .cal-step-text strong { color: var(--text); font-weight: 600; }
+
+    /* ── EMPTY STATE ── */
+    .empty-state {
+      text-align: center; padding: 32px 16px;
+      color: var(--text3); font-size: 12px; line-height: 1.6;
+    }
+    .empty-icon { font-size: 32px; margin-bottom: 10px; opacity: 0.5; }
+
+    /* ── STATUS DOT ── */
+    @keyframes breathe { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.85)} }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); animation: breathe 2.5s ease-in-out infinite; display: inline-block; margin-right: 6px; }
+
+    /* ── TRAINING CARD (Feature 2) ── */
+    .training-card {
+      background: linear-gradient(135deg, var(--surface) 0%, var(--bg2) 100%);
+      border: 1px solid var(--border2);
+      border-radius: 20px; padding: 18px 20px;
+      margin-bottom: 12px; position: relative; overflow: hidden;
+    }
+    .training-card.active {
+      border-color: rgba(10,132,255,0.35);
+      background: linear-gradient(135deg, rgba(10,132,255,0.07) 0%, var(--bg2) 100%);
+    }
+    .training-card::before {
+      content: ''; position: absolute;
+      top: -50px; right: -50px; width: 130px; height: 130px;
+      background: radial-gradient(circle, rgba(10,132,255,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .training-header {
+      display: flex; align-items: center; gap: 12px; margin-bottom: 12px;
+    }
+    .training-icon {
+      width: 40px; height: 40px; border-radius: 12px;
+      background: rgba(10,132,255,0.12); border: 1px solid rgba(10,132,255,0.2);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 18px; flex-shrink: 0;
+    }
+    .training-card.active .training-icon {
+      animation: breathe 1.8s ease-in-out infinite;
+    }
+    .training-title { font-size: 13px; font-weight: 700; color: var(--text); }
+    .training-sub   { font-size: 11px; color: var(--text2); line-height: 1.5; margin-top: 2px; }
+
+    /* Progress Bar */
+    .training-progress-wrap {
+      margin: 12px 0 10px; display: none;
+    }
+    .training-card.active .training-progress-wrap { display: block; }
+    .training-bar-bg {
+      height: 4px; background: rgba(255,255,255,0.07);
+      border-radius: 2px; overflow: hidden; margin-bottom: 8px;
+    }
+    .training-bar-fill {
+      height: 100%; background: var(--blue);
+      border-radius: 2px; transition: width 1s linear;
+      box-shadow: 0 0 8px rgba(10,132,255,0.5);
+    }
+    .training-stats {
+      display: flex; justify-content: space-between;
+      font-size: 10px; color: var(--text2);
+    }
+    .training-stats span { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+  </style>
+</head>
+<body>
+
+<!-- ══════════════════════════════════ -->
+<!-- ACTIVATION                         -->
+<!-- ══════════════════════════════════ -->
+<div id="screen-activate" class="screen active">
+  <div class="header">
+    <div class="logo-mark">M</div>
+    <div class="logo-info">
+      <div class="logo-name">MIRA Agent</div>
+      <div class="logo-sub">Virtueller Mitarbeiter</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="act-hero">
+      <div class="act-eyebrow">Willkommen</div>
+      <div class="act-title">Aktiviere<br>deinen Agent.</div>
+      <div class="act-sub">Gib deinen Code/AufladeCode ein um MIRA zu starten. Sie erledigt deine Arbeit – autonom.</div>
+      <div class="input-wrap">
+        <input class="input-field clickable" id="inp-code" placeholder="AGENT-XXX-XXX-2026" autocomplete="off" />
+      </div>
+      <button class="btn btn-primary clickable" onclick="doActivate()">Aktivieren</button>
+      <button class="btn btn-ghost clickable" onclick="goToCalibrate()">Nur Desktop kalibrieren</button>
+    </div>
+
+    <!-- ── INFO-KARTE 1: Von Wort zu Tat ── -->
+    <div class="info-card">
+      <div class="pipeline-row">
+        <div class="pipeline-node">
+          <div class="pn-icon">🗣️</div>
+          <div class="pn-lbl">Du sagst</div>
+        </div>
+        <div class="pipeline-arrow">›</div>
+        <div class="pipeline-node center-node">
+          <div class="pn-icon">🧠</div>
+          <div class="pn-lbl">MIRA denkt</div>
+        </div>
+        <div class="pipeline-arrow">›</div>
+        <div class="pipeline-node">
+          <div class="pn-icon">✅</div>
+          <div class="pn-lbl">Erledigt</div>
+        </div>
+      </div>
+      <div class="info-card-title">Von Wort zu Tat — in Sekunden</div>
+      <div class="info-card-body">
+        Du schreibst oder sprichst was du willst. MIRA denkt kurz nach — und dann passiert es: Die Maus bewegt sich, Felder werden ausgefüllt, Mails geschrieben, Tabellen aktualisiert. Alles von selbst.<br><br>
+        Kein Programmieren, keine Einrichtung, keine Technik.
+        <em>»Schick Schmidt eine Auftragsbestätigung«<br>→ MIRA öffnet Mail, findet die Adresse, schreibt und sendet.</em>
+      </div>
+    </div>
+
+    <!-- ── INFO-KARTE 2: Mac & Windows ── -->
+    <div class="info-card" style="margin-bottom: 28px;">
+      <div class="platform-row">
+        <div class="platform-badge">
+          <!-- Apple Logo -->
+          <svg viewBox="0 0 24 24" fill="currentColor" style="color:var(--text)">
+            <path d="M17.05 20.28c-.98.95-2.05.8-3.08.35-1.09-.46-2.09-.48-3.24 0-1.44.62-2.2.44-3.06-.35C2.79 15.25 3.51 7.7 9.05 7.42c1.27.06 2.14.72 2.89.73.71-.01 2.04-.85 3.47-.72 1.26.11 2.3.57 3.09 1.47-2.88 1.68-2.4 5.41.55 6.57-.69 1.88-1.6 3.73-3 4.81zM12.03 7.25c-.15-2.23 1.66-4.07 3.74-4.25.29 2.58-2.34 4.5-3.74 4.25z"/>
+          </svg>
+          <span>macOS</span>
+        </div>
+        <div class="platform-plus">+</div>
+        <div class="platform-badge">
+          <!-- Windows Logo -->
+          <svg viewBox="0 0 24 24" fill="currentColor" style="color:var(--text)">
+            <path d="M0 3.449L9.75 2.1v9.451H0m10.949-9.602L24 0v11.4H10.949M0 12.6h9.75v9.451L0 20.699M10.949 12.6H24V24l-12.9-1.801"/>
+          </svg>
+          <span>Windows</span>
+        </div>
+      </div>
+      <div class="info-card-title">Läuft auf Mac &amp; Windows</div>
+      <div class="info-card-body">
+        MIRA liest deinen Bildschirm direkt vom Betriebssystem — präziser als jeder Screenshot. Auf dem Mac heißt diese Technik <strong style="color:var(--text)">AX Tree</strong>, auf Windows <strong style="color:var(--text)">UI Automation</strong>. Zwei Namen, eine Funktion: MIRA sieht jeden Button, jedes Textfeld, jede Zahl auf deinem Bildschirm — egal ob Mac oder PC.
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══════════════════════════════════ -->
+<!-- CALIBRATION                        -->
+<!-- ══════════════════════════════════ -->
+<div id="screen-calibrate" class="screen">
+  <div class="header">
+    <div class="logo-mark">M</div>
+    <div class="logo-info">
+      <div class="logo-name">MIRA Agent</div>
+      <div class="logo-sub">Einrichtung</div>
+    </div>
+  </div>
+  <div class="content">
+    <div class="cal-hero">
+      <div class="cal-icon">🖥</div>
+      <div class="cal-title">Desktop einrichten</div>
+      <div class="cal-sub">MIRA braucht deinen Desktop als<br>Ausgangspunkt für alle Routen.</div>
+
+      <div class="cal-step">
+        <div class="cal-step-num">1</div>
+        <div class="cal-step-text">Gehe auf deinen <strong>Desktop</strong> – minimiere alle Fenster</div>
+      </div>
+      <div class="cal-step">
+        <div class="cal-step-num">2</div>
+        <div class="cal-step-text">Drücke <strong>0</strong> auf deiner Tastatur</div>
+      </div>
+      <div class="cal-step">
+        <div class="cal-step-num">3</div>
+        <div class="cal-step-text">MIRA speichert deinen Desktop als Startpunkt</div>
+      </div>
+
+      <div style="margin-top: 28px; width: 100%;">
+        <button class="btn btn-primary clickable" onclick="startDesktopCalibration()" style="margin-bottom:8px">
+          Desktop jetzt kalibrieren
+        </button>
+        <button class="btn btn-ghost clickable" onclick="skipCalibration()">Überspringen</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════ -->
+<!-- DASHBOARD                          -->
+<!-- ══════════════════════════════════ -->
+<div id="screen-dashboard" class="screen">
+  <div class="header">
+    <div class="logo-mark">M</div>
+    <div class="logo-info">
+      <div class="logo-name">MIRA Agent</div>
+      <div class="logo-sub" id="d-status-sub">Bereit</div>
+    </div>
+    <div class="header-badge show" id="d-badge"><span class="status-dot"></span>Aktiv</div>
+  </div>
+  <div class="content">
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="stat-val" id="d-tier">—</div>
+        <div class="stat-lbl">Plan</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-val" id="d-tasks">—</div>
+        <div class="stat-lbl">Tasks übrig</div>
+      </div>
+    </div>
+
+    <div class="conn-card">
+      <div class="conn-header">
+        <div class="conn-title">Website verbinden</div>
+        <div class="conn-sub">Auf getmira.space/mitarbeiter eingeben</div>
+      </div>
+      <div class="conn-field">
+        <div class="conn-lbl">Device ID</div>
+        <div class="conn-val" id="d-device-id">—</div>
+      </div>
+      <div class="conn-field">
+        <div class="conn-lbl">PIN</div>
+        <div class="conn-val pin" id="d-pin">—</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── VOICE COMMAND ── -->
+    <div class="voice-card clickable" id="voice-card" onclick="toggleVoice()">
+      <div class="voice-icon-wrap" id="voice-icon-wrap">
+        <svg id="voice-icon-mic" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+          <path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/>
+          <line x1="8" y1="23" x2="16" y2="23"/>
+        </svg>
+        <div class="voice-ripple" id="voice-ripple"></div>
+      </div>
+      <div class="voice-text-area">
+        <div class="voice-label" id="voice-label">MIRA sprechen</div>
+        <div class="voice-sub" id="voice-sub">Tippe oder sprich einen Befehl</div>
+      </div>
+      <div class="voice-status-dot" id="voice-status-dot"></div>
+    </div>
+
+    <!-- Stille-Countdown (erscheint während Recording) -->
+    <div id="voice-countdown" style="display:none;text-align:center;padding:6px 0;font-size:11px;color:var(--text2)">
+      <span id="voice-countdown-txt">Stille erkannt — sendet in <b>1.5s</b></span>
+    </div>
+
+    <!-- Erkannter Text (Vorschau) -->
+    <div id="voice-transcript-card" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;margin-top:4px">
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Erkannt:</div>
+      <div id="voice-transcript-text" style="font-size:13px;color:var(--text);line-height:1.5"></div>
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- ── PASSIVES TRAINING (Feature 2) ── -->
+    <div class="training-card clickable" id="training-card">
+      <div class="training-header">
+        <div class="training-icon" id="training-icon">👁</div>
+        <div>
+          <div class="training-title">1-Stunden Training</div>
+          <div class="training-sub" id="training-sub-text">Arbeite normal — MIRA lernt dabei mit.</div>
+        </div>
+      </div>
+
+      <!-- Progress (nur wenn aktiv) -->
+      <div class="training-progress-wrap" id="training-progress-wrap">
+        <div class="training-bar-bg">
+          <div class="training-bar-fill" id="training-bar" style="width:0%"></div>
+        </div>
+        <div class="training-stats">
+          <div>Verbleibend: <span id="training-remaining">60 min</span></div>
+          <div>Beobachtet: <span id="training-obs">0</span> Klicks</div>
+        </div>
+      </div>
+
+      <button class="btn btn-ghost clickable" id="training-btn"
+        style="width:100%;font-size:12px;padding:10px;margin-top:4px"
+        onclick="togglePassiveTraining()">
+        ▶ Training starten
+      </button>
+    </div>
+
+    <div class="divider"></div>
+
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('kb-open')" style="margin-bottom:8px">
+      🧠 Wissensbase bearbeiten
+    </button>
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-device-knowledge')" style="margin-bottom:8px">
+      ✦ Mira beibringen
+    </button>
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-user-profile')" style="margin-bottom:8px">
+      👤 Unternehmensprofil
+    </button>
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('templates-open')" style="margin-bottom:8px">
+      🌐 Template-Bibliothek
+    </button>
+    <button class="btn btn-green clickable" onclick="showRouteScreen()" style="margin-bottom:8px">
+      🗺 Routen verwalten
+    </button>
+    <button class="btn btn-ghost clickable" onclick="goToCalibrate()">Desktop neu kalibrieren</button>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════ -->
+<!-- ROUTES                             -->
+<!-- ══════════════════════════════════ -->
+<div id="screen-routes" class="screen">
+  <div class="header">
+    <div class="logo-mark">M</div>
+    <div class="logo-info">
+      <div class="logo-name">MIRA Agent</div>
+      <div class="logo-sub">Routen</div>
+    </div>
+  </div>
+  <div class="content">
+    <button class="back-btn clickable" onclick="showDashboard()">← Zurück</button>
+
+    <!-- PC Vorstellen Card -->
+    <div class="route-new-card" style="margin-bottom:12px;border-color:#00ff8820">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <div style="width:8px;height:8px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88"></div>
+        <div class="route-new-title" style="margin:0;color:#00ff88">Autonomes Handeln freischalten</div>
+      </div>
+      <div class="route-new-sub" style="margin-bottom:14px">
+        Stelle MIRA deinen PC vor — einmalig, 10 Minuten. MIRA lernt deinen Browser, Mail, Dateien und Apps kennen und kann danach eigenständig handeln ohne jede Route zu trainieren.
+      </div>
+      <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px" onclick="ipcRenderer.invoke('open-pc-training')">
+        🖥️ PC jetzt vorstellen
+      </button>
+    </div>
+
+    <!-- Büro Setup Card -->
+<div class="route-new-card" style="margin-bottom:12px;border-color:#e8ff4720">
+  <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+    <div style="width:8px;height:8px;border-radius:50%;background:#e8ff47;box-shadow:0 0 8px #e8ff47"></div>
+    <div class="route-new-title" style="margin:0;color:#e8ff47">Büro Setup</div>
+  </div>
+  <div class="route-new-sub" style="margin-bottom:14px">
+    Richte MIRA für deinen Büro-Alltag ein — Mail, Excel, Word, Templates. Einmalig, 5 Minuten. Danach versteht MIRA komplexe Aufgaben wie "fasse Rechnungen aus Mail zusammen und trag sie in Excel ein".
+  </div>
+  <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;background:#e8ff4715;border-color:#e8ff4740;color:#e8ff47" onclick="ipcRenderer.invoke('open-setup-overlay')">
+    ⚡ Büro Setup starten
+  </button>
+</div>
+
+    <!-- Neue Route -->
+    <div class="route-new-card">
+      <div class="route-new-title">Neue Route aufnehmen</div>
+      <div class="route-new-sub">Gib einen Namen ein, starte die Aufnahme und zeige MIRA was sie tun soll – Schritt für Schritt.</div>
+
+      <input class="route-input clickable" id="route-name-inp" placeholder="z.B. Rechnungen aus Gmail holen" />
+
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-green clickable" style="flex:1;font-size:13px;padding:12px" onclick="startRouteRecording()">
+          🔴 Aufnahme starten
+        </button>
+      </div>
+
+      <!-- Anleitung -->
+      <div id="route-how" style="margin-top:16px;display:none">
+        <div style="height:1px;background:var(--border);margin-bottom:14px"></div>
+        <div class="section-lbl">So geht's</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <div style="font-size:11px;color:var(--text3);line-height:1.6"><span style="color:var(--gold);font-weight:700;font-family:'JetBrains Mono',monospace">0</span> → Desktop als Start</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.6"><span style="color:var(--green);font-weight:700;font-family:'JetBrains Mono',monospace">1–8</span> → Maus auf Element → Taste drücken → Befehl eingeben</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.6"><span style="color:var(--red);font-weight:700;font-family:'JetBrains Mono',monospace">9</span> → Fertig & speichern</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Route trainieren -->
+    <div class="route-new-card" style="padding:14px 16px">
+      <button class="btn btn-ghost clickable" onclick="toggleTrainingInput()" style="width:100%;font-size:13px;padding:10px">
+        🎓 Route trainieren
+      </button>
+      <div id="training-input-wrap" style="display:none;margin-top:10px">
+        <input id="training-cmd-input" placeholder="z.B. öffne Opera..."
+          style="width:100%;background:#111;border:1px solid #222;border-radius:8px;
+                 padding:10px;color:#fff;font-size:13px;outline:none;margin-bottom:8px">
+        <button class="btn btn-green clickable" style="width:100%" onclick="startTrainingFromInput()">Starten</button>
+      </div>
+    </div>
+
+    <!-- Recording live state -->
+    <div id="recording-live" style="display:none">
+      <div class="running-card">
+        <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:12px">
+          <div style="width:8px;height:8px;border-radius:50%;background:var(--red);animation:breathe 1s infinite"></div>
+          <div style="font-size:13px;font-weight:700">Aufnahme läuft</div>
+        </div>
+        <div class="step-dots" id="rec-dots">
+          <div class="step-dot" id="rdot-0"></div>
+          <div class="step-dot" id="rdot-1"></div>
+          <div class="step-dot" id="rdot-2"></div>
+          <div class="step-dot" id="rdot-3"></div>
+          <div class="step-dot" id="rdot-4"></div>
+          <div class="step-dot" id="rdot-5"></div>
+          <div class="step-dot" id="rdot-6"></div>
+          <div class="step-dot" id="rdot-7"></div>
+          <div class="step-dot" id="rdot-8"></div>
+        </div>
+        <div class="running-step" id="rec-live-status" style="margin-top:12px">Warte auf Step 0 (Desktop)...</div>
+        <button class="btn btn-ghost clickable" style="margin-top:14px;font-size:12px;padding:10px" onclick="cancelRecording()">Abbrechen</button>
+      </div>
+    </div>
+
+    <!-- Route Running State -->
+    <div id="route-running" style="display:none">
+      <div class="running-card">
+        <div class="spinner"></div>
+        <div class="running-title" id="run-title">Route läuft...</div>
+        <div class="running-step" id="run-step">Initialisiere...</div>
+        <div class="step-dots" id="run-dots"></div>
+      </div>
+    </div>
+
+    <!-- Route Liste -->
+    <div id="route-list-section">
+      <div class="section-lbl">Gespeicherte Routen</div>
+      <div class="route-list" id="route-list">
+        <div class="empty-state">
+          <div class="empty-icon">🗺</div>
+          Noch keine Routen.<br>Nimm deine erste auf!
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+  const { ipcRenderer } = require('electron');
+
+  let userToken = null;
+  let isRecording = false;
+  let recordedStepNums = new Set();
+
+  // ══════════════════════════════════
+  // SCREENS
+  // ══════════════════════════════════
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+    document.getElementById(id).classList.add('active');
+  }
+
+  function showDashboard() {
+  showScreen('screen-dashboard');
+  startStatsRefresh();
+  syncTrainingStatus(); // Training-Status beim Öffnen synchronisieren
+}
+function goToCalibrate() { showScreen('screen-calibrate'); }
+function showRouteScreen() {
+  showScreen('screen-routes');
+  stopStatsRefresh(); // ← NEU — nicht refreshen wenn nicht auf Dashboard
+  loadRoutes();
+  document.getElementById('recording-live').style.display = 'none';
+  document.getElementById('route-running').style.display = 'none';
+  document.getElementById('route-how').style.display = 'none';
+}
+
+  // ══════════════════════════════════
+  // TOAST
+  // ══════════════════════════════════
+
+  let toastTimer;
+  function toast(msg, type = 'info') {
+    const el = document.getElementById('toast');
+    el.textContent = msg;
+    el.className = `show ${type}`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+  }
+
+  // ══════════════════════════════════
+  // ACTIVATION
+  // ══════════════════════════════════
+
+  async function doActivate() {
+    const code = document.getElementById('inp-code').value.trim();
+    if (!code) { toast('Code eingeben', 'error'); return; }
+    toast('Aktiviere...', 'info');
+    const result = await ipcRenderer.invoke('activate-token', code);
+    if (result.success) {
+      userToken = result.token;
+      toast(result.message, 'success');
+      setTimeout(() => {
+        const calibrated = localStorage.getItem('mira_desktop_calibrated');
+        if (calibrated) { fillDashboard(result); showDashboard(); }
+        else { goToCalibrate(); }
+      }, 800);
+    } else {
+      toast(result.message, 'error');
+    }
+  }
+
+  ipcRenderer.on('token-loaded', (event, data) => {
+    fillDashboard(data);
+    showDashboard();
+  });
+
+  // ══════════════════════════════════
+  // DASHBOARD
+  // ══════════════════════════════════
+
+// Auto-refresh
+let statsInterval = null;
+
+function startStatsRefresh() {
+  if (statsInterval) return;
+  statsInterval = setInterval(async () => {
+    const stats = await ipcRenderer.invoke('load-stats');
+    if (stats) {
+      document.getElementById('d-tasks').textContent = stats.tasks_remaining ?? '—';
+      document.getElementById('d-tier').textContent = (stats.tier || '—').toUpperCase();
+
+      // ← NEU: Bei 0 Tasks raus zum Login
+      if (stats.tasks_remaining === 0) {
+        stopStatsRefresh();
+        toast('Keine Tasks mehr übrig — Code eingeben zum Aufladen', 'error');
+        setTimeout(() => showScreen('screen-activate'), 2000);
+      }
+    }
+  }, 10000);
+}
+
+function stopStatsRefresh() {
+  if (statsInterval) { clearInterval(statsInterval); statsInterval = null; }
+}
+
+async function fillDashboard(data) {
+  document.getElementById('d-tier').textContent = (data.tier || '—').toUpperCase();
+  document.getElementById('d-tasks').textContent = '...';
+
+  const info = await ipcRenderer.invoke('get-device-info');
+  if (info) {
+    document.getElementById('d-device-id').textContent = info.device_id || '—';
+    document.getElementById('d-pin').textContent = info.pin || '—';
+  }
+
+  const stats = await ipcRenderer.invoke('load-stats');
+  if (stats) {
+    document.getElementById('d-tasks').textContent = stats.tasks_remaining ?? '—';
+    document.getElementById('d-tier').textContent = (stats.tier || '—').toUpperCase();
+  } else {
+    document.getElementById('d-tasks').textContent = data.tasks || '—';
+    document.getElementById('d-tier').textContent = (data.tier || '—').toUpperCase();
+  }
+
+  startStatsRefresh(); // ← NEU
+}
+
+  // ══════════════════════════════════
+  // PASSIVES TRAINING (Feature 2)
+  // ══════════════════════════════════
+
+  let _trainingActive = false;
+
+  async function togglePassiveTraining() {
+    if (_trainingActive) {
+      await ipcRenderer.invoke('stop-passive-training');
+      setTrainingUI(false, null);
+      toast('Training gestoppt — Daten werden verarbeitet', 'info');
+    } else {
+      const res = await ipcRenderer.invoke('start-passive-training');
+      if (res.success) {
+        setTrainingUI(true, { remaining_min: 60, observations: 0, elapsed_ms: 0 });
+        toast('Training gestartet — arbeite normal weiter!', 'success');
+      } else {
+        toast('Training konnte nicht gestartet werden', 'error');
+      }
+    }
+  }
+
+  function setTrainingUI(active, prog) {
+    _trainingActive = active;
+    const card = document.getElementById('training-card');
+    const btn  = document.getElementById('training-btn');
+    const sub  = document.getElementById('training-sub-text');
+
+    if (active) {
+      card.classList.add('active');
+      btn.textContent = '■ Training stoppen';
+      sub.textContent = 'MIRA beobachtet — arbeite ganz normal.';
+      document.getElementById('training-progress-wrap').style.display = 'block';
+      if (prog) updateTrainingProgress(prog);
+    } else {
+      card.classList.remove('active');
+      btn.textContent = '▶ Training starten';
+      sub.textContent = 'Arbeite normal — MIRA lernt dabei mit.';
+      document.getElementById('training-progress-wrap').style.display = 'none';
+      document.getElementById('training-bar').style.width = '0%';
+    }
+  }
+
+  function updateTrainingProgress(prog) {
+    if (!prog || !prog.active) { setTrainingUI(false, null); return; }
+    const pct = Math.min(100, Math.round((prog.elapsed_ms / (60 * 60 * 1000)) * 100));
+    document.getElementById('training-bar').style.width = pct + '%';
+    document.getElementById('training-remaining').textContent = prog.remaining_min + ' min';
+    document.getElementById('training-obs').textContent = prog.observations;
+    _trainingActive = true;
+  }
+
+  // Live-Updates vom Main-Prozess
+  ipcRenderer.on('passive-training-progress', (event, prog) => {
+    updateTrainingProgress(prog);
+  });
+
+  ipcRenderer.on('passive-training-done', (event, result) => {
+    setTrainingUI(false, null);
+    toast(`✅ Training abgeschlossen — ${result.observations} Klicks gelernt!`, 'success');
+  });
+
+  // Beim Dashboard-Laden: Status abfragen (falls Training noch läuft)
+  async function syncTrainingStatus() {
+    const prog = await ipcRenderer.invoke('get-training-progress');
+    if (prog && prog.active) {
+      setTrainingUI(true, prog);
+    }
+  }
+
+  // ══════════════════════════════════
+  // CALIBRATION
+  // ══════════════════════════════════
+
+  async function startDesktopCalibration() {
+    const result = await ipcRenderer.invoke('start-route-record', '__desktop_calibration__');
+    if (result.success) {
+      toast('Gehe auf Desktop und drücke 0', 'info');
+    }
+  }
+
+  function skipCalibration() {
+    localStorage.setItem('mira_desktop_calibrated', 'true');
+    const tier = localStorage.getItem('mira_tier');
+    fillDashboard({ tier, tasks: localStorage.getItem('mira_tasks'), pin: localStorage.getItem('mira_pin'), device_id: localStorage.getItem('mira_device_id') });
+    showDashboard();
+  }
+
+  // ══════════════════════════════════
+  // ROUTES - RECORDING
+  // ══════════════════════════════════
+
+  async function startRouteRecording() {
+    const name = document.getElementById('route-name-inp').value.trim();
+    if (!name) { toast('Bitte Route einen Namen geben', 'error'); return; }
+
+    const result = await ipcRenderer.invoke('start-route-record', name);
+    if (result.success) {
+      isRecording = true;
+      recordedStepNums = new Set();
+      document.getElementById('recording-live').style.display = 'block';
+      document.getElementById('route-how').style.display = 'none';
+      document.getElementById('route-list-section').style.display = 'none';
+      resetRecDots();
+      document.getElementById('rec-live-status').textContent = 'Warte auf Step 0 (Desktop)...';
+      toast(`Aufnahme "${name}" gestartet`, 'success');
+    }
+  }
+
+  function cancelRecording() {
+    ipcRenderer.invoke('clear-recording');
+    isRecording = false;
+    document.getElementById('recording-live').style.display = 'none';
+    document.getElementById('route-list-section').style.display = 'block';
+    toast('Aufnahme abgebrochen', 'error');
+  }
+
+  function resetRecDots() {
+    for (let i = 0; i <= 8; i++) {
+      const d = document.getElementById(`rdot-${i}`);
+      if (d) d.className = 'step-dot';
+    }
+  }
+
+  // Step aufgenommen
+  ipcRenderer.on('route-step-recorded', (event, { stepNum, total }) => {
+    recordedStepNums.add(stepNum);
+
+    // Desktop calibration special case
+    if (!isRecording) {
+      localStorage.setItem('mira_desktop_calibrated', 'true');
+      toast('Desktop kalibriert!', 'success');
+      fillDashboard({
+        tier: localStorage.getItem('mira_tier') || '—',
+        tasks: localStorage.getItem('mira_tasks') || '—',
+        pin: localStorage.getItem('mira_pin'),
+        device_id: localStorage.getItem('mira_device_id')
+      });
+      showDashboard();
+      return;
+    }
+
+    // Update dot
+    const dot = document.getElementById(`rdot-${stepNum}`);
+    if (dot) dot.className = 'step-dot done';
+
+    const nextDot = document.getElementById(`rdot-${stepNum + 1}`);
+    if (nextDot) nextDot.className = 'step-dot active';
+
+    const status = stepNum === 0
+      ? 'Desktop gespeichert ✓ Gehe zu Step 1...'
+      : stepNum >= 8
+        ? 'Alle Steps aufgenommen → drücke 9 zum Speichern'
+        : `Step ${stepNum} ✓ → gehe zu Step ${stepNum + 1}`;
+
+    document.getElementById('rec-live-status').textContent = status;
+  });
+
+  // Route gespeichert
+  ipcRenderer.on('route-record-done', (event, { name, steps }) => {
+    isRecording = false;
+    document.getElementById('recording-live').style.display = 'none';
+    document.getElementById('route-list-section').style.display = 'block';
+    document.getElementById('route-name-inp').value = '';
+    toast(`"${name}" gespeichert – ${steps} Steps`, 'success');
+    loadRoutes();
+  });
+
+  ipcRenderer.on('recording-cancelled', () => {
+    isRecording = false;
+    document.getElementById('recording-live').style.display = 'none';
+    document.getElementById('route-list-section').style.display = 'block';
+    toast('Aufnahme abgebrochen', 'error');
+  });
+
+  // ══════════════════════════════════
+  // ROUTES - LIST & RUN
+  // ══════════════════════════════════
+
+  async function loadRoutes() {
+    const result = await ipcRenderer.invoke('route-list');
+    const container = document.getElementById('route-list');
+
+    if (!result.success || !result.routes || result.routes.length === 0) {
+      container.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">🗺</div>
+          Noch keine Routen.<br>Nimm deine erste auf!
+        </div>`;
+      return;
+    }
+
+   container.innerHTML = result.routes.map(r => `
+  <div class="route-item">
+    <div class="route-item-left">
+      <div class="route-item-name">${r.name}</div>
+      <div class="route-item-meta">${r.steps?.length || 0} Steps · ${r.run_count || 0}× ausgeführt</div>
+    </div>
+    <div class="route-item-actions">
+      <button class="route-play-btn clickable" onclick="runRoute('${r.id}', '${r.name}', ${r.steps?.length || 0})">▶</button>
+      <button class="route-del-btn clickable" onclick="deleteRoute('${r.id}', '${r.name}')">🗑</button>
+    </div>
+  </div>
+`).join('');
+  }
+
+ async function deleteRoute(routeId, routeName) {
+  if (!confirm(`"${routeName}" wirklich löschen?`)) return;
+  const result = await ipcRenderer.invoke('route-delete', routeId);
+  if (result.success) {
+    toast(`"${routeName}" gelöscht`, 'success');
+    loadRoutes();
+  } else {
+    toast('Fehler: ' + (result.error || 'unbekannt'), 'error');
+  }
+}
+
+  async function runRoute(routeId, routeName, totalSteps) {
+    document.getElementById('route-list-section').style.display = 'none';
+    document.getElementById('route-running').style.display = 'block';
+    document.getElementById('run-title').textContent = routeName;
+    document.getElementById('run-step').textContent = 'Starte...';
+
+    // Build step dots
+    const dots = document.getElementById('run-dots');
+    dots.innerHTML = Array.from({length: totalSteps}, (_, i) =>
+      `<div class="step-dot" id="rundot-${i}"></div>`
+    ).join('');
+
+    const result = await ipcRenderer.invoke('route-run', routeId);
+
+    document.getElementById('route-running').style.display = 'none';
+    document.getElementById('route-list-section').style.display = 'block';
+
+    if (result.success) {
+      toast(`✅ ${result.steps_completed} Steps erledigt!`, 'success');
+    } else {
+      toast(`❌ Step ${result.failed_at_step} fehlgeschlagen: ${result.reason || result.error || ''}`, 'error');
+    }
+    loadRoutes();
+  }
+
+  // Live step updates
+  ipcRenderer.on('route-step-update', (event, { step, total, validation }) => {
+    document.getElementById('run-step').textContent = `Step ${step} von ${total}...`;
+    const dot = document.getElementById(`rundot-${step - 1}`);
+    if (dot) dot.className = validation?.ok === false ? 'step-dot' : 'step-dot done';
+    const nextDot = document.getElementById(`rundot-${step}`);
+    if (nextDot) nextDot.className = 'step-dot active';
+  });
+
+  //====================================
+            //ipc Token expired
+  //====================================
+  
+  ipcRenderer.on('session-expired', () => {
+  stopStatsRefresh();
+  showScreen('screen-activate');
+  toast('Sitzung abgelaufen – bitte neu einloggen', 'error');
+});
+
+ipcRenderer.on('agent-offline', () => {
+  const badge = document.getElementById('d-badge');
+  if (badge) {
+    badge.innerHTML = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff453a;margin-right:6px"></span>Offline';
+    badge.style.background = 'rgba(255,69,58,0.15)';
+    badge.style.color = '#ff453a';
+  }
+  document.getElementById('d-status-sub').textContent = 'Keine Verbindung';
+});
+
+ipcRenderer.on('agent-online', () => {
+  const badge = document.getElementById('d-badge');
+  if (badge) {
+    badge.innerHTML = '<span class="status-dot"></span>Aktiv';
+    badge.style.background = '';
+    badge.style.color = '';
+  }
+  document.getElementById('d-status-sub').textContent = 'Bereit';
+});
+
+
+
+// MIRA zeigt wo sie klicken würde → User sagt ja/nein
+ipcRenderer.on('training-ask', (event, data) => {
+  document.getElementById('training-command').textContent = data.command;
+  document.getElementById('training-progress').textContent = `${data.step_index} / ${data.total}`;
+  document.getElementById('training-coords').textContent = `Maus bei: [${data.x}, ${data.y}]`;
+  document.getElementById('training-screenshot').src = `data:image/jpeg;base64,${data.screenshot}`;
+});
+
+function trainingYes() {
+  ipcRenderer.send('training-answer', { correct: true });
+}
+
+function trainingNo() {
+  ipcRenderer.send('training-answer', { correct: false });
+}
+
+// User bewegt Maus zur richtigen Stelle
+ipcRenderer.on('training-move-mouse', (event, data) => {
+  document.getElementById('training-status').textContent = 
+    `Bewege die Maus zu: "${data.command}" → dann Bestätigen`;
+});
+
+async function trainingConfirmPosition() {
+  const pos = await ipcRenderer.invoke('training-get-mouse-pos');
+  ipcRenderer.send('training-correction', { x: pos.x, y: pos.y });
+}
+
+function toggleTrainingInput() {
+  const wrap = document.getElementById('training-input-wrap');
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+  if (wrap.style.display === 'block') {
+    document.getElementById('training-cmd-input').focus();
+  }
+}
+
+function startTrainingFromInput() {
+  const command = document.getElementById('training-cmd-input').value.trim();
+  if (!command) return;
+  document.getElementById('training-input-wrap').style.display = 'none';
+  startTraining(command);
+}
+
+// In index.html <script> einfügen:
+async function startTraining(command) {
+  const data = await ipcRenderer.invoke('training-start', command);
+  if (!data.success) {
+    alert('Training Fehler: ' + (data.error || 'Unbekannt'));
+    return;
+  }
+  console.log(`🎓 Training gestartet: "${data.route_name}"`);
+}
+  // ══════════════════════════════════
+  // INIT
+  // ══════════════════════════════════
+
+  document.getElementById('inp-code').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') doActivate();
+  });
+
+  document.getElementById('route-name-inp')?.addEventListener('focus', () => {
+    document.getElementById('route-how').style.display = 'block';
+  });
+
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // VOICE — Spracheingabe mit automatischer Stille-Erkennung
+  // ══════════════════════════════════════════════════════════════════════════
+  //
+  // Pipeline:
+  //   1. Nutzer klickt Voice-Card → Recording startet
+  //   2. AudioContext + AnalyserNode misst RMS-Level jedes Frame (~60fps)
+  //   3. Fällt RMS unter SILENCE_THRESHOLD für >= SILENCE_DURATION ms → auto-stop
+  //   4. Web Speech API (Chromium built-in) transkribiert den Text
+  //   5. Transkript wird via IPC an main.js geschickt → MIRA führt Befehl aus
+  //
+  // Kein manueller Stop-Button nötig. Stille = Satzende.
+
+  const SILENCE_THRESHOLD = 0.012; // RMS unter diesem Wert gilt als Stille
+  const SILENCE_DURATION  = 1500;  // ms Stille bis auto-stop
+  const MIN_SPEECH_MS     = 400;   // mind. Aufnahmedauer bevor Stille zählt
+
+  let voiceActive       = false;
+  let voiceRecognition  = null;
+  let voiceAudioCtx     = null;
+  let voiceAnalyser     = null;
+  let voiceStream       = null;
+  let voiceSilenceStart = null;
+  let voiceAnimFrame    = null;
+  let voiceStartTime    = 0;
+  let voiceTranscript   = '';
+  let voiceCountdownInt = null;
+
+  function toggleVoice() {
+    if (voiceActive) {
+      stopVoice(true); // manuell gestoppt → senden
+    } else {
+      startVoice();
+    }
+  }
+
+  async function startVoice() {
+    if (voiceActive) return;
+
+    // Mikrofon-Zugriff
+    try {
+      voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+    } catch (err) {
+      toast('Mikrofon-Zugriff verweigert', 'error');
+      return;
+    }
+
+    // Web Speech API für Transkription
+    const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
+    if (!SR) {
+      toast('Speech Recognition nicht verfügbar', 'error');
+      voiceStream.getTracks().forEach(t => t.stop());
+      return;
+    }
+
+    voiceActive      = true;
+    voiceTranscript  = '';
+    voiceStartTime   = Date.now();
+    voiceSilenceStart = null;
+
+    // ── Audio Analysis für Stille-Erkennung ──
+    voiceAudioCtx = new AudioContext();
+    voiceAnalyser = voiceAudioCtx.createAnalyser();
+    voiceAnalyser.fftSize       = 1024;
+    voiceAnalyser.smoothingTimeConstant = 0.6;
+    voiceAudioCtx.createMediaStreamSource(voiceStream).connect(voiceAnalyser);
+
+    // ── Speech Recognition ──
+    voiceRecognition = new SR();
+    voiceRecognition.lang             = 'de-DE';
+    voiceRecognition.interimResults   = true;
+    voiceRecognition.continuous       = true;
+    voiceRecognition.maxAlternatives  = 1;
+
+    voiceRecognition.onresult = (evt) => {
+      let full = '';
+      for (let i = 0; i < evt.results.length; i++) {
+        full += evt.results[i][0].transcript;
+      }
+      voiceTranscript = full.trim();
+      updateVoiceTranscriptUI(voiceTranscript, false);
+    };
+
+    voiceRecognition.onerror = (evt) => {
+      if (evt.error !== 'no-speech') {
+        console.warn('Speech recognition error:', evt.error);
+      }
+    };
+
+    // Don't auto-stop on speech end — our silence detector handles that
+    voiceRecognition.onspeechend = () => {};
+
+    voiceRecognition.start();
+
+    setVoiceUI(true);
+    startSilenceLoop();
+  }
+
+  function startSilenceLoop() {
+    const data = new Uint8Array(voiceAnalyser.fftSize);
+
+    function loop() {
+      if (!voiceActive) return;
+      voiceAnimFrame = requestAnimationFrame(loop);
+
+      voiceAnalyser.getByteTimeDomainData(data);
+
+      // RMS calculation
+      let sum = 0;
+      for (let i = 0; i < data.length; i++) {
+        const v = (data[i] - 128) / 128;
+        sum += v * v;
+      }
+      const rms = Math.sqrt(sum / data.length);
+
+      const elapsed = Date.now() - voiceStartTime;
+
+      if (rms < SILENCE_THRESHOLD && elapsed >= MIN_SPEECH_MS) {
+        // Stille erkannt
+        if (!voiceSilenceStart) {
+          voiceSilenceStart = Date.now();
+          showSilenceCountdown();
+        } else {
+          const silentFor = Date.now() - voiceSilenceStart;
+          const remaining = Math.max(0, SILENCE_DURATION - silentFor);
+          updateSilenceCountdown(remaining);
+
+          if (silentFor >= SILENCE_DURATION) {
+            stopVoice(true); // Stille lang genug → auto-stop + senden
+          }
+        }
+      } else {
+        // Geräusch → Stille-Timer zurücksetzen
+        if (voiceSilenceStart) {
+          voiceSilenceStart = null;
+          hideSilenceCountdown();
+        }
+      }
+    }
+
+    loop();
+  }
+
+  function stopVoice(send = false) {
+    if (!voiceActive) return;
+    voiceActive = false;
+
+    cancelAnimationFrame(voiceAnimFrame);
+    clearInterval(voiceCountdownInt);
+
+    if (voiceRecognition) {
+      try { voiceRecognition.stop(); } catch (_) {}
+      voiceRecognition = null;
+    }
+    if (voiceStream) {
+      voiceStream.getTracks().forEach(t => t.stop());
+      voiceStream = null;
+    }
+    if (voiceAudioCtx) {
+      voiceAudioCtx.close().catch(() => {});
+      voiceAudioCtx = null;
+    }
+
+    setVoiceUI(false);
+    hideSilenceCountdown();
+
+    const text = voiceTranscript.trim();
+    if (send && text.length > 1) {
+      updateVoiceTranscriptUI(text, true);
+      // Transkript an MIRA schicken
+      ipcRenderer.invoke('voice-command', { text }).then(res => {
+        if (res?.queued) {
+          toast(`🎤 "${text.substring(0, 50)}…" → MIRA`, 'success');
+        }
+      }).catch(() => {});
+    } else if (!send || !text) {
+      // Kein Text → Vorschau ausblenden
+      setTimeout(() => {
+        document.getElementById('voice-transcript-card').style.display = 'none';
+      }, 2000);
+    }
+    voiceTranscript = '';
+  }
+
+  // ── UI Helpers ──
+
+  function setVoiceUI(listening) {
+    const card = document.getElementById('voice-card');
+    const lbl  = document.getElementById('voice-label');
+    const sub  = document.getElementById('voice-sub');
+    if (listening) {
+      card.classList.add('listening');
+      lbl.textContent = 'Ich höre zu…';
+      sub.textContent = 'Stille wird automatisch erkannt';
+    } else {
+      card.classList.remove('listening');
+      lbl.textContent = 'MIRA sprechen';
+      sub.textContent = 'Tippe oder sprich einen Befehl';
+    }
+  }
+
+  function updateVoiceTranscriptUI(text, final) {
+    const card = document.getElementById('voice-transcript-card');
+    const txt  = document.getElementById('voice-transcript-text');
+    card.style.display = 'block';
+    txt.textContent = text;
+    if (final) {
+      card.style.borderColor = 'rgba(52,199,89,0.3)';
+      setTimeout(() => {
+        card.style.borderColor = '';
+        card.style.display = 'none';
+      }, 3500);
+    }
+  }
+
+  function showSilenceCountdown() {
+    document.getElementById('voice-countdown').style.display = 'block';
+    updateSilenceCountdown(SILENCE_DURATION);
+  }
+
+  function hideSilenceCountdown() {
+    document.getElementById('voice-countdown').style.display = 'none';
+  }
+
+  function updateSilenceCountdown(remainingMs) {
+    const s = (remainingMs / 1000).toFixed(1);
+    document.getElementById('voice-countdown-txt').innerHTML =
+      `Stille erkannt — sendet in <b>${s}s</b>`;
+  }
+
+</script>
+</body>
+</html>

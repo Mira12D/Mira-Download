@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>MIRA — Willkommen</title>
+<style>
+  :root {
+    --bg:      #0a0c14;
+    --surface: #12151f;
+    --border:  #1e2235;
+    --text:    #e2e8f0;
+    --text2:   #64748b;
+    --accent:  #6c63ff;
+    --accent2: #a78bfa;
+    --green:   #34d399;
+    --yellow:  #fbbf24;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Layout ── */
+  .screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 40px 48px;
+    opacity: 0;
+    transform: translateY(18px);
+    transition: opacity .45s ease, transform .45s ease;
+    pointer-events: none;
+  }
+  .screen.active {
+    opacity: 1; transform: translateY(0);
+    pointer-events: all;
+  }
+  .screen.exit {
+    opacity: 0; transform: translateY(-18px);
+    pointer-events: none;
+  }
+
+  /* ── Step dots ── */
+  .dots {
+    position: fixed; bottom: 28px; left: 0; right: 0;
+    display: flex; justify-content: center; gap: 8px;
+  }
+  .dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--border); transition: background .3s, width .3s;
+  }
+  .dot.active { background: var(--accent); width: 20px; border-radius: 3px; }
+  .dot.done   { background: var(--green); }
+
+  /* ── Typography ── */
+  .title {
+    font-size: 26px; font-weight: 800;
+    letter-spacing: -.5px; line-height: 1.2;
+    text-align: center; margin-bottom: 10px;
+  }
+  .subtitle {
+    font-size: 14px; color: var(--text2);
+    text-align: center; line-height: 1.6;
+    max-width: 360px; margin-bottom: 36px;
+  }
+
+  /* ── MIRA Logo/Avatar ── */
+  .mira-ring {
+    width: 88px; height: 88px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6c63ff 0%, #a78bfa 100%);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 38px; margin-bottom: 28px;
+    box-shadow: 0 0 0 0 rgba(108,99,255,.4);
+    animation: pulse 2.8s infinite;
+  }
+  @keyframes pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(108,99,255,.4); }
+    70%  { box-shadow: 0 0 0 22px rgba(108,99,255,0); }
+    100% { box-shadow: 0 0 0 0 rgba(108,99,255,0); }
+  }
+  .mira-ring.scan { animation: spin-ring 3s linear infinite; }
+  @keyframes spin-ring {
+    from { box-shadow: 0 0 0 0 rgba(108,99,255,.5), 0 0 0 12px rgba(108,99,255,.15); }
+    50%  { box-shadow: 0 0 0 14px rgba(108,99,255,.25), 0 0 0 26px rgba(108,99,255,.07); }
+    to   { box-shadow: 0 0 0 0 rgba(108,99,255,.5), 0 0 0 12px rgba(108,99,255,.15); }
+  }
+  .mira-ring.done { background: linear-gradient(135deg, #34d399 0%, #6ee7b7 100%); animation: none; }
+
+  /* ── Buttons ── */
+  .btn {
+    padding: 13px 36px; border-radius: 12px;
+    font-size: 15px; font-weight: 700;
+    cursor: pointer; border: none;
+    transition: opacity .15s, transform .1s;
+    letter-spacing: -.1px;
+  }
+  .btn:hover { opacity: .88; }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-ghost {
+    background: none; color: var(--text2);
+    border: 1px solid var(--border);
+    padding: 10px 24px; font-size: 13px;
+    font-weight: 600; border-radius: 10px;
+    cursor: pointer; transition: color .15s;
+  }
+  .btn-ghost:hover { color: var(--text); }
+
+  /* ── App grid (scan) ── */
+  .app-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr);
+    gap: 10px; width: 100%; max-width: 380px;
+    margin-bottom: 32px;
+  }
+  .app-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 10px 12px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px; font-weight: 600;
+    opacity: 0; transform: scale(.9);
+    transition: opacity .3s, transform .3s;
+  }
+  .app-chip.visible { opacity: 1; transform: scale(1); }
+  .app-chip .icon { font-size: 18px; }
+
+  /* ── Questions ── */
+  .questions { width: 100%; max-width: 400px; }
+  .q-label {
+    font-size: 11px; font-weight: 700;
+    color: var(--text2); text-transform: uppercase;
+    letter-spacing: .6px; margin-bottom: 8px; display: block;
+  }
+  .q-row { margin-bottom: 18px; }
+  .industry-grid {
+    display: grid; grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+  .industry-btn {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px; padding: 10px 12px;
+    font-size: 12px; font-weight: 600;
+    color: var(--text2); cursor: pointer;
+    display: flex; align-items: center; gap: 7px;
+    transition: border-color .15s, color .15s, background .15s;
+    text-align: left;
+  }
+  .industry-btn:hover { border-color: var(--accent); color: var(--text); }
+  .industry-btn.selected {
+    border-color: var(--accent); color: var(--text);
+    background: rgba(108,99,255,.12);
+  }
+
+  .task-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+  .task-chip {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px; padding: 6px 12px;
+    font-size: 12px; font-weight: 600; color: var(--text2);
+    cursor: pointer;
+    transition: border-color .15s, color .15s, background .15s;
+  }
+  .task-chip:hover { border-color: var(--accent); color: var(--text); }
+  .task-chip.selected {
+    border-color: var(--accent); color: var(--accent);
+    background: rgba(108,99,255,.12);
+  }
+
+  /* ── Progress bar (generating) ── */
+  .progress-bar {
+    width: 280px; height: 4px;
+    background: var(--border); border-radius: 2px;
+    overflow: hidden; margin-top: 28px;
+  }
+  .progress-fill {
+    height: 100%; width: 0;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 2px;
+    transition: width .6s ease;
+  }
+  .progress-label {
+    font-size: 12px; color: var(--text2);
+    text-align: center; margin-top: 12px;
+    min-height: 18px;
+  }
+
+  /* ── Ready checkmarks ── */
+  .ready-list { list-style: none; margin-bottom: 36px; text-align: left; }
+  .ready-list li {
+    display: flex; align-items: center; gap: 10px;
+    font-size: 14px; padding: 5px 0;
+    opacity: 0; transform: translateX(-10px);
+    transition: opacity .35s, transform .35s;
+  }
+  .ready-list li.show { opacity: 1; transform: translateX(0); }
+  .ready-list .check { color: var(--green); font-size: 16px; }
+
+  /* ── Scan animation text ── */
+  .scan-status {
+    font-size: 12px; color: var(--text2);
+    margin-bottom: 20px; min-height: 18px;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<!-- ═══ STEP 0: AX PERMISSION ═══ -->
+<div id="step-0" class="screen" style="display:none">
+  <div class="mira-ring" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);animation:none">🔐</div>
+  <div class="title" style="font-size:20px">Zugriff benötigt</div>
+  <div class="subtitle">
+    MIRA benötigt Zugriff auf die <b>Bedienungshilfen</b>, um deine Apps zu steuern.<br><br>
+    Systemeinstellungen wurden automatisch geöffnet.<br>
+    Aktiviere <b>MIRA Agent</b> in<br>Datenschutz &amp; Sicherheit → Bedienungshilfen.
+  </div>
+  <button class="btn btn-primary" id="perm-check-btn" onclick="recheckPermission()">Ich habe es aktiviert ✓</button>
+  <div id="perm-status" style="font-size:12px;color:#f87171;margin-top:12px;min-height:18px"></div>
+</div>
+
+<!-- ═══ STEP 1: WELCOME ═══ -->
+<div id="step-1" class="screen active">
+  <div class="mira-ring">M</div>
+  <div class="title">Hallo, ich bin MIRA.</div>
+  <div class="subtitle">Deine digitale Büroassistentin. Ich lerne deinen Job kennen — damit du dich auf das Wesentliche konzentrieren kannst.</div>
+  <button class="btn btn-primary" onclick="goTo(2)">Los geht's →</button>
+</div>
+
+<!-- ═══ STEP 2: SCAN ═══ -->
+<div id="step-2" class="screen">
+  <div class="mira-ring scan" id="scan-ring">🔍</div>
+  <div class="title" style="font-size:20px">Ich scanne dein System…</div>
+  <div class="scan-status" id="scan-status">Suche nach installierten Apps…</div>
+  <div class="app-grid" id="app-grid"></div>
+  <button class="btn btn-primary" id="scan-next-btn" style="display:none" onclick="goTo(3)">Weiter →</button>
+</div>
+
+<!-- ═══ STEP 3: JOB SETUP ═══ -->
+<div id="step-3" class="screen">
+  <div class="title" style="font-size:20px;margin-bottom:6px">Was machst du täglich?</div>
+  <div class="subtitle" style="margin-bottom:20px">Keine langen Einstellungen. Nur 2 Fragen.</div>
+  <div class="questions">
+
+    <div class="q-row">
+      <span class="q-label">Branche</span>
+      <div class="industry-grid" id="industry-grid">
+        <button class="industry-btn" data-v="handel"        onclick="selectIndustry(this)">🛒 Handel / E-Commerce</button>
+        <button class="industry-btn" data-v="gastronomie"   onclick="selectIndustry(this)">🍽 Gastronomie</button>
+        <button class="industry-btn" data-v="buero"         onclick="selectIndustry(this)">🏢 Büro / Verwaltung</button>
+        <button class="industry-btn" data-v="it"            onclick="selectIndustry(this)">💻 IT / Freelancer</button>
+        <button class="industry-btn" data-v="handwerk"      onclick="selectIndustry(this)">🔧 Handwerk / Bau</button>
+        <button class="industry-btn" data-v="sonstige"      onclick="selectIndustry(this)">✦ Sonstiges</button>
+      </div>
+    </div>
+
+    <div class="q-row">
+      <span class="q-label">Was machst du täglich? (mehrfach wählbar)</span>
+      <div class="task-chips" id="task-chips">
+        <div class="task-chip" data-v="emails"       onclick="toggleTask(this)">📧 E-Mails</div>
+        <div class="task-chip" data-v="rechnungen"   onclick="toggleTask(this)">🧾 Rechnungen</div>
+        <div class="task-chip" data-v="bestellungen" onclick="toggleTask(this)">📦 Bestellungen</div>
+        <div class="task-chip" data-v="berichte"     onclick="toggleTask(this)">📊 Berichte</div>
+        <div class="task-chip" data-v="kalender"     onclick="toggleTask(this)">📅 Termine</div>
+        <div class="task-chip" data-v="dokumente"    onclick="toggleTask(this)">📄 Dokumente</div>
+        <div class="task-chip" data-v="buchhaltung"  onclick="toggleTask(this)">💰 Buchhaltung</div>
+        <div class="task-chip" data-v="support"      onclick="toggleTask(this)">🎧 Support</div>
+      </div>
+    </div>
+
+  </div>
+  <button class="btn btn-primary" id="setup-next-btn" style="margin-top:8px" onclick="goToGenerate()">MIRA einrichten →</button>
+</div>
+
+<!-- ═══ STEP 4: GENERATING ═══ -->
+<div id="step-4" class="screen">
+  <div class="mira-ring scan">⚙️</div>
+  <div class="title" style="font-size:20px">Ich lerne deinen Job…</div>
+  <div class="subtitle" style="margin-bottom:0">Einen Moment. Ich richte alles ein.</div>
+  <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+  <div class="progress-label" id="progress-label">Analysiere gefundene Apps…</div>
+</div>
+
+<!-- ═══ STEP 5: READY ═══ -->
+<div id="step-5" class="screen">
+  <div class="mira-ring done">✓</div>
+  <div class="title">Ich bin bereit.</div>
+  <div class="subtitle" style="margin-bottom:20px">Ich kenne deinen Job. Ich fange an.</div>
+  <ul class="ready-list" id="ready-list">
+    <li><span class="check">✓</span> <span id="rl-apps">Apps erkannt</span></li>
+    <li><span class="check">✓</span> <span id="rl-triggers">Trigger aktiviert</span></li>
+    <li><span class="check">✓</span> <span id="rl-limits">Grenzen gesetzt</span></li>
+    <li><span class="check">✓</span> Bereit für Aufgaben</li>
+  </ul>
+  <button class="btn btn-primary" onclick="finish()">Loslegen →</button>
+</div>
+
+<!-- ── Step dots ── -->
+<div class="dots">
+  <div class="dot active" id="dot-1"></div>
+  <div class="dot"        id="dot-2"></div>
+  <div class="dot"        id="dot-3"></div>
+  <div class="dot"        id="dot-4"></div>
+  <div class="dot"        id="dot-5"></div>
+</div>
+
+<script>
+const { ipcRenderer } = require('electron');
+
+// ── State ──────────────────────────────────────────────────────────────────
+let currentStep = 1;
+let scannedApps = [];
+let selectedIndustry = '';
+let selectedTasks    = new Set();
+
+// ── Step navigation ────────────────────────────────────────────────────────
+
+function goTo(n) {
+  const prev = document.getElementById('step-' + currentStep);
+  prev.classList.add('exit');
+  setTimeout(() => prev.classList.remove('active', 'exit'), 450);
+
+  currentStep = n;
+  setTimeout(() => {
+    const next = document.getElementById('step-' + n);
+    next.classList.add('active');
+    updateDots();
+    if (n === 2) startScan();
+  }, 80);
+}
+
+function updateDots() {
+  for (let i = 1; i <= 5; i++) {
+    const d = document.getElementById('dot-' + i);
+    d.classList.remove('active', 'done');
+    if (i < currentStep) d.classList.add('done');
+    else if (i === currentStep) d.classList.add('active');
+  }
+}
+
+// ── Step 2: App Scan ───────────────────────────────────────────────────────
+
+async function startScan() {
+  const statusEl = document.getElementById('scan-status');
+  const grid     = document.getElementById('app-grid');
+  const ring     = document.getElementById('scan-ring');
+  grid.innerHTML = '';
+
+  statusEl.textContent = 'Suche nach installierten Apps…';
+  await sleep(600);
+
+  const result = await ipcRenderer.invoke('onboarding-scan-apps');
+  scannedApps = result.apps || [];
+
+  if (scannedApps.length === 0) {
+    statusEl.textContent = 'Scan abgeschlossen.';
+  } else {
+    statusEl.textContent = `${scannedApps.length} Apps gefunden.`;
+  }
+
+  // Animate chips in
+  for (const app of scannedApps) {
+    const chip = document.createElement('div');
+    chip.className = 'app-chip';
+    chip.innerHTML = `<span class="icon">${app.icon}</span><span>${app.name}</span>`;
+    grid.appendChild(chip);
+  }
+  // Staggered reveal
+  const chips = grid.querySelectorAll('.app-chip');
+  chips.forEach((c, i) => {
+    setTimeout(() => c.classList.add('visible'), 120 + i * 80);
+  });
+
+  ring.textContent = '✓';
+  ring.classList.remove('scan');
+
+  await sleep(300 + scannedApps.length * 80);
+  document.getElementById('scan-next-btn').style.display = 'block';
+}
+
+// ── Step 3: Industry / Tasks ───────────────────────────────────────────────
+
+function selectIndustry(btn) {
+  document.querySelectorAll('.industry-btn').forEach(b => b.classList.remove('selected'));
+  btn.classList.add('selected');
+  selectedIndustry = btn.dataset.v;
+}
+
+function toggleTask(chip) {
+  chip.classList.toggle('selected');
+  if (chip.classList.contains('selected')) selectedTasks.add(chip.dataset.v);
+  else selectedTasks.delete(chip.dataset.v);
+}
+
+function goToGenerate() {
+  if (!selectedIndustry) {
+    document.getElementById('industry-grid').style.outline = '1px solid #f87171';
+    setTimeout(() => document.getElementById('industry-grid').style.outline = '', 1500);
+    return;
+  }
+  goTo(4);
+  runGenerate();
+}
+
+// ── Step 4: Generate ───────────────────────────────────────────────────────
+
+async function runGenerate() {
+  const fill  = document.getElementById('progress-fill');
+  const label = document.getElementById('progress-label');
+
+  const steps = [
+    [10,  'Analysiere gefundene Apps…'],
+    [30,  'Erkenne Arbeitsmuster…'],
+    [55,  'Aktiviere Standard-Trigger…'],
+    [75,  'Setze Autonomiegrenzen…'],
+    [90,  'Speichere Wissensbase…'],
+    [100, 'Fertig!'],
+  ];
+
+  for (const [pct, msg] of steps) {
+    fill.style.width = pct + '%';
+    label.textContent = msg;
+    await sleep(pct === 100 ? 400 : 700 + Math.random() * 300);
+  }
+
+  const result = await ipcRenderer.invoke('onboarding-complete', {
+    industry: selectedIndustry,
+    tasks:    [...selectedTasks],
+    apps:     scannedApps,
+  });
+
+  // Populate ready screen summary
+  document.getElementById('rl-apps').textContent =
+    `${scannedApps.length} App${scannedApps.length !== 1 ? 's' : ''} erkannt`;
+  document.getElementById('rl-triggers').textContent =
+    `${result.triggerCount || 0} Trigger aktiviert`;
+  document.getElementById('rl-limits').textContent =
+    `${result.limitCount || 0} Autonomiegrenzen gesetzt`;
+
+  await sleep(200);
+  goTo(5);
+  animateReadyList();
+}
+
+// ── Step 5: Ready ──────────────────────────────────────────────────────────
+
+function animateReadyList() {
+  const items = document.querySelectorAll('#ready-list li');
+  items.forEach((li, i) => setTimeout(() => li.classList.add('show'), 200 + i * 180));
+}
+
+function finish() {
+  ipcRenderer.invoke('onboarding-finish');
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────────
+
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ── Boot ──────────────────────────────────────────────────────────────────
+
+async function checkAndStart() {
+  // On macOS: check AX permission first — if denied show blocking screen
+  const { granted } = await ipcRenderer.invoke('check-ax-permission');
+  if (!granted) {
+    document.getElementById('step-1').classList.remove('active');
+    const s0 = document.getElementById('step-0');
+    s0.style.display = '';
+    setTimeout(() => s0.classList.add('active'), 50);
+  }
+}
+
+async function recheckPermission() {
+  document.getElementById('perm-status').textContent = 'Prüfe…';
+  document.getElementById('perm-check-btn').disabled = true;
+  await sleep(600);
+  const { granted } = await ipcRenderer.invoke('check-ax-permission');
+  if (granted) {
+    const s0 = document.getElementById('step-0');
+    s0.classList.add('exit');
+    setTimeout(() => { s0.classList.remove('active', 'exit'); s0.style.display = 'none'; }, 450);
+    currentStep = 0;
+    setTimeout(() => goTo(1), 80);
+  } else {
+    document.getElementById('perm-status').textContent = 'Noch nicht aktiviert — bitte in Systemeinstellungen → Bedienungshilfen freigeben.';
+    document.getElementById('perm-check-btn').disabled = false;
+  }
+}
+
+checkAndStart();
+</script>
+</body>
+</html>
