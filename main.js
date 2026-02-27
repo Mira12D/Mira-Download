@@ -53,6 +53,7 @@ let targetTrainingWindow  = null;
 let agentActive = false;
 let userToken = null;
 let userProfileSettings = {};
+let _dk = null; // RAM-only decrypted API keys — never written to disk
 let userTier = null;
 let tasksRemaining = 0;
 let pollingInterval = null;
@@ -75,6 +76,130 @@ function getDeviceId() {
 }
 
 // ═══════════════════════════════════════
+// DUAL-MODE ARCHITECTURE — Direct API Keys (RAM only)
+// Keys sind AES-256-CBC mit device_id verschlüsselt.
+// Format vom Server: "ivHex:encryptedHex"
+// ═══════════════════════════════════════
+
+function decryptKey(encrypted) {
+  const key = crypto.createHash('sha256').update(getDeviceId()).digest();
+  const [ivHex, encHex] = encrypted.split(':');
+  const iv  = Buffer.from(ivHex,  'hex');
+  const enc = Buffer.from(encHex, 'hex');
+  const decipher = crypto.createDecipheriv('aes-256-cbc', key, iv);
+  return Buffer.concat([decipher.update(enc), decipher.final()]).toString('utf8');
+}
+
+async function bootstrap() {
+  if (!userToken) return;
+  try {
+    const res = await fetch(`${API}/api/auth/bootstrap`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: userToken, device_id: getDeviceId() })
+    });
+    const data = await res.json();
+    if (!data.success) return;
+    _dk = {
+      supabaseUrl:   data.supabase_url,
+      supabaseToken: decryptKey(data.supabase_token),
+      gptKey:        decryptKey(data.gpt_key),
+      claudeKey:     decryptKey(data.claude_key),
+      expiresAt:     Date.now() + (data.expires_in || 3600) * 1000,
+    };
+    console.log('🔑 Direct keys bootstrapped (RAM only)');
+    // Auto-refresh at 90% of expiry window
+    const refreshIn = (data.expires_in || 3600) * 900;
+    setTimeout(() => bootstrap().catch(() => {}), refreshIn);
+  } catch(e) {
+    console.warn('⚠️ Bootstrap fehlgeschlagen:', e.message);
+  }
+}
+
+async function directOpenAI(messages, opts = {}) {
+  if (!_dk?.gptKey) return null;
+  if (_dk.expiresAt && Date.now() > _dk.expiresAt) await bootstrap();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${_dk.gptKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: opts.model || 'gpt-4o-mini',
+        messages,
+        max_tokens: opts.max_tokens || 200,
+        ...(opts.extra || {}),
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await res.json();
+    return data.choices?.[0]?.message?.content || null;
+  } catch(e) {
+    clearTimeout(timeout);
+    return null;
+  }
+}
+
+async function directClaude(messages, opts = {}) {
+  if (!_dk?.claudeKey) return null;
+  if (_dk.expiresAt && Date.now() > _dk.expiresAt) await bootstrap();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': _dk.claudeKey,
+        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: opts.model || 'claude-haiku-4-5-20251001',
+        max_tokens: opts.max_tokens || 200,
+        messages,
+      }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const data = await res.json();
+    return data.content?.[0]?.text || null;
+  } catch(e) {
+    clearTimeout(timeout);
+    return null;
+  }
+}
+
+async function directSupabase(method, path, body = null) {
+  if (!_dk?.supabaseUrl || !_dk?.supabaseToken) return null;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 5000);
+  try {
+    const headers = {
+      'apikey': _dk.supabaseToken,
+      'Authorization': `Bearer ${_dk.supabaseToken}`,
+      'Content-Type': 'application/json',
+    };
+    if (method === 'POST') headers['Prefer'] = 'return=representation';
+    const res = await fetch(`${_dk.supabaseUrl}/rest/v1${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    return await res.json();
+  } catch(e) {
+    clearTimeout(timeout);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════
 // TOKEN STORAGE
 // ═══════════════════════════════════════
 
@@ -88,6 +213,7 @@ function loadSavedToken() {
     userPin = store.get('userPin');
     agentActive = true;
     startPolling();
+    bootstrap().catch(() => {});
     // Feature 1: System-Log Monitor mit gespeichertem Token starten
     sysLogMonitor.start({ api: API, token: savedToken });
     loadUserProfileSettings().catch(() => {});
@@ -149,18 +275,37 @@ async function takeCompressedScreenshot() {
 // ═══════════════════════════════════════
 
 async function miniFind(screenshotBase64, elementDescription) {
+  // ── Direct path: GPT-4o-mini ohne Vercel-Hop ──
+  if (_dk?.gptKey) {
+    try {
+      const raw = await directOpenAI([
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshotBase64}`, detail: 'high' } },
+            { type: 'text', text: `Finde dieses Element: "${elementDescription}"\nAntworte NUR mit JSON:\n{"found": true, "x": 120, "y": 450, "confidence": 0.95, "description": "was du siehst"}\noder wenn nicht gefunden:\n{"found": false, "confidence": 0}\nKoordinaten für 1280x720.` }
+          ]
+        }
+      ], { model: 'gpt-4o-mini', max_tokens: 200 });
+      if (raw) {
+        const jsonMatch = raw.match(/\{[\s\S]*?\}/);
+        if (jsonMatch) {
+          const result = JSON.parse(jsonMatch[0]);
+          console.log(`👁️ miniFind[direct] "${elementDescription}": found=${result.found} conf=${result.confidence}`);
+          return result;
+        }
+      }
+    } catch(e) { /* Vercel Fallback */ }
+  }
+  // ── Fallback: Vercel ──
   try {
     const response = await fetch(`${API}/api/brain/mini-find`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: userToken,
-        screenshot: screenshotBase64,
-        element: elementDescription
-      })
+      body: JSON.stringify({ token: userToken, screenshot: screenshotBase64, element: elementDescription })
     });
     const data = await response.json();
-    console.log(`👁️ miniFind "${elementDescription}": found=${data.found} confidence=${data.confidence}`);
+    console.log(`👁️ miniFind[vercel] "${elementDescription}": found=${data.found} conf=${data.confidence}`);
     return data;
   } catch(e) {
     console.error('❌ miniFind error:', e.message);
@@ -169,18 +314,32 @@ async function miniFind(screenshotBase64, elementDescription) {
 }
 
 async function miniVerify(screenshotBase64, expectedState) {
+  // ── Direct path: GPT-4o-mini ohne Vercel-Hop ──
+  if (_dk?.gptKey) {
+    try {
+      const raw = await directOpenAI([
+        {
+          role: 'user',
+          content: [
+            { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshotBase64}`, detail: 'low' } },
+            { type: 'text', text: `Prüfe ob dieser Zustand sichtbar ist: "${expectedState}"\nAntworte NUR mit JSON: {"ok": true, "confidence": 0.9, "reason": "kurze Beschreibung"}` }
+          ]
+        }
+      ], { model: 'gpt-4o-mini', max_tokens: 100 });
+      if (raw) {
+        const jsonMatch = raw.match(/\{[\s\S]*?\}/);
+        if (jsonMatch) return JSON.parse(jsonMatch[0]);
+      }
+    } catch(e) { /* Vercel Fallback */ }
+  }
+  // ── Fallback: Vercel ──
   try {
     const response = await fetch(`${API}/api/brain/mini-verify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: userToken,
-        screenshot: screenshotBase64,
-        expected: expectedState
-      })
+      body: JSON.stringify({ token: userToken, screenshot: screenshotBase64, expected: expectedState })
     });
-    const data = await response.json();
-    return data;
+    return await response.json();
   } catch(e) {
     return { ok: true, confidence: 0.5 };
   }
@@ -1668,6 +1827,7 @@ ipcMain.handle('activate-token', async (event, code) => {
       agentActive = true;
       saveToken();
       startPolling();
+      bootstrap().catch(() => {});
       // Feature 1: System-Log Monitor nach Aktivierung starten
       sysLogMonitor.start({ api: API, token: data.token });
       loadUserProfileSettings().catch(() => {});
@@ -1696,6 +1856,7 @@ ipcMain.handle('logout', async () => {
   tasksRemaining = 0;
   userPin = null;
   agentActive = false;
+  _dk = null; // Wipe RAM keys on logout
   clearToken();
   return { success: true };
 });
