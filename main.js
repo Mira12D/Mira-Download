@@ -1556,9 +1556,49 @@ async function executeTaskFromQueue(task) {
       console.log(`🗂️ file_task: ${foundFiles.length} Dateien gefunden`);
 
       if (foundFiles.length === 0) {
-        await ftLog('😐 Keine passenden Dateien gefunden. Entweder falsch geschrieben oder du hast sie gelöscht.', 'error');
-        await ftLog(null, 'done', { done: true, summary: { files_count: 0, rows_written: 0, error: true, error_msg: 'Keine Dateien gefunden' } });
-        await fetch(`${API}/api/agent/complete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: 'Keine Dateien gefunden' } }) });
+        // ── Keine Datei vorhanden → neue leere Datei erstellen ────────────
+        await ftLog('📋 Keine passende Datei gefunden — erstelle neue Datei...', 'step');
+
+        const profileHeaders = ftProfile.excel_headers
+          ? ftProfile.excel_headers.split(',').map(h => h.trim()).filter(Boolean)
+          : null;
+        const defaultHeaderMap = {
+          extract_to_excel: ['Datum', 'Absender', 'Betreff', 'Netto', 'MwSt', 'Brutto', 'IBAN'],
+          invoice_extract:  ['Datum', 'Rechnungsnummer', 'Absender', 'Netto', 'MwSt', 'Brutto', 'IBAN'],
+        };
+        const emptyHeaders = profileHeaders || defaultHeaderMap[action] || ['Datum', 'Beschreibung', 'Betrag', 'Kategorie'];
+
+        let newFileResult = null;
+        try {
+          const emptyData = (action === 'write_docx' || action === 'write_pdf')
+            ? { text: '' }
+            : { headers: emptyHeaders, rows: [] };
+          newFileResult = await ftWriteOutput({ ...parsed, append_if_exists: false }, [], emptyData, ftProfile);
+        } catch(e) { console.error('❌ Neue Datei erstellen:', e.message); }
+
+        const pathMod = require('path');
+        const newName = newFileResult?.outputPath
+          ? pathMod.basename(newFileResult.outputPath)
+          : (target_filename || `MIRA_Neu.${target_format || 'xlsx'}`);
+
+        const doneMsg = newFileResult
+          ? `✅ Neue Datei erstellt: "${newName}" — direkt weiterarbeiten möglich.`
+          : `❌ Datei nicht gefunden und neue Datei konnte nicht erstellt werden.`;
+        await ftLog(doneMsg, newFileResult ? 'step' : 'error');
+
+        const newSummary = {
+          files_count: 0, rows_written: 0, is_new_file: true,
+          output_path:     newFileResult?.outputPath || null,
+          target_filename: newName,
+          file_base64:     newFileResult?.fileBase64 || null,
+          mime:            newFileResult?.mime       || null,
+          error: !newFileResult
+        };
+        await ftLog(null, 'done', { done: true, summary: newSummary });
+        await fetchWithTimeout(`${API}/api/agent/complete`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, task_id: task.id, status: newFileResult ? 'success' : 'error', result: newSummary })
+        }, 10000).catch(() => {});
         return;
       }
 
@@ -2663,7 +2703,7 @@ async function ftFindFiles(patterns, sourceDirs) {
   }
 
   dirs.forEach(d => walk(d, 0));
-  return found.sort((a, b) => b.mtime - a.mtime); // neueste zuerst
+  return found.sort((a, b) => b.mtime - a.mtime);
 }
 
 // Findet die Header-Zeile in einem ExcelJS-Sheet (scannt Zeilen 1–8)
