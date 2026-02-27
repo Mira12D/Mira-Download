@@ -2894,8 +2894,9 @@ async function executeRouteStep(step) {
         const miniResult = await miniFind(preSc, elementLabel);
 
         if (miniResult.found && miniResult.confidence > 0.7) {
-          finalX = Math.round(miniResult.x * (realW / 1280));
-          finalY = Math.round(miniResult.y * (realH / 720));
+          const miniScaled = scaleWithCalibration(miniResult.x, miniResult.y, 1280, 720, calibration);
+          finalX = miniScaled.x;
+          finalY = miniScaled.y;
           coordSource = 'mini';
           console.log(`👁️ Mini findet "${elementLabel}": x:${finalX} y:${finalY} (${miniResult.confidence})`);
         } else if (step.coordinate) {
