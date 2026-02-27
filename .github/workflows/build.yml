@@ -38,19 +38,19 @@ jobs:
       - name: Install setuptools (distutils fix)
         run: pip install setuptools
 
-      - name: Install GTK for canvas
-        run: choco install gtk-runtime -y
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install dependencies (postinstall überspringen)
+        run: npm ci --ignore-scripts
         env:
           NUT_TREE_TOKEN: ${{ secrets.NUT_TREE_TOKEN }}
+
+      - name: Rebuild native modules (canvas excluded)
+        run: npx electron-rebuild -f -x canvas
 
       - name: Build Windows NSIS Installer
         run: npx electron-builder --win --x64
