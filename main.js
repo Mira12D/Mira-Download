@@ -245,12 +245,18 @@ function startLocalServer() {
       return json({ ok: true, agent: true, tier: userTier, version: '1.0' });
     }
 
-    // ── Auth: Token muss mit aktiver Session übereinstimmen ──────────────
+    // ── Auth: Device-Token ODER Browser-User-JWT akzeptieren ─────────────
+    // userToken  = Electron-Device-Token (für App-interne Calls)
+    // user JWT   = Browser-Login-Token   (type:'user', von /api/users/login)
     const tok = (req.headers.authorization || '').replace('Bearer ', '');
-    if (!tok || tok !== userToken) return json({ error: 'Unauthorized' }, 401);
+    if (!tok) return json({ error: 'Unauthorized' }, 401);
 
     const payload = decodeJWT(tok);
-    const userId  = payload?.id;
+    const isDeviceToken = tok === userToken;
+    const isUserToken   = payload?.type === 'user' && !!payload?.id;
+    if (!isDeviceToken && !isUserToken) return json({ error: 'Unauthorized' }, 401);
+
+    const userId = payload?.id;
     if (!userId) return json({ error: 'Invalid token' }, 401);
 
     // ── GET /api/users/device-status ─────────────────────────────────────
