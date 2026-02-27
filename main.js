@@ -3015,6 +3015,32 @@ async function executeRouteStep(step) {
         console.log(`🗂️ Cache invalidiert: "${elementLabel}" (koordinaten veraltet)`);
       }
 
+      // ── Lernkreis: AX-verifizierter Klick → device_knowledge (persistent) ──
+      // Nur wenn Click wirklich gewirkt hat (AX-Delta bestätigt) und die Quelle
+      // verlässlich ist. Fire-and-forget — blockiert die Route nicht.
+      if (clickSuccess && userToken) {
+        const LEARN_SOURCES = new Set(['ax', 'ctx_state', 'fingerprint', 'mini', 'training']);
+        if (LEARN_SOURCES.has(coordSource)) {
+          const learnConfidence = { ax: 0.97, ctx_state: 0.95, fingerprint: 0.95, mini: 0.75, training: 0.70 }[coordSource] || 0.70;
+          fetch(`${API}/api/brain/device-knowledge-save`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              token:       userToken,
+              konzept:     elementLabel,
+              app_name:    ctx.app?.bundleId || null,
+              position_x:  finalX,
+              position_y:  finalY,
+              screen_width:  realW,
+              screen_height: realH,
+              methode:     coordSource,
+              confidence:  learnConfidence,
+            })
+          }).catch(() => {});
+          console.log(`📚 Lernkreis: "${elementLabel}" → device_knowledge (${coordSource}, ${Math.round(learnConfidence * 100)}%)`);
+        }
+      }
+
       // ── Screen Memory speichern ──
       await saveScreenMemory({
         action: 'click',
