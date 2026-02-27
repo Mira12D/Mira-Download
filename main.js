@@ -372,7 +372,8 @@ function startLocalServer() {
     // ── GET /api/artifacts ───────────────────────────────────────────────
     if (pathname === '/api/artifacts' && req.method === 'GET') {
       const rows = await directSupabase('GET', `/artifacts?user_id=eq.${userId}&select=id,name,type,rows,pages,preview_data,created_at,updated_at&order=updated_at.desc&limit=50`);
-      if (rows) return json({ success: true, artifacts: rows });
+      if (Array.isArray(rows)) return json({ success: true, artifacts: rows }); // Supabase gibt Array zurück
+      // rows ist null (kein _dk) oder Fehler-Objekt (Tabelle fehlt etc.) → Vercel-Fallback
       try {
         const r = await fetch(`${API}/api/artifacts`, { headers: { 'Authorization': `Bearer ${tok}` } });
         return json(await r.json());
