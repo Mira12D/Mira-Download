@@ -8,7 +8,7 @@ const fetch = require('node-fetch');
 const { uIOhook } = require('uiohook-napi');
 const Store = require('electron-store');
 const sharp = require('sharp');
-const { runCalibration, loadCalibration, scaleWithCalibration } = require('./screen-calibrator');
+const { runCalibration, loadCalibration, saveCalibration, getCalibrationPath, scaleWithCalibration } = require('./screen-calibrator');
 const { buildDesktopMap, scaleCoordinate, getMapContext } = require('./desktop-map');
 const axLayer        = require('./ax-layer');
 const contextManager = require('./context-manager');
@@ -4614,18 +4614,15 @@ ipcMain.handle('target-training-shoot', async (event, { targetLogicalX, targetLo
 
 ipcMain.handle('target-training-save-calibration', async (event, { avgErrorX, avgErrorY }) => {
   try {
-    const fs   = require('fs');
-    const path = require('path');
-    const calPath = path.join(__dirname, 'calibration.json');
-    const cal  = calibration || {};
+    const cal = calibration || {};
 
-    // Correct systematic error: if cursor always lands +avgErrorX px too far right,
-    // reduce the offset so we undershoot by that amount next time.
+    // Systematischen Fehler korrigieren: landet MIRA immer +avgErrorX zu weit rechts,
+    // wird der Offset um diesen Wert reduziert → nächster Klick trifft genauer.
     cal.offsetX = (cal.offsetX || 0) - avgErrorX;
     cal.offsetY = (cal.offsetY || 0) - avgErrorY;
     cal.lastTrainingAt = new Date().toISOString();
 
-    fs.writeFileSync(calPath, JSON.stringify(cal, null, 2), 'utf8');
+    saveCalibration(cal); // nutzt app.getPath('userData') im packaged App
     calibration = cal;
     console.log(`🎯 Training-Kalibrierung gespeichert: offsetX=${cal.offsetX} offsetY=${cal.offsetY}`);
     return { success: true, offsetX: cal.offsetX, offsetY: cal.offsetY };

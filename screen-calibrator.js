@@ -9,13 +9,23 @@ const { mouse, screen: nutScreen } = require('@nut-tree/nut-js');
 const fs = require('fs');
 const path = require('path');
 
-const CALIBRATION_FILE = path.join(__dirname, 'calibration.json');
+// Im packaged App zeigt __dirname auf die read-only .asar — daher userData nutzen
+function getCalibrationPath() {
+  try {
+    const { app } = require('electron');
+    if (app && app.isPackaged) {
+      return path.join(app.getPath('userData'), 'calibration.json');
+    }
+  } catch (_) {}
+  return path.join(__dirname, 'calibration.json');
+}
 
 // ── Kalibrierung laden wenn vorhanden ──
 function loadCalibration() {
+  const calFile = getCalibrationPath();
   try {
-    if (fs.existsSync(CALIBRATION_FILE)) {
-      const data = JSON.parse(fs.readFileSync(CALIBRATION_FILE, 'utf8'));
+    if (fs.existsSync(calFile)) {
+      const data = JSON.parse(fs.readFileSync(calFile, 'utf8'));
       console.log(`📐 Kalibrierung geladen: scaleX=${data.scaleX.toFixed(4)} scaleY=${data.scaleY.toFixed(4)}`);
       return data;
     }
@@ -27,9 +37,10 @@ function loadCalibration() {
 
 // ── Kalibrierung speichern ──
 function saveCalibration(data) {
+  const calFile = getCalibrationPath();
   try {
-    fs.writeFileSync(CALIBRATION_FILE, JSON.stringify(data, null, 2), 'utf8');
-    console.log(`💾 Kalibrierung gespeichert: ${CALIBRATION_FILE}`);
+    fs.writeFileSync(calFile, JSON.stringify(data, null, 2), 'utf8');
+    console.log(`💾 Kalibrierung gespeichert: ${calFile}`);
   } catch(e) {
     console.error('❌ Kalibrierung speichern:', e.message);
   }
@@ -194,6 +205,8 @@ function sleep(ms) {
 module.exports = {
   runCalibration,
   loadCalibration,
+  saveCalibration,
+  getCalibrationPath,
   scaleWithCalibration,
   getZone
 };
