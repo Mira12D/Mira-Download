@@ -1602,14 +1602,26 @@ async function executeTaskFromQueue(task) {
         try {
           const ExcelJS = require('exceljs');
 
-          // 1. Artifact laden
-          const artRes = await fetchWithTimeout(`${API}/api/artifacts/${artifact_id}`, {
-            headers: { 'Authorization': `Bearer ${userToken}` }
-          }, 6000);
-          const artData = await artRes.json();
-          if (!artData.success || !artData.artifact?.data_base64) throw new Error('Artifact nicht gefunden oder leer');
+          // 1. Artifact laden — direkt via Supabase (device-token hat kein id-Feld,
+          //    deshalb kein API-Roundtrip → kein user_id-Problem)
+          let artRow = null;
+          const artRows = await directSupabase('GET', `/artifacts?id=eq.${artifact_id}&limit=1&select=*`);
+          artRow = artRows?.[0] || null;
 
-          const buf = Buffer.from(artData.artifact.data_base64, 'base64');
+          // Fallback: Vercel-Endpoint (falls directSupabase keys nicht geladen)
+          if (!artRow) {
+            try {
+              const artRes = await fetchWithTimeout(`${API}/api/artifacts/${artifact_id}`, {
+                headers: { 'Authorization': `Bearer ${userToken}` }
+              }, 6000);
+              const artData = await artRes.json();
+              artRow = artData?.artifact || null;
+            } catch(_) {}
+          }
+
+          if (!artRow?.data_base64) throw new Error('Artifact nicht gefunden oder leer');
+
+          const buf = Buffer.from(artRow.data_base64, 'base64');
 
           // 2. ExcelJS laden
           const wb = new ExcelJS.Workbook();
@@ -1637,12 +1649,14 @@ async function executeTaskFromQueue(task) {
 
           await ftLog(`✅ ${rowsArr.length} Zeile(n) eingetragen. Gesamt: ${rowCount} Zeilen.`, 'step');
 
-          // 6. Artifact in DB updaten
-          await fetchWithTimeout(`${API}/api/artifacts/${artifact_id}`, {
-            method: 'PATCH',
-            headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data_base64: newB64, rows: rowCount })
-          }, 6000).catch(() => {});
+          // 6. Artifact in DB updaten — direkt via Supabase
+          const oldMeta = artRow.metadata || {};
+          const newMeta = { ...oldMeta, rows: rowCount };
+          await directSupabase('PATCH', `/artifacts?id=eq.${artifact_id}`, {
+            data_base64: newB64,
+            metadata: newMeta,
+            updated_at: new Date().toISOString()
+          });
 
           const artSummary = {
             is_artifact_update: true, artifact_id, artifact_name,
