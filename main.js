@@ -1,4 +1,7 @@
 const { app, BrowserWindow, ipcMain, screen: electronScreen } = require('electron');
+
+// Chrome Private Network Access: HTTPS-Seiten dürfen localhost erreichen
+app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights');
 const { autoUpdater } = require('electron-updater');
 const http = require('http');
 const os = require('os');
