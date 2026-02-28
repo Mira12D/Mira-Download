@@ -599,6 +599,68 @@
       font-size: 10px; color: var(--text2);
     }
     .training-stats span { font-family: 'JetBrains Mono', monospace; color: var(--text); }
+
+    /* ── MIRA VOICE BUBBLE ───────────────────────────── */
+    .mira-bubble {
+      position: fixed; bottom: 28px; right: 28px;
+      background: linear-gradient(135deg, #0d1117 0%, #0e1622 100%);
+      border: 1px solid rgba(52,199,89,0.35);
+      border-radius: 22px; padding: 16px 42px 16px 16px;
+      min-width: 248px; max-width: 330px;
+      box-shadow: 0 4px 40px rgba(0,0,0,0.75), 0 0 0 1px rgba(52,199,89,0.07), 0 0 64px rgba(52,199,89,0.05);
+      z-index: 9998; display: flex; gap: 12px; align-items: flex-start;
+    }
+    .mira-bubble.mb-in  { animation: mbIn  0.42s cubic-bezier(0.34,1.56,0.64,1) forwards; }
+    .mira-bubble.mb-out { animation: mbOut 0.28s ease-in forwards; }
+    @keyframes mbIn  { from{opacity:0;transform:translateY(22px) scale(0.88)} to{opacity:1;transform:translateY(0) scale(1)} }
+    @keyframes mbOut { from{opacity:1;transform:translateY(0) scale(1)} to{opacity:0;transform:translateY(10px) scale(0.94)} }
+
+    .mb-av { position:relative; flex-shrink:0; width:42px; height:42px; }
+    .mb-av img { width:42px; height:42px; border-radius:12px; border:1.5px solid rgba(52,199,89,0.25); background:#141a28; display:block; }
+    .mb-spin {
+      position:absolute; inset:-5px; border-radius:50%;
+      border:2px solid transparent; border-top-color:#34c759;
+      animation:mbSpin 1s linear infinite; display:none;
+    }
+    .mb-spin.on { display:block; }
+    .mb-pulse {
+      position:absolute; inset:-6px; border-radius:50%;
+      border:2px solid rgba(52,199,89,0.45);
+      animation:mbPulse 1.5s ease-out infinite; display:none;
+    }
+    .mb-pulse.on { display:block; }
+    @keyframes mbSpin  { to{transform:rotate(360deg)} }
+    @keyframes mbPulse { 0%{transform:scale(1);opacity:.9} 100%{transform:scale(1.55);opacity:0} }
+
+    .mb-body { flex:1; min-width:0; }
+    .mb-name { font-size:10px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; color:#34c759; margin-bottom:4px; }
+    .mb-txt  { font-size:13px; color:rgba(255,255,255,0.88); line-height:1.5; min-height:16px; }
+
+    .mb-wave { display:flex; align-items:flex-end; gap:3px; height:18px; margin-top:7px; }
+    .mb-wave span { display:block; width:3px; background:#34c759; border-radius:2px; opacity:0; animation:mbW 0.9s ease-in-out infinite; }
+    .mb-wave.on span { opacity:1; }
+    .mb-wave span:nth-child(1){height:55%;animation-delay:0s}
+    .mb-wave span:nth-child(2){height:100%;animation-delay:.1s}
+    .mb-wave span:nth-child(3){height:70%;animation-delay:.2s}
+    .mb-wave span:nth-child(4){height:85%;animation-delay:.15s}
+    .mb-wave span:nth-child(5){height:45%;animation-delay:.05s}
+    @keyframes mbW { 0%,100%{transform:scaleY(.35)} 50%{transform:scaleY(1)} }
+
+    .mb-dots { display:flex; gap:5px; align-items:center; margin-top:7px; }
+    .mb-dots span { width:7px; height:7px; border-radius:50%; background:rgba(52,199,89,.5); animation:mbD 1.4s ease-in-out infinite; opacity:0; }
+    .mb-dots.on span { opacity:1; }
+    .mb-dots span:nth-child(1){animation-delay:0s}
+    .mb-dots span:nth-child(2){animation-delay:.22s}
+    .mb-dots span:nth-child(3){animation-delay:.44s}
+    @keyframes mbD { 0%,60%,100%{transform:scale(.8);opacity:.35} 30%{transform:scale(1.5);opacity:1} }
+
+    .mb-close {
+      position:absolute; top:10px; right:10px;
+      background:rgba(255,255,255,0.07); border:none; color:rgba(255,255,255,0.4);
+      width:22px; height:22px; border-radius:50%; cursor:pointer;
+      font-size:10px; display:flex; align-items:center; justify-content:center; transition:background .15s;
+    }
+    .mb-close:hover { background:rgba(255,255,255,0.15); color:#fff; }
   </style>
 </head>
 <body>
@@ -1533,19 +1595,19 @@ async function startTraining(command) {
 
   // ── MIRA fragt zurück (nach "Hey MIRA" oder Chat) ────────────────────────
   ipcRenderer.on('mira-ask', (event, { text, mode }) => {
-    // Frage im Transcript-Bereich anzeigen
-    const card = document.getElementById('voice-transcript-card');
-    const el   = document.getElementById('voice-transcript-text');
-    if (card && el) {
-      el.textContent = '🔮 ' + text;
-      card.style.display = 'block';
-    }
     if (mode === 'voice_followup') {
-      // Sprechen + danach auto-voice für Antwort
+      showMiraBubble(text, 'speaking');
       miraSay(text, () => {
+        showMiraBubble('Ich höre...', 'listening');
         voiceContextMode = true;
-        setTimeout(() => startVoice(), 400);
+        stopWakeWordListening();
+        setTimeout(() => startVoice(), 350);
       });
+    } else {
+      // Chat-Modus: nur Transcript-Card
+      const card = document.getElementById('voice-transcript-card');
+      const el   = document.getElementById('voice-transcript-text');
+      if (card && el) { el.textContent = '🔮 ' + text; card.style.display = 'block'; }
     }
   });
 
@@ -1559,6 +1621,7 @@ async function startTraining(command) {
 
   async function startVoice() {
     if (voiceActive) return;
+    stopWakeWordListening(); // sicherstellen dass Wake-Word-Rec nicht kollidiert
 
     // Mikrofon-Zugriff
     try {
@@ -1694,24 +1757,38 @@ async function startTraining(command) {
       if (voiceContextMode) {
         // Follow-up nach "Hey MIRA" → context-answer IPC
         voiceContextMode = false;
+        showMiraBubble('Verstanden...', 'thinking');
         ipcRenderer.invoke('voice-context-answer', { text }).then(res => {
-          if (res?.queued) toast(`✅ "${text.substring(0, 50)}" → MIRA`, 'success');
-        }).catch(() => {});
+          if (res?.queued) {
+            showMiraBubble('Erledigt ✓', 'speaking');
+            hideMiraBubble(2200);
+            setTimeout(startWakeWordListening, 2800);
+          } else {
+            hideMiraBubble(800);
+            setTimeout(startWakeWordListening, 1400);
+          }
+        }).catch(() => {
+          hideMiraBubble(500);
+          setTimeout(startWakeWordListening, 1500);
+        });
       } else {
         // Normaler Voice-Befehl
         ipcRenderer.invoke('voice-command', { text }).then(res => {
           if (res?.queued) {
             toast(`🎤 "${text.substring(0, 50)}…" → MIRA`, 'success');
           } else if (res?.mode === 'context_question') {
-            // "Hey MIRA" erkannt → TTS läuft, kein toast nötig
+            // "Hey MIRA" erkannt → mira-ask kommt separat, kein toast
           }
         }).catch(() => {});
+        setTimeout(startWakeWordListening, 1200);
       }
     } else if (!send || !text) {
-      // Kein Text → Vorschau ausblenden
+      // Kein Text → Bubble + Transcript ausblenden
+      hideMiraBubble(300);
       setTimeout(() => {
         document.getElementById('voice-transcript-card').style.display = 'none';
       }, 2000);
+      setTimeout(startWakeWordListening, 1000);
     }
     voiceTranscript = '';
   }
@@ -1762,6 +1839,112 @@ async function startTraining(command) {
       `Stille erkannt — sendet in <b>${s}s</b>`;
   }
 
+  // ── MIRA BUBBLE ──────────────────────────────────────────────────────────────
+  function showMiraBubble(text, state = 'speaking') {
+    const b = document.getElementById('mira-bubble');
+    b.style.display = 'flex';
+    b.classList.remove('mb-out');
+    void b.offsetWidth; // reflow for re-animation
+    b.classList.add('mb-in');
+    document.getElementById('mb-txt').textContent = text;
+    // reset indicators
+    document.getElementById('mb-spin').classList.remove('on');
+    document.getElementById('mb-pulse').classList.remove('on');
+    document.getElementById('mb-wave').classList.remove('on');
+    document.getElementById('mb-dots').classList.remove('on');
+    if (state === 'thinking')  document.getElementById('mb-spin').classList.add('on');
+    if (state === 'speaking')  document.getElementById('mb-wave').classList.add('on');
+    if (state === 'listening') {
+      document.getElementById('mb-dots').classList.add('on');
+      document.getElementById('mb-pulse').classList.add('on');
+    }
+  }
+
+  function updateMiraBubbleTxt(text) {
+    const el = document.getElementById('mb-txt');
+    if (el) el.textContent = text;
+  }
+
+  function hideMiraBubble(delay = 0) {
+    setTimeout(() => {
+      const b = document.getElementById('mira-bubble');
+      if (!b || b.style.display === 'none') return;
+      b.classList.remove('mb-in');
+      b.classList.add('mb-out');
+      setTimeout(() => { b.style.display = 'none'; b.classList.remove('mb-out'); }, 300);
+    }, delay);
+  }
+
+  // ── WAKE WORD DETECTOR ───────────────────────────────────────────────────────
+  let wakeWordRec    = null;
+  let wakeWordActive = false;
+
+  function startWakeWordListening() {
+    if (wakeWordActive || voiceActive) return;
+    if (!('webkitSpeechRecognition' in window)) return;
+    wakeWordRec = new webkitSpeechRecognition();
+    wakeWordRec.continuous     = true;
+    wakeWordRec.interimResults = true;
+    wakeWordRec.lang           = 'de-DE';
+    wakeWordActive = true;
+    wakeWordRec.onresult = (e) => {
+      for (let i = e.resultIndex; i < e.results.length; i++) {
+        const t = e.results[i][0].transcript.toLowerCase().trim();
+        if (/hey\s*mira/.test(t)) {
+          try { wakeWordRec.stop(); } catch(_) {}
+          wakeWordActive = false;
+          onWakeWord();
+          return;
+        }
+      }
+    };
+    wakeWordRec.onend = () => {
+      wakeWordActive = false;
+      if (!voiceActive && !voiceContextMode) setTimeout(startWakeWordListening, 900);
+    };
+    wakeWordRec.onerror = (e) => {
+      wakeWordActive = false;
+      if (e.error !== 'aborted') setTimeout(startWakeWordListening, 2000);
+    };
+    try { wakeWordRec.start(); } catch(e) { wakeWordActive = false; }
+  }
+
+  function stopWakeWordListening() {
+    if (wakeWordRec) { try { wakeWordRec.stop(); } catch(_) {} wakeWordRec = null; }
+    wakeWordActive = false;
+  }
+
+  async function onWakeWord() {
+    showMiraBubble('Einen Moment...', 'thinking');
+    try {
+      await ipcRenderer.invoke('voice-command', { text: 'hey mira' });
+      // mira-ask event kommt async zurück
+    } catch(e) {
+      hideMiraBubble(400);
+      setTimeout(startWakeWordListening, 1500);
+    }
+  }
+
+  // Wake-Word nach kurzer Verzögerung starten
+  setTimeout(startWakeWordListening, 2500);
+
 </script>
+
+<!-- MIRA VOICE BUBBLE -->
+<div id="mira-bubble" class="mira-bubble" style="display:none">
+  <div class="mb-av">
+    <img src="https://api.dicebear.com/9.x/bottts/svg?seed=MiraCore&backgroundColor=0d1117&primaryColor=34c759" alt="MIRA" />
+    <div class="mb-spin"  id="mb-spin"></div>
+    <div class="mb-pulse" id="mb-pulse"></div>
+  </div>
+  <div class="mb-body">
+    <div class="mb-name">MIRA</div>
+    <div class="mb-txt"  id="mb-txt"></div>
+    <div class="mb-wave" id="mb-wave"><span></span><span></span><span></span><span></span><span></span></div>
+    <div class="mb-dots" id="mb-dots"><span></span><span></span><span></span></div>
+  </div>
+  <button class="mb-close" onclick="hideMiraBubble()">✕</button>
+</div>
+
 </body>
 </html>
