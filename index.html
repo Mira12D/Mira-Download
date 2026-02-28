@@ -1502,6 +1502,36 @@ async function startTraining(command) {
   let voiceStartTime    = 0;
   let voiceTranscript   = '';
   let voiceCountdownInt = null;
+  let voiceContextMode  = false; // true = followup nach "Hey MIRA"
+
+  // ── MIRA spricht (TTS) ────────────────────────────────────────────────────
+  function miraSay(text, onDone) {
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang  = 'de-DE';
+    u.rate  = 1.05;
+    u.pitch = 1.0;
+    if (onDone) u.onend = onDone;
+    speechSynthesis.speak(u);
+  }
+
+  // ── MIRA fragt zurück (nach "Hey MIRA" oder Chat) ────────────────────────
+  ipcRenderer.on('mira-ask', (event, { text, mode }) => {
+    // Frage im Transcript-Bereich anzeigen
+    const card = document.getElementById('voice-transcript-card');
+    const el   = document.getElementById('voice-transcript-text');
+    if (card && el) {
+      el.textContent = '🔮 ' + text;
+      card.style.display = 'block';
+    }
+    if (mode === 'voice_followup') {
+      // Sprechen + danach auto-voice für Antwort
+      miraSay(text, () => {
+        voiceContextMode = true;
+        setTimeout(() => startVoice(), 400);
+      });
+    }
+  });
 
   function toggleVoice() {
     if (voiceActive) {
@@ -1644,12 +1674,23 @@ async function startTraining(command) {
     const text = voiceTranscript.trim();
     if (send && text.length > 1) {
       updateVoiceTranscriptUI(text, true);
-      // Transkript an MIRA schicken
-      ipcRenderer.invoke('voice-command', { text }).then(res => {
-        if (res?.queued) {
-          toast(`🎤 "${text.substring(0, 50)}…" → MIRA`, 'success');
-        }
-      }).catch(() => {});
+
+      if (voiceContextMode) {
+        // Follow-up nach "Hey MIRA" → context-answer IPC
+        voiceContextMode = false;
+        ipcRenderer.invoke('voice-context-answer', { text }).then(res => {
+          if (res?.queued) toast(`✅ "${text.substring(0, 50)}" → MIRA`, 'success');
+        }).catch(() => {});
+      } else {
+        // Normaler Voice-Befehl
+        ipcRenderer.invoke('voice-command', { text }).then(res => {
+          if (res?.queued) {
+            toast(`🎤 "${text.substring(0, 50)}…" → MIRA`, 'success');
+          } else if (res?.mode === 'context_question') {
+            // "Hey MIRA" erkannt → TTS läuft, kein toast nötig
+          }
+        }).catch(() => {});
+      }
     } else if (!send || !text) {
       // Kein Text → Vorschau ausblenden
       setTimeout(() => {

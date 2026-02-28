@@ -80,7 +80,8 @@ const runningTasks = new Map();
 const RUNNING_TASK_TTL = 5 * 60 * 1000; // 5 Minuten
 
 // Letztes aktives Artifact (vom Frontend via IPC gesetzt, für Voice-Routing)
-let lastActiveArtifact = null;
+let lastActiveArtifact       = null;
+let pendingContextPerception = null; // gespeichert nach "Hey MIRA" für Follow-up Antwort
 
 // ═══════════════════════════════════════
 // DEVICE ID
@@ -4470,6 +4471,24 @@ ipcMain.handle('get-recording-steps', () => {
 });
 
 // ══════════════════════════════════════════════════════════════════════════════
+// ── "Hey MIRA" Kontextfrage generieren ────────────────────────────────────────
+function buildContextQuestion(perception) {
+  if (!perception || !perception.scene) return 'Was kann ich für dich tun?';
+  const scene = perception.scene;
+  const app   = (perception.app_type || '').toLowerCase();
+  if (perception.is_form)
+    return `Ich sehe ${scene}. Ich kann das Formular ausfüllen. Hast du eine Datei mit den Infos oder kannst du sie mir kurz nennen?`;
+  if (/word|dokument|schreib|text|pages/i.test(app))
+    return `Ich sehe ${scene}. Soll ich weiterschreiben oder etwas anderes machen? Wo finde ich die nötigen Infos?`;
+  if (/excel|tabelle|xlsx|numbers/i.test(app))
+    return `Ich sehe ${scene}. Was soll ich mit der Tabelle tun?`;
+  if (/mail|email|outlook|thunderbird/i.test(app))
+    return `Ich sehe ${scene}. Soll ich die Mail schreiben oder bearbeiten?`;
+  if (/browser|chrome|opera|firefox|safari|edge/i.test(app))
+    return `Ich sehe ${scene}. Was soll ich im Browser für dich erledigen?`;
+  return `Ich sehe ${scene}. Was soll ich für dich tun?`;
+}
+
 // VOICE COMMAND — empfängt Sprachbefehl vom Renderer, reiht ihn als Task ein
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -4481,6 +4500,25 @@ ipcMain.handle('voice-command', async (event, { text }) => {
   console.log(`🎤 Voice Befehl: "${command}"`);
 
   try {
+    // ── "Hey MIRA" → Context-Modus: Bildschirm scannen + zurückfragen ──────
+    const isHeyMira = /^hey\s*mira[,!.]?\s*$/i.test(command);
+    if (isHeyMira) {
+      console.log('🔮 "Hey MIRA" → Context-Modus');
+      try {
+        const sc  = await takeCompressedScreenshot();
+        const ax  = contextManager.toPromptString(contextManager.captureState());
+        const perception = await wahrnehmung.wahrnehmen({ screenshot: sc, axContext: ax, token: userToken, API });
+        pendingContextPerception = perception;
+        const question = buildContextQuestion(perception);
+        console.log(`🔮 Kontextfrage: "${question}"`);
+        if (mainWindow) mainWindow.webContents.send('mira-ask', { text: question, mode: 'voice_followup' });
+      } catch(e) {
+        console.warn('Context-Modus Fehler:', e.message);
+        if (mainWindow) mainWindow.webContents.send('mira-ask', { text: 'Was kann ich für dich tun?', mode: 'voice_followup' });
+      }
+      return { mode: 'context_question' };
+    }
+
     // ── Artifact-Insert Erkennung ──
     // Wenn ein aktives Artifact gesetzt ist und der Befehl wie "füge X Y ein" klingt,
     // direkt als file-task routen statt durch den Dispatcher (der es nicht versteht)
@@ -4529,6 +4567,45 @@ ipcMain.handle('voice-command', async (event, { text }) => {
     }
   } catch (e) {
     console.error(`❌ voice-command Fehler:`, e.message);
+    return { queued: false, reason: e.message };
+  }
+});
+
+// ── Follow-up Antwort nach "Hey MIRA" Context-Frage ──────────────────────────
+ipcMain.handle('voice-context-answer', async (event, { text }) => {
+  if (!text?.trim()) return { queued: false, reason: 'empty' };
+  if (!userToken)    return { queued: false, reason: 'not_connected' };
+
+  const perception = pendingContextPerception;
+  pendingContextPerception = null;
+
+  // Befehl mit Wahrnehmungs-Kontext anreichern
+  const perceptionHint = perception?.scene
+    ? `[SCREEN_CONTEXT: ${perception.scene}] `
+    : '';
+  const enrichedCommand = perceptionHint + text.trim();
+
+  const ctx = contextManager.captureState();
+  const ctxString = contextManager.toPromptString(ctx);
+
+  try {
+    const res = await fetch(`${API}/api/agent/queue`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        token:   userToken,
+        command: enrichedCommand,
+        source:  'voice_context',
+        context: ctxString
+      })
+    });
+    const data = await res.json();
+    if (data.success || data.queued) {
+      console.log(`✅ Context-Answer Task: "${text}"`);
+      return { queued: true };
+    }
+    return { queued: false, reason: data.error };
+  } catch(e) {
     return { queued: false, reason: e.message };
   }
 });
