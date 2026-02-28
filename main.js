@@ -4597,11 +4597,20 @@ ipcMain.handle('voice-context-answer', async (event, { text }) => {
   const perception = pendingContextPerception;
   pendingContextPerception = null;
 
-  // Befehl mit Wahrnehmungs-Kontext anreichern
-  const perceptionHint = perception?.scene
-    ? `[SCREEN_CONTEXT: ${perception.scene}] `
-    : '';
-  const enrichedCommand = perceptionHint + text.trim();
+  // Befehl explizit für den Dispatcher aufbauen
+  const scene    = perception?.scene    || '';
+  const appType  = perception?.app_type || '';
+  const isForm   = perception?.is_form  || false;
+
+  let enrichedCommand;
+  if (isForm && scene) {
+    enrichedCommand = `Fülle das sichtbare Formular aus. Was ich auf dem Bildschirm sehe: ${scene}. Der Nutzer sagt dazu: ${text.trim()}`;
+  } else if (scene) {
+    enrichedCommand = `Aufgabe bezogen auf aktuellen Bildschirm (${appType || 'App'}: ${scene}): ${text.trim()}`;
+  } else {
+    enrichedCommand = text.trim();
+  }
+  console.log(`🔮 Context-Task: "${enrichedCommand.substring(0, 120)}..."`);
 
   const ctx = contextManager.captureState();
   const ctxString = contextManager.toPromptString(ctx);
