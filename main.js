@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen: electronScreen, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, screen: electronScreen, dialog, globalShortcut } = require('electron');
 
 // Chrome Private Network Access: HTTPS-Seiten dürfen localhost erreichen
 app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights');
@@ -5561,6 +5561,13 @@ app.whenReady().then(async () => {
   setupAutoUpdater();
   uIOhook.start();
 
+  // ── "Hey MIRA" Keyboard-Trigger (zuverlässiger als Background-Speech) ──
+  globalShortcut.register('CommandOrControl+Shift+M', () => {
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('hey-mira-hotkey');
+    }
+  });
+
   calibration = loadCalibration();
   if (!calibration) {
     calibration = await runCalibration();
@@ -5612,4 +5619,5 @@ app.on('before-quit', () => {
   sysLogMonitor.stop();
   passiveTrainer.stop('app_close').catch(() => {});
   uIOhook.stop();
+  globalShortcut.unregisterAll();
 });

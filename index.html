@@ -854,6 +854,17 @@
       <div class="voice-status-dot" id="voice-status-dot"></div>
     </div>
 
+    <!-- Hey MIRA Hint + TTS Toggle -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;padding:0 2px">
+      <div style="font-size:10px;color:var(--text3)">
+        <span style="font-family:'JetBrains Mono',monospace;color:var(--border2)">⌘⇧M</span>
+        <span style="margin-left:4px">oder klick → sag "Hey MIRA"</span>
+      </div>
+      <button id="tts-toggle-btn" onclick="toggleMiraTts()" title="Sprachausgabe ein/aus"
+        style="background:none;border:1px solid var(--border);border-radius:6px;padding:2px 7px;font-size:11px;color:var(--text3);cursor:pointer;transition:all .15s"
+      >🔇 Ton</button>
+    </div>
+
     <!-- Stille-Countdown (erscheint während Recording) -->
     <div id="voice-countdown" style="display:none;text-align:center;padding:6px 0;font-size:11px;color:var(--text2)">
       <span id="voice-countdown-txt">Stille erkannt — sendet in <b>1.5s</b></span>
@@ -1582,9 +1593,9 @@ async function startTraining(command) {
   let voiceCountdownInt = null;
   let voiceContextMode  = false; // true = followup nach "Hey MIRA"
 
-  // ── MIRA spricht (TTS) — IPC-native zuerst, Web Speech als Fallback ──────
+  // ── MIRA spricht (TTS) — opt-in, IPC-native zuerst ──────────────────────
   function miraSay(text, onDone) {
-    // Nativer say-Befehl via main.js: kein User-Gesture nötig (Wake-Word-Kontext)
+    if (!miraTtsEnabled) { if (onDone) onDone(); return; } // TTS deaktiviert → nur Bubble
     ipcRenderer.invoke('tts-speak', { text })
       .then(res => {
         if (res && res.done) { if (onDone) onDone(); }
@@ -1940,8 +1951,21 @@ async function startTraining(command) {
     });
   }
 
-  // Wake-Word nach kurzer Verzögerung starten
-  setTimeout(startWakeWordListening, 2500);
+  // ── Keyboard-Hotkey: Cmd+Shift+M → Hey MIRA Flow ─────────────────────────
+  ipcRenderer.on('hey-mira-hotkey', () => { onWakeWord(); });
+
+  // ── TTS opt-in: Standard = aus ────────────────────────────────────────────
+  let miraTtsEnabled = false;
+
+  function toggleMiraTts() {
+    miraTtsEnabled = !miraTtsEnabled;
+    const btn = document.getElementById('tts-toggle-btn');
+    if (btn) {
+      btn.textContent = miraTtsEnabled ? '🔊 Ton' : '🔇 Ton';
+      btn.style.color = miraTtsEnabled ? 'var(--green)' : 'var(--text3)';
+      btn.style.borderColor = miraTtsEnabled ? 'rgba(52,199,89,0.35)' : 'var(--border)';
+    }
+  }
 
 </script>
 
