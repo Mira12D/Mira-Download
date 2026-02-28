@@ -1576,11 +1576,86 @@ async function executeTaskFromQueue(task) {
         } catch(e) { console.error('⚠️ ftLog failed:', e.message); }
       };
 
-      const { search_patterns, source_dirs, target_filename, target_format = 'xlsx', action, instruction, append_if_exists, custom_headers } = parsed;
+      const { search_patterns, source_dirs, target_filename, target_format = 'xlsx', action, instruction, append_if_exists, custom_headers, artifact_id, artifact_name, rows_to_add } = parsed;
 
       // ── Profil laden (brauchen wir immer, auch bei create_excel) ────────
       if (!userProfileSettings.company_name) await loadUserProfileSettings().catch(() => {});
       const ftProfile = userProfileSettings;
+
+      // ══════════════════════════════════════════════════════════════
+      // ARTIFACT EDIT — Zeilen in bestehendes Artifact eintragen
+      // ══════════════════════════════════════════════════════════════
+      if (action === 'artifact_edit' && artifact_id) {
+        await ftLog(`📂 Lade Artifact "${artifact_name}"...`, 'step');
+        try {
+          const ExcelJS = require('exceljs');
+
+          // 1. Artifact laden
+          const artRes = await fetchWithTimeout(`${API}/api/artifacts/${artifact_id}`, {
+            headers: { 'Authorization': `Bearer ${userToken}` }
+          }, 6000);
+          const artData = await artRes.json();
+          if (!artData.success || !artData.artifact?.data_base64) throw new Error('Artifact nicht gefunden oder leer');
+
+          const buf = Buffer.from(artData.artifact.data_base64, 'base64');
+
+          // 2. ExcelJS laden
+          const wb = new ExcelJS.Workbook();
+          await wb.xlsx.load(buf);
+          const ws = wb.worksheets[0];
+          if (!ws) throw new Error('Keine Arbeitsmappe im Artifact');
+
+          // 3. Header-Zeile lesen
+          const headers = [];
+          ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
+            headers[col - 1] = cell.value?.toString() || '';
+          });
+
+          // 4. Neue Zeilen einfügen
+          const rowsArr = Array.isArray(rows_to_add) ? rows_to_add : (rows_to_add ? [rows_to_add] : [{}]);
+          for (const rowObj of rowsArr) {
+            const newRow = headers.map(h => rowObj[h] !== undefined ? rowObj[h] : '');
+            ws.addRow(newRow);
+          }
+
+          // 5. Als base64 serialisieren
+          const updBuf   = await wb.xlsx.writeBuffer();
+          const newB64   = Buffer.from(updBuf).toString('base64');
+          const rowCount = ws.rowCount - 1; // ohne Header
+
+          await ftLog(`✅ ${rowsArr.length} Zeile(n) eingetragen. Gesamt: ${rowCount} Zeilen.`, 'step');
+
+          // 6. Artifact in DB updaten
+          await fetchWithTimeout(`${API}/api/artifacts/${artifact_id}`, {
+            method: 'PATCH',
+            headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({ data_base64: newB64, rows: rowCount })
+          }, 6000).catch(() => {});
+
+          const artSummary = {
+            is_artifact_update: true, artifact_id, artifact_name,
+            rows_written: rowsArr.length, files_count: 1,
+            file_base64: newB64,
+            mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            target_filename: artifact_name || 'Artifact.xlsx'
+          };
+          await ftLog(null, 'done', { done: true, summary: artSummary });
+          await fetchWithTimeout(`${API}/api/agent/complete`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: userToken, task_id: task.id, status: 'success', result: artSummary })
+          }, 10000).catch(() => {});
+          return;
+        } catch(e) {
+          console.error('❌ artifact_edit:', e.message);
+          await ftLog(`❌ Fehler: ${e.message}`, 'error');
+          await ftLog(null, 'done', { done: true, summary: { error: true, error_msg: e.message } });
+          await fetchWithTimeout(`${API}/api/agent/complete`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: e.message } })
+          }, 10000).catch(() => {});
+          return;
+        }
+      }
 
       // ── create_excel: direkt neue Datei erstellen, kein Suchen ───────
       const isDirectCreate = action === 'create_excel';
