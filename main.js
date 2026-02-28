@@ -1549,16 +1549,25 @@ async function executeTaskFromQueue(task) {
         } catch(e) { console.error('⚠️ ftLog failed:', e.message); }
       };
 
-      const { search_patterns, source_dirs, target_filename, target_format = 'xlsx', action, instruction, append_if_exists } = parsed;
+      const { search_patterns, source_dirs, target_filename, target_format = 'xlsx', action, instruction, append_if_exists, custom_headers } = parsed;
 
-      // ── 1. DATEIEN SUCHEN ─────────────────────────────────────────────
-      await ftLog('🔍 Durchsuche deinen chaotischen PC... mein Gott ist es hier voll...');
-      const foundFiles = await ftFindFiles(search_patterns, source_dirs);
-      console.log(`🗂️ file_task: ${foundFiles.length} Dateien gefunden`);
+      // ── create_excel: direkt neue Datei erstellen, kein Suchen ───────
+      const isDirectCreate = action === 'create_excel';
 
-      if (foundFiles.length === 0) {
-        // ── Keine Datei vorhanden → neue leere Datei erstellen ────────────
-        await ftLog('📋 Keine passende Datei gefunden — erstelle neue Datei...', 'step');
+      // ── 1. DATEIEN SUCHEN (nur wenn kein direktes Erstellen) ──────────
+      let foundFiles = [];
+      if (!isDirectCreate) {
+        await ftLog('🔍 Durchsuche deinen chaotischen PC... mein Gott ist es hier voll...');
+        foundFiles = await ftFindFiles(search_patterns, source_dirs);
+        console.log(`🗂️ file_task: ${foundFiles.length} Dateien gefunden`);
+      }
+
+      if (isDirectCreate || foundFiles.length === 0) {
+        // ── Neue Datei erstellen (explizit angefordert oder keine Quelldatei gefunden) ──
+        const logMsg = isDirectCreate
+          ? '📋 Erstelle neue Datei...'
+          : '📋 Keine passende Datei gefunden — erstelle neue Datei...';
+        await ftLog(logMsg, 'step');
 
         const profileHeaders = ftProfile.excel_headers
           ? ftProfile.excel_headers.split(',').map(h => h.trim()).filter(Boolean)
@@ -1566,8 +1575,13 @@ async function executeTaskFromQueue(task) {
         const defaultHeaderMap = {
           extract_to_excel: ['Datum', 'Absender', 'Betreff', 'Netto', 'MwSt', 'Brutto', 'IBAN'],
           invoice_extract:  ['Datum', 'Rechnungsnummer', 'Absender', 'Netto', 'MwSt', 'Brutto', 'IBAN'],
+          create_excel:     ['Datum', 'Beschreibung', 'Betrag', 'Kategorie'],
         };
-        const emptyHeaders = profileHeaders || defaultHeaderMap[action] || ['Datum', 'Beschreibung', 'Betrag', 'Kategorie'];
+        // Priorität: custom_headers vom User > Profil-Headers > Action-Default > generisch
+        const emptyHeaders = (custom_headers?.length ? custom_headers : null)
+          || profileHeaders
+          || defaultHeaderMap[action]
+          || ['Datum', 'Beschreibung', 'Betrag', 'Kategorie'];
 
         let newFileResult = null;
         try {
