@@ -1863,11 +1863,15 @@ async function executeTaskFromQueue(task) {
             // Eine gemeinsame Zusammenfassung für alle Dateien
             allExtracted.push({ file: fileContents.map(f => f.name).join(', '), rawText: batchData.summary_text });
           } else if (batchData.success && batchMode === 'extract' && Array.isArray(batchData.results)) {
-            // Ein JSON-Objekt pro Datei
+            // Ergebnis: Array von Zeilen-Arrays (eine Datei → mehrere Zeilen möglich)
             batchData.results.forEach((result, i) => {
               const fname = fileContents[i]?.name || `Datei ${i + 1}`;
-              if (result && typeof result === 'object') {
-                allExtracted.push({ file: fname, data: result });
+              // Normalisieren: immer Array von Zeilen-Objekten
+              const rows = Array.isArray(result)
+                ? result.filter(r => r && typeof r === 'object' && !Array.isArray(r))
+                : (result && typeof result === 'object' ? [result] : []);
+              if (rows.length > 0) {
+                rows.forEach(row => allExtracted.push({ file: fname, data: row }));
               } else {
                 allExtracted.push({ file: fname, rawText: fileContents[i]?.content || '' });
               }
@@ -2959,6 +2963,10 @@ async function ftWriteOutput(parsed, files, extractedRows, profile = {}) {
       await wb.xlsx.readFile(outputPath);
       sheet = wb.getWorksheet(1) || wb.addWorksheet('MIRA');
 
+      // ExcelJS rowCount ist manchmal unzuverlässig → echte Zeilen zählen
+      let actualLastRow = 0;
+      sheet.eachRow((row, rowNum) => { actualLastRow = rowNum; });
+
       // Header-Zeile automatisch erkennen (nicht immer Zeile 1)
       hdrRowIdx = findHeaderRow(sheet);
       existingHeaders = [];
@@ -2966,17 +2974,17 @@ async function ftWriteOutput(parsed, files, extractedRows, profile = {}) {
         existingHeaders.push((cell.value || '').toString().trim());
       });
       // Alte Summenzeile am Ende entfernen
-      const lastRow = sheet.getRow(sheet.rowCount);
+      const lastRow = sheet.getRow(actualLastRow || sheet.rowCount);
       const lastCell = lastRow.getCell(1);
       if (lastCell.value && typeof lastCell.value === 'string' && lastCell.value === 'Gesamt') {
-        sheet.spliceRows(sheet.rowCount, 1);
+        sheet.spliceRows(actualLastRow || sheet.rowCount, 1);
       }
-      console.log(`📋 Anhänge-Modus: Header in Zeile ${hdrRowIdx}, Spalten=[${existingHeaders.join(', ')}] ab Zeile ${sheet.rowCount + 1}`);
+      console.log(`📋 Anhänge-Modus: Header in Zeile ${hdrRowIdx}, Spalten=[${existingHeaders.join(', ')}] ab Zeile ${(actualLastRow || sheet.rowCount) + 1}`);
     } else {
       sheet = wb.addWorksheet('MIRA');
     }
 
-    // Daten starten eine Zeile nach der Header-Zeile
+    // Neue Zeilen werden nach der letzten echten Zeile angehängt
     const dataStartRow = hdrRowIdx + 1;
 
     // Aktive Header-Liste bestimmen (Priorität: bestehende Datei > Profil > AI-Ergebnis)
