@@ -1796,31 +1796,29 @@ async function executeTaskFromQueue(task) {
       const fileNames = foundFiles.map(f => f.name).join(', ');
       await ftLog(`📂 Gefunden: ${fileNames}`, 'found');
 
-      // ── Bestehende Zieldatei: Spalten auslesen (für Append-Matching) ──
+      // ── Bestehende Zieldatei: rekursiv suchen + Spalten auslesen (für Append-Matching) ──
       let targetFileColHeaders = [];
+      let resolvedTargetPath = null;
       if (target_filename && (target_format === 'xlsx' || !target_format)) {
-        const fs = require('fs');
-        const os = require('os');
-        const pathMod = require('path');
-        const home = os.homedir();
-        for (const dir of [pathMod.join(home,'Desktop'), pathMod.join(home,'Downloads'), pathMod.join(home,'Documents')]) {
-          const candidate = pathMod.join(dir, target_filename);
-          if (fs.existsSync(candidate)) {
-            try {
-              const ExcelJS = require('exceljs');
-              const wbTmp = new ExcelJS.Workbook();
-              await wbTmp.xlsx.readFile(candidate);
-              const shTmp = wbTmp.getWorksheet(1);
-              if (shTmp) {
-                const hdrRowNum = findHeaderRow(shTmp);
-                shTmp.getRow(hdrRowNum).eachCell({ includeEmpty: false }, (cell) => {
-                  if (cell.value) targetFileColHeaders.push(cell.value.toString().trim());
-                });
-                console.log(`📊 Zieldatei Header in Zeile ${hdrRowNum}: [${targetFileColHeaders.join(', ')}]`);
-              }
-            } catch(_) {}
-            break;
-          }
+        const targetFound = await ftFindFiles([target_filename]);
+        resolvedTargetPath = targetFound?.[0]?.path || null;
+        if (resolvedTargetPath) {
+          try {
+            const ExcelJS = require('exceljs');
+            const wbTmp = new ExcelJS.Workbook();
+            await wbTmp.xlsx.readFile(resolvedTargetPath);
+            const shTmp = wbTmp.getWorksheet(1);
+            if (shTmp) {
+              const hdrRowNum = findHeaderRow(shTmp);
+              shTmp.getRow(hdrRowNum).eachCell({ includeEmpty: false }, (cell) => {
+                if (cell.value) targetFileColHeaders.push(cell.value.toString().trim());
+              });
+              console.log(`📊 Zieldatei gefunden: ${resolvedTargetPath}`);
+              console.log(`📊 Zieldatei Header in Zeile ${hdrRowNum}: [${targetFileColHeaders.join(', ')}]`);
+            }
+          } catch(_) {}
+        } else {
+          console.log(`📊 Zieldatei "${target_filename}" nicht gefunden → wird neu erstellt`);
         }
       }
 
@@ -1896,6 +1894,11 @@ async function executeTaskFromQueue(task) {
         return;
       }
 
+      // Gefundenen Zieldatei-Pfad durchreichen (damit ftWriteOutput nicht nochmal sucht)
+      const parsedWithTarget = resolvedTargetPath
+        ? { ...parsed, target_path: resolvedTargetPath, append_if_exists: true }
+        : parsed;
+
       let outputResult = null;
       try {
         if (action === 'summarize' || action === 'write_report' || action === 'read_to_chat' || action === 'create_pdf' || target_format === 'pdf') {
@@ -1906,11 +1909,11 @@ async function executeTaskFromQueue(task) {
           // create_pdf → immer pdf, sonst target_format (xlsx→txt als Fallback)
           const outFmt = (action === 'create_pdf' || target_format === 'pdf') ? 'pdf'
                        : target_format === 'xlsx' ? 'txt' : target_format;
-          outputResult = await ftWriteOutput({ ...parsed, target_format: outFmt, append_if_exists }, foundFiles, { text: summaryText }, ftProfile);
+          outputResult = await ftWriteOutput({ ...parsedWithTarget, target_format: outFmt, append_if_exists }, foundFiles, { text: summaryText }, ftProfile);
         } else if (action === 'write_brief') {
           // Brief / Word-Dokument DIN 5008
           const briefText = allExtracted.map(e => e.rawText || JSON.stringify(e.data, null, 2)).join('\n\n');
-          outputResult = await ftWriteOutput({ ...parsed, target_format: 'docx', append_if_exists }, foundFiles, { text: briefText }, ftProfile);
+          outputResult = await ftWriteOutput({ ...parsedWithTarget, target_format: 'docx', append_if_exists }, foundFiles, { text: briefText }, ftProfile);
         } else {
           // extract_to_excel (default) + append_section
           const firstData = allExtracted.find(e => e.data);
@@ -1920,7 +1923,7 @@ async function executeTaskFromQueue(task) {
             headers.forEach(h => { row[h] = e.data[h] ?? ''; });
             return row;
           });
-          outputResult = await ftWriteOutput({ ...parsed, append_if_exists }, foundFiles, { headers, rows }, ftProfile);
+          outputResult = await ftWriteOutput(parsedWithTarget, foundFiles, { headers, rows }, ftProfile);
         }
       } catch(e) {
         console.error('❌ ftWriteOutput:', e.message);
@@ -2933,11 +2936,12 @@ async function ftWriteOutput(parsed, files, extractedRows, profile = {}) {
   const fmt  = (parsed.target_format || 'xlsx').toLowerCase();
   const targetName = parsed.target_filename || `MIRA_Output_${Date.now()}.${fmt}`;
 
-  // Zieldatei suchen (Desktop → Downloads → Documents → direkt)
-  let outputPath = null;
-  for (const dir of [path.join(home,'Desktop'), path.join(home,'Downloads'), path.join(home,'Documents')]) {
-    const c = path.join(dir, targetName);
-    if (fs.existsSync(c)) { outputPath = c; break; }
+  // Zieldatei rekursiv suchen (wie Quelldatei) — falls schon bekannt via target_path überspringen
+  let outputPath = parsed.target_path || null;
+  if (!outputPath && parsed.target_filename) {
+    const found = await ftFindFiles([parsed.target_filename]);
+    outputPath = found?.[0]?.path || null;
+    if (outputPath) console.log(`📍 Zieldatei gefunden: ${outputPath}`);
   }
   if (!outputPath) outputPath = path.join(home, 'Desktop', targetName);
   const exists = fs.existsSync(outputPath);
