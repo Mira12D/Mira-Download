@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, screen: electronScreen } = require('electron');
+const { app, BrowserWindow, ipcMain, screen: electronScreen, dialog } = require('electron');
 
 // Chrome Private Network Access: HTTPS-Seiten dürfen localhost erreichen
 app.commandLine.appendSwitch('disable-features', 'BlockInsecurePrivateNetworkRequests,PrivateNetworkAccessSendPreflights');
@@ -24,6 +24,12 @@ const miraPlanner    = require('./mira-planner');
 const sysLogMonitor  = require('./system-log-monitor');
 const passiveTrainer = require('./passive-trainer');
 const path           = require('path');
+
+// ── Kognitive Layer ───────────────────────────────────────────────────────
+const sessionCtx     = require('./session-context');
+const wahrnehmung    = require('./wahrnehmungs-amt');
+const infoAmt        = require('./informations-amt');
+const gefahrenAmt    = require('./gefahren-amt');
 
 let calibration = null;
 
@@ -1306,6 +1312,44 @@ async function executeTaskFromQueue(task) {
     console.log(`🔍 Command: ${task.command.substring(0, 100)}`);
     console.log(`🔍 Parsed type: ${parsed?.type}`);
 
+    // ════════════════════════════════════════════════════════════════
+    // KOGNITIVE LAYER — vor allem anderen
+    // 1. WahrnehmungsAmt: Was ist gerade auf dem Bildschirm?
+    // 2. InformationsAmt: Haben wir genug Kontext? Sonst fragen.
+    // Übersprungen für interne Tasks (file_task, scan, training)
+    // ════════════════════════════════════════════════════════════════
+    let perception = null;
+    const isInternalTask = parsed?.type === 'file_task' || parsed?.type === 'scan_folder'
+      || parsed?.type === 'start_training' || parsed?.type === 'extract_data';
+
+    if (!isInternalTask) {
+      // Checkpoint vor jeder Aktion
+      gefahrenAmt.snapshot({ contextManager, description: task.command.substring(0, 60) });
+
+      // Wahrnehmen (Screenshot + AX → semantisches Verständnis)
+      try {
+        const sc  = await takeCompressedScreenshot();
+        const ax  = contextManager.toPromptString(contextManager.captureState());
+        perception = await wahrnehmung.wahrnehmen({ screenshot: sc, axContext: ax, token: userToken, API });
+      } catch(e) { console.warn('WahrnehmungsAmt skip:', e.message); }
+
+      // InformationsAmt: Kontext prüfen + ggf. User fragen
+      const info = await infoAmt.assess({ command: task.command, perception });
+      if (!info.proceed) {
+        console.log(`🛑 InformationsAmt: ${info.reason}`);
+        await markTaskComplete(task.id, 'failed');
+        return;
+      }
+      // Angereicherten Befehl verwenden (mit [NUTZER_INFO: ...] falls vorhanden)
+      if (info.enriched_command !== task.command) {
+        task = { ...task, command: info.enriched_command };
+        try { parsed = JSON.parse(task.command); } catch(_) {}
+      }
+    }
+
+    // SessionContext: Goal aus Befehl übernehmen
+    sessionCtx.update({ current_step: task.command.substring(0, 80), perception });
+
     // ════════════════════════════
     // START_TRAINING — ganz oben!
     // ════════════════════════════
@@ -2046,6 +2090,10 @@ async function executeTaskFromQueue(task) {
       }
     }
 
+    // SessionContext: erledigten Schritt notieren
+    sessionCtx.update({ step_done: task.command.substring(0, 60) });
+    wahrnehmung.invalidate(); // Bildschirm hat sich verändert → Cache löschen
+
   } catch(error) {
     console.error('❌ Task error:', error);
     await markTaskComplete(task.id, 'failed');
@@ -2584,9 +2632,11 @@ async function tryDispatch(task) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        token: userToken,
-        command: task.command,
-        screen_size: { width: realW, height: realH }
+        token:           userToken,
+        command:         task.command,
+        screen_size:     { width: realW, height: realH },
+        session_context: sessionCtx.toPromptString(),
+        last_perception: sessionCtx.last_perception
       })
     });
 
@@ -3626,6 +3676,26 @@ async function executeRouteStep(step) {
 
       // Kontext-Cache invalidieren
       contextManager.invalidate();
+
+      // ── GefahrenAmt: Wenn Klick keinen State-Delta hatte → Korrektur ────────
+      if (!clickSuccess) {
+        const appName    = ctx?.frontmostApp || 'unknown';
+        const fingerprint = `NO_DELTA:${appName}:${elementLabel.replace(/\s/g,'_').substring(0,30)}`;
+        const correction  = await gefahrenAmt.correct({
+          fingerprint,
+          issue:          `Kein State-Delta nach Klick "${elementLabel}" (source: ${coordSource})`,
+          executeStepFn:  (s) => executeRouteStep(s),
+          contextManager,
+          token:          userToken,
+          API,
+          deviceKnowledgeId: null // TODO: aus device_knowledge ID setzen wenn vorhanden
+        });
+        if (correction.corrected) {
+          clickSuccess    = true;
+          clickVerifyNote = `GefahrenAmt Korrektur OK (Versuch ${correction.attempt || '?'})`;
+          console.log(`🔧 GefahrenAmt: Klick korrigiert — ${clickVerifyNote}`);
+        }
+      }
 
       // ── Koordinaten-Cache aktualisieren ──────────────────────────────────
       if (clickSuccess) {
@@ -5366,6 +5436,32 @@ app.whenReady().then(async () => {
   }
 
   await buildDesktopMap();
+
+  // ── InformationsAmt initialisieren ─────────────────────────────────
+  // ask-Callback: Bestätigung oder Info-Eingabe via Electron-Dialog
+  infoAmt.init(async (question, type) => {
+    const win = mainWindow && !mainWindow.isDestroyed() ? mainWindow : null;
+    if (type === 'danger') {
+      const { response } = await dialog.showMessageBox(win || { }, {
+        type: 'warning',
+        title: '⚠️ MIRA Bestätigung',
+        message: question,
+        buttons: ['Abbrechen', 'Ja, fortfahren'],
+        defaultId: 0, cancelId: 0
+      });
+      return response === 1 ? true : null;
+    }
+    // Info-Frage: kleines Input-Overlay über IPC
+    if (win) {
+      win.webContents.send('mira-needs-info', { question });
+      return new Promise(resolve => {
+        const handler = (e, { answer }) => resolve(answer || null);
+        ipcMain.once('mira-info-answer', handler);
+        setTimeout(() => { ipcMain.removeListener('mira-info-answer', handler); resolve(null); }, 45000);
+      });
+    }
+    return null;
+  });
 });
 
 app.on('window-all-closed', () => {
