@@ -230,9 +230,18 @@ function startLocalServer() {
 
     // Body einlesen (POST/PATCH)
     let body = {};
+    let rawBodyBuffer = null;
+    const contentType = req.headers['content-type'] || '';
     if (!['GET', 'DELETE'].includes(req.method)) {
-      const raw = await new Promise(r => { let d = ''; req.on('data', c => d += c); req.on('end', () => r(d)); });
-      try { body = JSON.parse(raw); } catch(_) {}
+      if (contentType.includes('multipart/form-data')) {
+        // Binary (Audio, Bilder) — als Buffer puffern für Proxy
+        rawBodyBuffer = await new Promise(r => {
+          const chunks = []; req.on('data', c => chunks.push(c)); req.on('end', () => r(Buffer.concat(chunks)));
+        });
+      } else {
+        const raw = await new Promise(r => { let d = ''; req.on('data', c => d += c); req.on('end', () => r(d)); });
+        try { body = JSON.parse(raw); } catch(_) {}
+      }
     }
 
     const json = (data, code = 200) => {
@@ -444,10 +453,17 @@ function startLocalServer() {
 
     // ── Alles andere → Proxy zu Vercel ────────────────────────────────────
     try {
+      const isNoBody = ['GET', 'DELETE'].includes(req.method);
       const proxyRes = await fetch(`${API}${pathname}${url.search}`, {
         method: req.method,
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${tok}` },
-        body: ['GET', 'DELETE'].includes(req.method) ? undefined : JSON.stringify(body),
+        headers: {
+          'Authorization': `Bearer ${tok}`,
+          // multipart: Content-Type mit boundary 1:1 weitergeben; sonst JSON
+          ...(rawBodyBuffer
+            ? { 'Content-Type': contentType }
+            : { 'Content-Type': 'application/json' }),
+        },
+        body: isNoBody ? undefined : (rawBodyBuffer || JSON.stringify(body)),
       });
       const proxyText = await proxyRes.text();
       res.writeHead(proxyRes.status, {
@@ -1551,6 +1567,10 @@ async function executeTaskFromQueue(task) {
 
       const { search_patterns, source_dirs, target_filename, target_format = 'xlsx', action, instruction, append_if_exists, custom_headers } = parsed;
 
+      // ── Profil laden (brauchen wir immer, auch bei create_excel) ────────
+      if (!userProfileSettings.company_name) await loadUserProfileSettings().catch(() => {});
+      const ftProfile = userProfileSettings;
+
       // ── create_excel: direkt neue Datei erstellen, kein Suchen ───────
       const isDirectCreate = action === 'create_excel';
 
@@ -1712,10 +1732,6 @@ async function executeTaskFromQueue(task) {
 
       // ── 3. OUTPUT BAUEN ──────────────────────────────────────────────
       await ftLog(`✍️ Schreibe ${target_filename || 'Ausgabedatei'}... Zeile für Zeile, wie ein Buchhalter der nie schläft...`);
-
-      // Profil sicherstellen
-      if (!userProfileSettings.company_name) await loadUserProfileSettings().catch(() => {});
-      const ftProfile = userProfileSettings;
 
       if (allExtracted.length === 0) {
         await ftLog('😐 Konnte keinen lesbaren Inhalt aus den Dateien extrahieren. Gescannte PDFs ohne OCR? Da kann ich nichts lesen.', 'error');
