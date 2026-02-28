@@ -69,8 +69,12 @@ let currentCalibrationElement = null;
 
 app.disableHardwareAcceleration();
 
-// Ganz oben nach den let-Variablen einfügen
-const runningTasks = new Set();
+// Task-Guard: id → startTime (ms). Tasks older than 5min werden als stale entfernt.
+const runningTasks = new Map();
+const RUNNING_TASK_TTL = 5 * 60 * 1000; // 5 Minuten
+
+// Letztes aktives Artifact (vom Frontend via IPC gesetzt, für Voice-Routing)
+let lastActiveArtifact = null;
 
 // ═══════════════════════════════════════
 // DEVICE ID
@@ -1278,12 +1282,20 @@ function stopKeepAlive() {
 }
 
 async function executeTaskFromQueue(task) {
-  // GUARD — Task nur einmal ausführen
+  // GUARD — Task nur einmal ausführen (mit 5-Minuten-Stale-TTL)
   if (runningTasks.has(task.id)) {
-    console.log(`⏭️ Skip — läuft bereits: ${task.id}`);
-    return;
+    const startedAt = runningTasks.get(task.id);
+    const elapsed = Date.now() - startedAt;
+    if (elapsed < RUNNING_TASK_TTL) {
+      console.log(`⏭️ Skip — läuft bereits: ${task.id.substring(0,8)} (${Math.round(elapsed/1000)}s)`);
+      return;
+    }
+    // Stale task — war zu lange "running", entfernen und neu starten
+    console.log(`🗑️ Stale Task ${task.id.substring(0,8)} nach ${Math.round(elapsed/1000)}s entfernt → Retry`);
+    runningTasks.delete(task.id);
+    await markTaskComplete(task.id, 'failed').catch(() => {});
   }
-  runningTasks.add(task.id);
+  runningTasks.set(task.id, Date.now());
 
   console.log(`⚙️ Executing: ${task.command.substring(0, 80)}`);
   try {
@@ -1994,12 +2006,17 @@ async function executeTaskFromQueue(task) {
         } else {
           // ── 3. Fallback — alter execute Weg ──
           console.log(`⚡ Dispatcher kein Match → execute Fallback`);
+          if (!userToken || !sc) {
+            console.warn(`⚠️ Fallback skip: kein Token oder Screenshot — Task wird als failed markiert`);
+            await markTaskComplete(task.id, 'failed');
+            return;
+          }
           const scaleX = realW / 1280;
           const scaleY = realH / 720;
           const response = await fetch(`${API}/api/agent/execute`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: userToken, task: task.command, screenshot: sc, screen_size: { width: 1280, height: 720 } })
+            body: JSON.stringify({ token: userToken, task: task.command, screenshot: sc, screen_size: { width: realW, height: realH } })
           });
           const data = await response.json();
           if (!data.success) throw new Error(data.message);
@@ -4369,11 +4386,33 @@ ipcMain.handle('voice-command', async (event, { text }) => {
   console.log(`🎤 Voice Befehl: "${command}"`);
 
   try {
-    // Kontext aufnehmen damit MIRA weiß in welcher App sie sich befindet
+    // ── Artifact-Insert Erkennung ──
+    // Wenn ein aktives Artifact gesetzt ist und der Befehl wie "füge X Y ein" klingt,
+    // direkt als file-task routen statt durch den Dispatcher (der es nicht versteht)
+    const isInsertCmd = /\b\d+\b/.test(command) &&
+      /\b(f[üu]g\w*|erg[äa]nz\w*|hinzu\w*|eintrag\w*|trag\w*|füg\w*)\b/i.test(command);
+
+    if (isInsertCmd && lastActiveArtifact) {
+      console.log(`📂 Voice → file-task (Artifact: ${lastActiveArtifact.name})`);
+      const fileCmd = `${command} [ARBEITE_IN_ARTIFACT: ${lastActiveArtifact.name}, ID: ${lastActiveArtifact.id}]`;
+      const res = await fetch(`${API}/api/agent/file-task`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ command: fileCmd })
+      });
+      const data = await res.json();
+      if (data.success && data.task_id) {
+        console.log(`✅ Voice file-task eingereiht: ${data.task_id}`);
+        // Frontend informieren damit es den file-task-progress pollt
+        if (mainWindow) mainWindow.webContents.send('start-file-task-poll', { task_id: data.task_id });
+        return { queued: true, file_task: true, task_id: data.task_id };
+      }
+    }
+
+    // ── Normaler Weg: Kontext aufnehmen + in Queue einreihen ──
     const ctx = contextManager.captureState();
     const ctxString = contextManager.toPromptString(ctx);
 
-    // Befehl + Kontext als Task an das Backend schicken
     const res = await fetch(`${API}/api/agent/queue`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -4397,6 +4436,13 @@ ipcMain.handle('voice-command', async (event, { text }) => {
     console.error(`❌ voice-command Fehler:`, e.message);
     return { queued: false, reason: e.message };
   }
+});
+
+// ── Aktives Artifact vom Frontend synchronisieren (für Voice-Routing) ──
+ipcMain.handle('set-active-artifact', (event, artifact) => {
+  lastActiveArtifact = artifact; // null zum Löschen, oder { id, name, type }
+  console.log(artifact ? `📌 Active Artifact: ${artifact.name}` : `📌 Active Artifact: (keins)`);
+  return true;
 });
 
 
