@@ -1592,6 +1592,7 @@ async function startTraining(command) {
   let voiceTranscript   = '';
   let voiceCountdownInt = null;
   let voiceContextMode  = false; // true = followup nach "Hey MIRA"
+  let wakeWordPending   = false; // true = onWakeWord läuft gerade (verhindert Doppel-Trigger)
 
   // ── MIRA spricht (TTS) — opt-in, IPC-native zuerst ──────────────────────
   function miraSay(text, onDone) {
@@ -1707,8 +1708,25 @@ async function startTraining(command) {
     };
 
     voiceRecognition.onerror = (evt) => {
-      if (evt.error !== 'no-speech') {
-        console.warn('Speech recognition error:', evt.error);
+      if (evt.error === 'no-speech') return; // normal, ignorieren
+      console.warn('Speech recognition error:', evt.error);
+      if (evt.error === 'network' && voiceActive) {
+        // Network-Error = SR-Verbindung zu Google abgebrochen → sofort neu starten
+        setTimeout(() => {
+          if (voiceActive) {
+            try { voiceRecognition.start(); } catch(_) {}
+          }
+        }, 300);
+      } else if (evt.error === 'not-allowed') {
+        toast('Mikrofon-Zugriff verweigert', 'error');
+        stopVoice(false);
+      }
+    };
+
+    // SR manchmal unerwartet gestoppt (z.B. nach network-reset) → neu starten
+    voiceRecognition.onend = () => {
+      if (voiceActive) {
+        try { voiceRecognition.start(); } catch(_) {}
       }
     };
 
@@ -1794,7 +1812,8 @@ async function startTraining(command) {
 
     const text = voiceTranscript.trim();
     const wasContextMode = voiceContextMode;
-    voiceContextMode = false; // immer zurücksetzen
+    voiceContextMode  = false; // immer zurücksetzen
+    wakeWordPending   = false; // flow abgeschlossen
 
     if (send && text.length > 1) {
       updateVoiceTranscriptUI(text, true);
@@ -1957,6 +1976,7 @@ async function startTraining(command) {
   }
 
   async function onWakeWord() {
+    wakeWordPending = true; // sofort sperren gegen Doppel-Trigger
     // Sofortiges "Ja?" — dann Bildschirm scannen
     showMiraBubble('Ja?', 'speaking');
     miraSay('Ja?', async () => {
@@ -1981,8 +2001,8 @@ async function startTraining(command) {
 
   // ── Keyboard-Hotkey: Cmd+Shift+M → Hey MIRA Flow ─────────────────────────
   ipcRenderer.on('hey-mira-hotkey', () => {
-    if (voiceActive) { stopVoice(true); return; }   // 2. Druck = stop + senden
-    if (voiceContextMode) return;                    // Kontext läuft noch, ignorieren
+    if (voiceActive) { stopVoice(true); return; }                    // 2. Druck = stop + senden
+    if (voiceContextMode || wakeWordPending) return;                 // läuft bereits, ignorieren
     onWakeWord();
   });
 
