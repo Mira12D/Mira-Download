@@ -383,10 +383,13 @@ function startLocalServer() {
     }
 
     // ── GET /api/artifacts ───────────────────────────────────────────────
+    // Schema: id, name, type, metadata(jsonb), data_base64, created_at, updated_at
     if (pathname === '/api/artifacts' && req.method === 'GET') {
-      const rows = await directSupabase('GET', `/artifacts?user_id=eq.${userId}&select=id,name,type,rows,pages,preview_data,created_at,updated_at&order=updated_at.desc&limit=50`);
-      if (Array.isArray(rows)) return json({ success: true, artifacts: rows }); // Supabase gibt Array zurück
-      // rows ist null (kein _dk) oder Fehler-Objekt (Tabelle fehlt etc.) → Vercel-Fallback
+      const rows = await directSupabase('GET', `/artifacts?user_id=eq.${userId}&select=id,name,type,metadata,created_at,updated_at&order=updated_at.desc&limit=50`);
+      if (Array.isArray(rows)) {
+        const artifacts = rows.map(a => ({ ...a, rows: a.metadata?.rows || 0, pages: a.metadata?.pages || 0, preview_data: a.metadata?.preview_data || null }));
+        return json({ success: true, artifacts });
+      }
       try {
         const r = await fetch(`${API}/api/artifacts`, { headers: { 'Authorization': `Bearer ${tok}` } });
         return json(await r.json());
@@ -400,27 +403,29 @@ function startLocalServer() {
 
       if (req.method === 'GET') {
         const rows = await directSupabase('GET', `/artifacts?id=eq.${aId}&user_id=eq.${userId}&limit=1`);
-        if (rows?.[0]) return json({ success: true, artifact: rows[0] });
+        if (rows?.[0]) {
+          const a = rows[0];
+          return json({ success: true, artifact: { ...a, rows: a.metadata?.rows || 0, pages: a.metadata?.pages || 0, preview_data: a.metadata?.preview_data || null } });
+        }
         try {
           const r = await fetch(`${API}/api/artifacts/${aId}`, { headers: { 'Authorization': `Bearer ${tok}` } });
           return json(await r.json());
         } catch(e) { return json({ success: false, error: 'Not found' }, 404); }
       }
 
-      if (req.method === 'POST') {
-        const row = await directSupabase('POST', `/artifacts`, {
-          user_id: userId, ...body,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        });
-        if (row?.[0]) return json({ success: true, artifact: row[0] });
-      }
-
       if (req.method === 'PATCH') {
-        const row = await directSupabase('PATCH', `/artifacts?id=eq.${aId}&user_id=eq.${userId}`, {
-          ...body, updated_at: new Date().toISOString()
-        });
-        if (row?.[0]) return json({ success: true, artifact: row[0] });
+        // metadata mergen
+        const existingRows = await directSupabase('GET', `/artifacts?id=eq.${aId}&user_id=eq.${userId}&select=metadata&limit=1`);
+        const oldMeta = existingRows?.[0]?.metadata || {};
+        const newMeta = { ...oldMeta };
+        if (body.rows         !== undefined) newMeta.rows         = body.rows;
+        if (body.pages        !== undefined) newMeta.pages        = body.pages;
+        if (body.preview_data !== undefined) newMeta.preview_data = body.preview_data;
+        const patch = { metadata: newMeta, updated_at: new Date().toISOString() };
+        if (body.data_base64 !== undefined) patch.data_base64 = body.data_base64;
+        if (body.name        !== undefined) patch.name        = body.name;
+        const row = await directSupabase('PATCH', `/artifacts?id=eq.${aId}&user_id=eq.${userId}`, patch);
+        if (row?.[0]) return json({ success: true, artifact: { ...row[0], rows: newMeta.rows || 0, pages: newMeta.pages || 0, preview_data: newMeta.preview_data || null } });
         try {
           const r = await fetch(`${API}/api/artifacts/${aId}`, {
             method: 'PATCH',
@@ -437,14 +442,16 @@ function startLocalServer() {
       }
     }
 
-    // POST /api/artifacts (ohne :id) ─────────────────────────────────────
+    // POST /api/artifacts (ohne :id oder mit :id) ─────────────────────────
     if (pathname === '/api/artifacts' && req.method === 'POST') {
+      const { name, type, data_base64, preview_data, rows, pages } = body;
+      const metadata = { rows: rows || 0, pages: pages || 0, preview_data: preview_data || null };
       const row = await directSupabase('POST', `/artifacts`, {
-        user_id: userId, ...body,
+        user_id: userId, name, type, data_base64, metadata,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       });
-      if (row?.[0]) return json({ success: true, artifact: row[0] });
+      if (row?.[0]) return json({ success: true, artifact: { ...row[0], rows: rows || 0, pages: pages || 0, preview_data: preview_data || null } });
       try {
         const r = await fetch(`${API}/api/artifacts`, {
           method: 'POST',
