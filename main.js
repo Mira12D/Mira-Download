@@ -4244,6 +4244,89 @@ async function executeRouteStep(step) {
       break;
     }
 
+    case 'fill_field': {
+      const fieldName  = step.field_name || step.konzept || '';
+      const fieldValue = step.value || '';
+      if (!fieldName || !fieldValue) break;
+      console.log(`✍️ fill_field: "${fieldName}" → "${fieldValue}"`);
+      // Tier 1: AX suchen
+      try {
+        const el = await axLayer.findElement(fieldName, {});
+        if (el && el.x != null) {
+          const fx = scaleWithCalibration(el.x, el.y).x;
+          const fy = scaleWithCalibration(el.x, el.y).y;
+          await mouse.setPosition({ x: Math.round(fx), y: Math.round(fy) });
+          await mouse.leftClick();
+          await sleep(200);
+          await keyboard.type(fieldValue);
+          contextManager.invalidate();
+          console.log(`✅ fill_field AX: "${fieldName}"`);
+          break;
+        }
+      } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
+      // Tier 2: mini-find via Screenshot
+      try {
+        const sc2 = await takeCompressedScreenshot();
+        const fRes = await fetch(`${API}/api/brain/mini-find`, {
+          method: 'POST',
+          headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ screenshot: sc2, target: fieldName, context: contextManager.toShortString(contextManager.captureState()) })
+        });
+        const fData = await fRes.json();
+        if (fData.x != null) {
+          const sx = Math.round(fData.x * (calibration?.scaleX || 1));
+          const sy = Math.round(fData.y * (calibration?.scaleY || 1));
+          await mouse.setPosition({ x: sx, y: sy });
+          await mouse.leftClick();
+          await sleep(200);
+          await keyboard.type(fieldValue);
+          contextManager.invalidate();
+          console.log(`✅ fill_field mini-find: "${fieldName}"`);
+        }
+      } catch(mfE) { console.warn(`⚠️ fill_field mini-find: ${mfE.message}`); }
+      break;
+    }
+
+    case 'screen_fill_from_file': {
+      const srcFile = step.source_file;
+      const srcDir  = step.source_dir;
+      console.log(`📋 screen_fill_from_file: "${srcFile}"`);
+      if (!srcFile) { console.warn('⚠️ screen_fill_from_file: kein source_file'); break; }
+      // 1. Datei finden
+      const dirs = srcDir ? [srcDir] : undefined;
+      const foundF = await ftFindFiles([srcFile], dirs);
+      if (!foundF.length) { console.warn(`❌ "${srcFile}" nicht gefunden`); break; }
+      // 2. Datei lesen
+      const fileContent = await ftReadFile(foundF[0].path);
+      if (!fileContent) { console.warn('❌ Datei leer'); break; }
+      // 3. AX State für Formularfelder
+      const axSnap  = contextManager.captureState(true);
+      const axShort = contextManager.toShortString(axSnap);
+      // 4. AI: Dateiinhalt → Feldzuordnung
+      const matchRes = await fetch(`${API}/api/brain/mini-find`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mode: 'form_match',
+          file_content: fileContent.substring(0, 2500),
+          ax_context: axShort,
+          instruction: 'Ordne den Dateiinhalt den sichtbaren Formularfeldern zu. Antworte NUR als JSON-Array: [{"field":"Feldname","value":"Wert"},...]'
+        })
+      });
+      const matchData = await matchRes.json();
+      const fieldMap  = Array.isArray(matchData.fields) ? matchData.fields
+                      : Array.isArray(matchData.result) ? matchData.result
+                      : Array.isArray(matchData) ? matchData : [];
+      console.log(`📋 Form-Match: ${fieldMap.length} Felder`);
+      // 5. Felder ausfüllen
+      for (const { field, value } of fieldMap) {
+        if (!field || value == null) continue;
+        await executeStep({ action: 'fill_field', field_name: field, value: String(value), command: `${field} → ${value}` }, taskId);
+        await sleep(350);
+      }
+      break;
+    }
+
     default:
       console.log(`⚠️ Unbekannter Step-Typ: ${step.action}`);
   }
