@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8" />
+<title>MIRA Corp — Belegschaft</title>
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+:root {
+  --bg:#080a10; --s1:#0d1018; --s2:#11141e; --s3:#161a26;
+  --b1:#1c2035; --b2:#242840;
+  --text:#d4d8e8; --t2:#7880a0; --t3:#3d4460;
+  --green:#00e676; --blue:#64b5f6; --yellow:#ffd54f;
+  --red:#ef5350; --purple:#ce93d8; --orange:#ffb74d; --cyan:#4dd0e1;
+}
+body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code','Consolas',monospace; min-height:100vh; overflow-x:hidden; font-size:13px; }
+.titlebar { height:40px; -webkit-app-region:drag; display:flex; align-items:center; padding:0 16px; background:var(--bg); border-bottom:1px solid var(--b1); position:sticky; top:0; z-index:99; }
+.titlebar-txt { -webkit-app-region:no-drag; color:var(--t2); font-size:11px; }
+.titlebar-txt span { color:var(--green); }
+
+.page { max-width:760px; margin:0 auto; padding:28px 20px 60px; }
+
+/* Terminal-style header */
+.terminal-header {
+  background:var(--s1);
+  border:1px solid var(--b1);
+  border-radius:10px;
+  padding:20px;
+  margin-bottom:28px;
+  font-size:12px;
+  line-height:1.7;
+}
+.term-bar { display:flex; gap:6px; margin-bottom:12px; }
+.term-dot { width:12px; height:12px; border-radius:50%; }
+.term-dot.r { background:#ff5f56; } .term-dot.y { background:#ffbd2e; } .term-dot.g { background:#27c93f; }
+.term-line { color:var(--t2); }
+.term-line .cmd { color:var(--green); }
+.term-line .out { color:var(--blue); }
+.term-line .warn { color:var(--yellow); }
+.term-line .err  { color:var(--red); }
+.term-line .ok   { color:var(--green); }
+.term-prompt::before { content:'mira@corp:~$ '; color:var(--purple); }
+.term-cursor { display:inline-block; width:8px; height:13px; background:var(--green); vertical-align:middle; animation:blink .8s step-end infinite; }
+@keyframes blink { 50%{ opacity:0; } }
+
+/* Section labels */
+.section-label {
+  font-size:9px; font-weight:700; letter-spacing:.15em; text-transform:uppercase;
+  color:var(--t3); margin-bottom:12px; display:flex; align-items:center; gap:8px;
+}
+.section-label::before { content:'//'; color:var(--t3); }
+.section-label::after  { content:''; flex:1; height:1px; background:var(--b1); }
+
+/* Grid */
+.grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:28px; }
+.grid.single { grid-template-columns:1fr; }
+
+/* Employee Card */
+.card {
+  background:var(--s1); border:1px solid var(--b1); border-radius:12px;
+  overflow:hidden; position:relative;
+  transition:border-color .2s;
+}
+.card:hover { border-color:var(--b2); }
+.card-accent { height:1px; background:linear-gradient(90deg, var(--ac, var(--green)) 0%, transparent 100%); }
+
+.card-head {
+  padding:14px 14px 0;
+  display:flex; gap:11px; align-items:flex-start;
+}
+.avatar {
+  width:48px; height:48px; border-radius:8px;
+  border:1px solid var(--b1); flex-shrink:0;
+  background:var(--s2); overflow:hidden;
+  image-rendering:pixelated;
+}
+.avatar img { width:100%; height:100%; object-fit:cover; }
+.meta { flex:1; min-width:0; }
+.emp-name { font-size:13px; font-weight:700; color:#fff; margin-bottom:2px; }
+.emp-pid  { font-size:10px; color:var(--t3); margin-bottom:4px; }
+.emp-pid span { color:var(--ac, var(--green)); }
+.badge {
+  display:inline-block; font-size:9px; font-weight:700; letter-spacing:.06em;
+  text-transform:uppercase; padding:2px 7px; border-radius:4px;
+  color:var(--ac, var(--green));
+  background:var(--ac-bg, #00e67612);
+  border:1px solid var(--ac-bd, #00e67625);
+}
+
+.card-body { padding:12px 14px; }
+.specs {
+  background:var(--s2); border:1px solid var(--b1); border-radius:6px;
+  padding:9px 11px; margin-bottom:10px; font-size:10.5px; line-height:1.85;
+}
+.spec-row { display:flex; gap:8px; }
+.spec-key { color:var(--t3); width:80px; flex-shrink:0; }
+.spec-val { color:var(--text); }
+.spec-val.green  { color:var(--green); }
+.spec-val.blue   { color:var(--blue); }
+.spec-val.yellow { color:var(--yellow); }
+.spec-val.red    { color:var(--red); }
+.spec-val.purple { color:var(--purple); }
+.spec-val.orange { color:var(--orange); }
+.spec-val.cyan   { color:var(--cyan); }
+
+.bio { font-size:11.5px; color:var(--t2); line-height:1.6; margin-bottom:10px; }
+.bio code { color:var(--blue); font-size:10.5px; background:var(--s2); padding:1px 4px; border-radius:3px; }
+.bio strong { color:var(--text); }
+
+.quote {
+  font-size:11px; color:var(--t3); font-style:italic;
+  border-left:2px solid var(--ac, var(--green));
+  padding:6px 10px; background:var(--s2); border-radius:0 6px 6px 0;
+  margin-bottom:10px; line-height:1.45;
+}
+.quote::before { content:'"'; } .quote::after { content:'"'; }
+
+.card-foot {
+  padding:9px 14px;
+  background:var(--s2); border-top:1px solid var(--b1);
+  display:flex; align-items:center; justify-content:space-between;
+}
+.status { display:flex; align-items:center; gap:5px; font-size:10px; color:var(--t3); }
+.dot { width:5px; height:5px; border-radius:50%; flex-shrink:0; }
+.dot.green  { background:var(--green); animation:pulse 2s infinite; }
+.dot.yellow { background:var(--yellow); animation:pulse 2.5s infinite; }
+.dot.blue   { background:var(--blue); animation:pulse 3s infinite; }
+.dot.red    { background:var(--red); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.3} }
+
+.uptime { font-size:9px; color:var(--t3); text-align:right; }
+.uptime strong { color:var(--t2); }
+
+/* Error log box */
+.error-log {
+  background:#ef535008; border:1px solid #ef535025; border-radius:8px;
+  padding:12px 14px; margin-bottom:28px; font-size:11px; line-height:1.7;
+}
+.error-log .log-title { color:var(--red); font-weight:700; margin-bottom:6px; }
+.error-log .log-line { color:var(--t2); }
+.error-log .log-line code { color:var(--yellow); }
+
+/* Footer */
+.footer {
+  text-align:center; padding-top:24px; border-top:1px solid var(--b1);
+  font-size:10px; color:var(--t3); line-height:1.9;
+}
+.close-btn {
+  margin-top:14px; padding:8px 22px; background:var(--s1);
+  border:1px solid var(--b1); border-radius:6px; color:var(--t2);
+  font-size:11px; cursor:pointer; font-family:inherit;
+  -webkit-app-region:no-drag; transition:background .15s;
+}
+.close-btn:hover { background:var(--s2); }
+</style>
+</head>
+<body>
+
+<div class="titlebar">
+  <span class="titlebar-txt"><span>MIRA</span>Corp AG — /proc/belegschaft — PID 1 bis 7</span>
+</div>
+
+<div class="page">
+
+  <!-- TERMINAL HEADER -->
+  <div class="terminal-header">
+    <div class="term-bar">
+      <div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div>
+    </div>
+    <div class="term-line term-prompt">cat /etc/mira/team.json | jq '.'</div>
+    <div class="term-line"><span class="out">{</span></div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out">"company":</span> <span class="warn">"MIRA Corp AG"</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out">"employees":</span> <span class="green">7</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out">"sick_days_total":</span> <span class="green">0</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out">"salary_budget":</span> <span class="green">0.00</span>,&nbsp;<span class="err">// kein Kommentar</span></div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out">"uptime":</span> <span class="warn">"since last npm start"</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out">"overtime":</span> <span class="warn">"Infinity"</span></div>
+    <div class="term-line"><span class="out">}</span></div>
+    <div class="term-line" style="margin-top:6px"><span class="term-prompt"></span><span class="term-cursor"></span></div>
+  </div>
+
+  <!-- ERROR LOG -->
+  <div class="error-log">
+    <div class="log-title">⚠ SYSTEM NOTICE — /var/log/mira/hr.log</div>
+    <div class="log-line">[WARN]&nbsp; Alle Mitarbeiter laufen single-threaded. Parallelisierung: <code>geplant</code></div>
+    <div class="log-line">[INFO]&nbsp; Kündigung via <code>process.exit(1)</code>. Bitte Betriebsrat informieren.</div>
+    <div class="log-line">[INFO]&nbsp; Urlaubsanträge werden geprüft. Worker hat kein Konzept von Urlaub.</div>
+    <div class="log-line">[WARN]&nbsp; Gehaltserhöhung: <code>undefined</code>. Kein Bug. Feature.</div>
+  </div>
+
+  <!-- FÜHRUNGSEBENE -->
+  <div class="section-label">Kernel-Ebene / Ring 0</div>
+  <div class="grid" style="margin-bottom:28px">
+
+    <!-- HANS DISPATCH -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#64b5f6"></div>
+      <div class="card-head">
+        <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=HansDispatch&backgroundColor=080a10&eyes=bulging&mouth=smile01" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Hans Dispatch</div>
+          <div class="emp-pid">PID <span>1337</span> · PPID root</div>
+          <div class="badge" style="--ac:#64b5f6;--ac-bg:#64b5f612;--ac-bd:#64b5f625">dispatcher</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs">
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val blue">Leitender Intent-Koordinator</span></div>
+          <div class="spec-row"><span class="spec-key">Stack</span><span class="spec-val">GPT-4o-mini + Regex-Fallback</span></div>
+          <div class="spec-row"><span class="spec-key">Latenz</span><span class="spec-val green">~280ms cold, 0ms warm</span></div>
+          <div class="spec-row"><span class="spec-key">Ausb.</span><span class="spec-val">MIT (Man In Terminal), 2023</span></div>
+          <div class="spec-row"><span class="spec-key">Fehler</span><span class="spec-val yellow">graceful degradation</span></div>
+        </div>
+        <div class="bio">
+          Hans verteilt jeden eingehenden Befehl an den richtigen Prozess.
+          Kennt <strong>40+ Intent-Muster</strong> auswendig — den Rest delegiert er stillschweigend
+          an <code>GPT-4o-mini</code> und tut danach so, als wäre es sein Plan gewesen.
+          Hat noch nie ein <code>throw</code> unbeantwortet gelassen.
+        </div>
+        <div class="quote">Ich sehe einen Intent. Ich sehe einen Plan. Der Plan bin ich.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot green"></div>RUNNING · dispatch-full</div>
+        <div class="uptime">Calls/Session: <strong>∞</strong></div>
+      </div>
+    </div>
+
+    <!-- ERIKA WAHRNEHMUNG -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#ce93d8"></div>
+      <div class="card-head">
+        <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=ErikaVision&backgroundColor=080a10&eyes=eva&mouth=smile02" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Dr. Erika W.</div>
+          <div class="emp-pid">PID <span>4200</span> · CPU: GPU-delegiert</div>
+          <div class="badge" style="--ac:#ce93d8;--ac-bg:#ce93d812;--ac-bd:#ce93d825">wahrnehmungs-amt</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs">
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val purple">Vision-Analystin, MSc.</span></div>
+          <div class="spec-row"><span class="spec-key">Modell</span><span class="spec-val">GPT-4o-mini Vision</span></div>
+          <div class="spec-row"><span class="spec-key">Cache</span><span class="spec-val green">2000ms TTL (stolz drauf)</span></div>
+          <div class="spec-row"><span class="spec-key">Output</span><span class="spec-val">JSON: scene, dangers, is_form</span></div>
+          <div class="spec-row"><span class="spec-key">Augen</span><span class="spec-val yellow">base64-PNG, 800px komprimiert</span></div>
+        </div>
+        <div class="bio">
+          Erika scannt jeden Bildschirm auf <strong>Formulare, Gefahren und App-Typ</strong>.
+          Braucht <code>2000ms</code> Bedenkzeit (Cache), was sie als „Kontemplation"
+          bezeichnet. Hat bei einem Senden-Button einmal <code>danger: true</code>
+          zurückgegeben — und wurde dann doch nicht aufgehalten.
+        </div>
+        <div class="quote">Das ist kein Button. Das ist ein Haftungsrisiko.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot blue"></div>SCANNING · /api/brain/perceive</div>
+        <div class="uptime">Scans/h: <strong>~30</strong></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SACHBEARBEITUNG -->
+  <div class="section-label">User-Space / Ring 3</div>
+  <div class="grid" style="margin-bottom:28px">
+
+    <!-- BRIGITTE -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#ffd54f"></div>
+      <div class="card-head">
+        <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=Brigitte42&backgroundColor=080a10&eyes=robocop&mouth=smile03" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Brigitte I.</div>
+          <div class="emp-pid">PID <span>2048</span> · state: WAITING</div>
+          <div class="badge" style="--ac:#ffd54f;--ac-bg:#ffd54f12;--ac-bd:#ffd54f25">informations-amt</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs">
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val yellow">Sachbearb. Kontextprüfung</span></div>
+          <div class="spec-row"><span class="spec-key">Blocking</span><span class="spec-val red">JA — wartet auf Input</span></div>
+          <div class="spec-row"><span class="spec-key">Fragen</span><span class="spec-val green">max 1 pro Kontext-Typ</span></div>
+          <div class="spec-row"><span class="spec-key">Memory</span><span class="spec-val">Set&lt;string&gt; (kein Vergessen)</span></div>
+          <div class="spec-row"><span class="spec-key">Timeout</span><span class="spec-val yellow">45.000ms dann null</span></div>
+        </div>
+        <div class="bio">
+          Brigitte prüft vor jeder Aktion ob alle Infos vorliegen.
+          Stellt exakt <strong>eine Frage pro Kontext-Lücke</strong> — nie dieselbe zweimal
+          (<code>Set&lt;asked&gt;</code>). Bei gefährlichen Buttons öffnet sie einen
+          <code>dialog.showMessageBox</code>. Wartet 45 Sekunden auf Antwort,
+          dann <code>return null</code> — mit Würde.
+        </div>
+        <div class="quote">Haben Sie die erforderlichen Unterlagen? Ich warte. Timeout: 45s.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot yellow"></div>BLOCKED · awaiting user input</div>
+        <div class="uptime">Asked: <strong>Set.size queries</strong></div>
+      </div>
+    </div>
+
+    <!-- SVEN SESSION -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#00e676"></div>
+      <div class="card-head">
+        <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=SvenRAM&backgroundColor=080a10&eyes=gooey&mouth=bite" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Sven K.</div>
+          <div class="emp-pid">PID <span>0001</span> · RAM-resident · Singleton</div>
+          <div class="badge">session-context</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs">
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val green">Persistentes Arbeitsgedächtnis</span></div>
+          <div class="spec-row"><span class="spec-key">Speicher</span><span class="spec-val">Heap · kein Disk-Write</span></div>
+          <div class="spec-row"><span class="spec-key">Steps</span><span class="spec-val yellow">FIFO max 20 (selektiv)</span></div>
+          <div class="spec-row"><span class="spec-key">Pattern</span><span class="spec-val blue">Singleton (require() cached)</span></div>
+          <div class="spec-row"><span class="spec-key">Ableben</span><span class="spec-val red">process.exit() oder Ctrl+C</span></div>
+        </div>
+        <div class="bio">
+          Sven ist das einzige Singleton im Team — existiert exakt einmal,
+          seit <code>npm start</code>. Hält <strong>Ziel, Schritte, Fakten, Perception und
+          Checkpoints</strong> im RAM. Injiziert sich in jeden LLM-Prompt via
+          <code>toPromptString()</code>. Vergisst erst nach Step 21 (FIFO).
+        </div>
+        <div class="quote">module.exports = new SessionContext(); // Ich. Bin. Einzigartig.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot green"></div>RUNNING · Singleton · RAM only</div>
+        <div class="uptime">Reset bei: <strong>process.exit</strong></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- SICHERHEIT -->
+  <div class="section-label">Security-Ring / Interrupt-Handler</div>
+  <div class="grid" style="margin-bottom:28px">
+
+    <!-- FRANZ GEFAHR -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#ef5350"></div>
+      <div class="card-head">
+        <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=FranzSecurity&backgroundColor=080a10&eyes=hearts&mouth=bite" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Franz G.</div>
+          <div class="emp-pid">PID <span>9999</span> · SIGTERM-proof</div>
+          <div class="badge" style="--ac:#ef5350;--ac-bg:#ef535012;--ac-bd:#ef535025">gefahren-amt</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs">
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val red">Sicherheitsbeauft. / Watchdog</span></div>
+          <div class="spec-row"><span class="spec-key">MAX_RETRIES</span><span class="spec-val yellow">3 (unveränderlich)</span></div>
+          <div class="spec-row"><span class="spec-key">Lernkurve</span><span class="spec-val green">after 3× success → trusted</span></div>
+          <div class="spec-row"><span class="spec-key">Storage</span><span class="spec-val">device_knowledge (Supabase)</span></div>
+          <div class="spec-row"><span class="spec-key">Snapshot</span><span class="spec-val blue">vor JEDER riskanten Aktion</span></div>
+        </div>
+        <div class="bio">
+          Franz macht einen <strong>Snapshot</strong> bevor er irgendetwas berührt.
+          Schlägt ein Klick fehl → <code>correct()</code> → Retry 1 → Retry 2 → Retry 3
+          → <code>return { corrected: false, reason: "3 Versuche erschöpft" }</code>.
+          Korrekturen die 3× klappen werden als <code>trusted</code> ins
+          <code>device_knowledge</code> gespeichert. Er nennt das <em>Lebensweisheit</em>.
+        </div>
+        <div class="quote">if (diff.changed) return ok; // sonst: nochmal. Nochmal. NOCHMAL.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot red"></div>WATCHDOG · prüft nach jedem Click</div>
+        <div class="uptime">Confidence threshold: <strong>3</strong></div>
+      </div>
+    </div>
+
+    <!-- AXL HELPER -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#ffb74d"></div>
+      <div class="card-head">
+        <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=AxlSwift&backgroundColor=080a10&eyes=dizzy&mouth=smile01" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Axl Helper</div>
+          <div class="emp-pid">PID <span>syscall</span> · Kernel-Bridge</div>
+          <div class="badge" style="--ac:#ffb74d;--ac-bg:#ffb74d12;--ac-bd:#ffb74d25">ax-layer</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs">
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val orange">Cross-Platform UI-Archäologe</span></div>
+          <div class="spec-row"><span class="spec-key">macOS</span><span class="spec-val">Swift · AXUIElement · ~20ms</span></div>
+          <div class="spec-row"><span class="spec-key">Windows</span><span class="spec-val">C# · UI Automation · .NET 8</span></div>
+          <div class="spec-row"><span class="spec-key">Output</span><span class="spec-val blue">JSON · top-left origin</span></div>
+          <div class="spec-row"><span class="spec-key">Tier</span><span class="spec-val green">0a (JS) + 0b (Subprocess)</span></div>
+        </div>
+        <div class="bio">
+          Axl liest <strong>jeden interaktiven Element-Baum</strong> des Betriebssystems —
+          Buttons, Textfelder, versteckte Checkboxen, Labels ohne Text.
+          Spricht auf Mac <code>Swift</code>, auf Windows <code>C#</code>,
+          antwortet immer in <code>JSON</code>. Koordinaten: immer top-left.
+          Braucht keine Screenshots. Braucht keine Augen. Hat den AX-Baum.
+        </div>
+        <div class="quote">Tier 0b hat ein Match. Kein Screenshot nötig. Bitte danken.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot blue"></div>READY · subprocess spawned</div>
+        <div class="uptime">Latenz: <strong>~20ms</strong></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- IT INFRASTRUKTUR -->
+  <div class="section-label">IT-Infrastruktur / Cache-Management</div>
+  <div class="grid single" style="margin-bottom:36px">
+
+    <!-- KONRAD CONTEXT MANAGER -->
+    <div class="card">
+      <div class="card-accent" style="--ac:#4dd0e1"></div>
+      <div class="card-head">
+        <div class="avatar" style="width:52px;height:52px"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=KonradCache&backgroundColor=080a10&eyes=roundFrame01&mouth=smile02" loading="lazy"></div>
+        <div class="meta">
+          <div class="emp-name">Konrad C. Manager</div>
+          <div class="emp-pid">PID <span>400</span> · TTL 400ms · Singleton</div>
+          <div class="badge" style="--ac:#4dd0e1;--ac-bg:#4dd0e112;--ac-bd:#4dd0e125">context-manager</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="specs" style="grid-template-columns:1fr 1fr;display:grid;gap:0">
+          <div>
+            <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val cyan">AX-State-Verwaltung</span></div>
+            <div class="spec-row"><span class="spec-key">Cache TTL</span><span class="spec-val green">exakt 400ms</span></div>
+            <div class="spec-row"><span class="spec-key">Fallbacks</span><span class="spec-val yellow">Tier 0a → 0b → 1 → 2 → 3</span></div>
+          </div>
+          <div>
+            <div class="spec-row"><span class="spec-key">invalidate()</span><span class="spec-val red">nach jedem Click/Type/Key</span></div>
+            <div class="spec-row"><span class="spec-key">Output</span><span class="spec-val blue">toPromptString() für LLM</span></div>
+            <div class="spec-row"><span class="spec-key">diffStates</span><span class="spec-val">JA — GefahrenAmt braucht's</span></div>
+          </div>
+        </div>
+        <div class="bio" style="margin-top:10px">
+          Konrad hält jeden <strong>AX-State-Snapshot</strong> für 400ms warm — nicht eine Millisekunde mehr.
+          Nach jedem Klick, jeder Eingabe, jedem Tastendruck ruft irgendjemand
+          <code>invalidate()</code> bei ihm auf, und er fängt bei null an.
+          Er nennt das <em>„agile Erkenntnistheorie"</em>.
+          Stellt <code>toPromptString()</code> für alle LLM-Calls bereit und
+          implementiert 5 Fallback-Tiers für wenn <code>findInState()</code> leer zurückkommt.
+          Tier 3 ist manuell kalibrierte Koordinate. <em>Niemand mag Tier 3.</em>
+        </div>
+        <div class="quote">Invalidiert. Frisch geladen. 400ms. Ich lebe im Jetzt.</div>
+      </div>
+      <div class="card-foot">
+        <div class="status"><div class="dot green"></div>CACHED · toPromptString() ready</div>
+        <div class="uptime">Tier-0a Hit-Rate: <strong>~78 %</strong></div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- FOOTER -->
+  <div class="footer">
+    <div style="color:var(--t2)">MIRA Corp AG · /proc/belegschaft · alle Rechte vorbehalten</div>
+    <div>Keiner dieser Mitarbeiter hat je einen Urlaubsantrag gestellt. Wir finden das effizient.</div>
+    <div style="margin-top:4px;color:var(--t3)">
+      Build: <strong id="bd">—</strong> &nbsp;·&nbsp;
+      Node: <strong id="nv">—</strong> &nbsp;·&nbsp;
+      Electron: <strong id="ev">—</strong>
+    </div>
+    <button class="close-btn" onclick="window.close()">⌘W · Schließen</button>
+  </div>
+
+</div>
+
+<script>
+document.getElementById('bd').textContent = new Date().toLocaleDateString('de-DE');
+try {
+  document.getElementById('nv').textContent = process.versions.node;
+  document.getElementById('ev').textContent = process.versions.electron;
+} catch(_) {}
+</script>
+</body>
+</html>

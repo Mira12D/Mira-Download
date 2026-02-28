@@ -56,6 +56,7 @@ let calibrationWindow     = null;
 let pcTrainingWin         = null;
 let knowledgeBaseWindow   = null;
 let deviceKnowledgeWindow = null;
+let mitarbeiterWindow     = null;
 let userProfileWindow     = null;
 let templatesWindow       = null;
 let onboardingWindow      = null;
@@ -935,6 +936,23 @@ function createKnowledgeBaseWindow() {
   });
   knowledgeBaseWindow.loadFile('knowledge-base-overlay.html');
   knowledgeBaseWindow.on('closed', () => { knowledgeBaseWindow = null; });
+}
+
+function createMitarbeiterWindow() {
+  if (mitarbeiterWindow && !mitarbeiterWindow.isDestroyed()) {
+    mitarbeiterWindow.focus(); return;
+  }
+  mitarbeiterWindow = new BrowserWindow({
+    width: 800, height: 680,
+    title: 'MIRA Corp — Belegschaft',
+    frame: true, resizable: true,
+    minimizable: false, maximizable: true,
+    titleBarStyle: 'hiddenInset',
+    backgroundColor: '#080a10',
+    webPreferences: { nodeIntegration: true, contextIsolation: false }
+  });
+  mitarbeiterWindow.loadFile('mitarbeiter-overlay.html');
+  mitarbeiterWindow.on('closed', () => { mitarbeiterWindow = null; });
 }
 
 function createDeviceKnowledgeWindow() {
@@ -5196,6 +5214,9 @@ ipcMain.handle('kb-close', () => {
     knowledgeBaseWindow.close();
   }
 });
+
+// ── Mitarbeiter IPC ───────────────────────────────────────────────────────
+ipcMain.handle('open-mitarbeiter', () => { createMitarbeiterWindow(); });
 
 // ── Device Knowledge IPC ─────────────────────────────────────────────────
 ipcMain.handle('open-device-knowledge', () => {

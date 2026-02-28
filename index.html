@@ -805,6 +805,21 @@
 
     <div class="divider"></div>
 
+    <!-- ── TEAM-STRIP ── -->
+    <div onclick="ipcRenderer.invoke('open-mitarbeiter')" style="cursor:pointer;margin-bottom:4px">
+      <div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#3d4460;margin-bottom:8px">Unsere Mitarbeiter</div>
+      <div style="display:flex;gap:6px;align-items:center">
+        <img src="https://api.dicebear.com/9.x/bottts/svg?seed=HansDispatch&backgroundColor=080a10&eyes=bulging&mouth=smile01" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Hans Dispatch · Dispatcher" loading="lazy" />
+        <img src="https://api.dicebear.com/9.x/bottts/svg?seed=ErikaVision&backgroundColor=080a10&eyes=eva&mouth=smile02" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Dr. Erika W. · WahrnehmungsAmt" loading="lazy" />
+        <img src="https://api.dicebear.com/9.x/bottts/svg?seed=Brigitte42&backgroundColor=080a10&eyes=robocop&mouth=smile03" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Brigitte I. · InformationsAmt" loading="lazy" />
+        <img src="https://api.dicebear.com/9.x/bottts/svg?seed=SvenRAM&backgroundColor=080a10&eyes=gooey&mouth=bite" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Sven K. · SessionContext" loading="lazy" />
+        <img src="https://api.dicebear.com/9.x/bottts/svg?seed=FranzSecurity&backgroundColor=080a10&eyes=hearts&mouth=bite" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Franz G. · GefahrenAmt" loading="lazy" />
+        <div style="flex:1;font-size:10px;color:#3d4460;text-align:right;line-height:1.3">7 online<br>0 krank</div>
+      </div>
+    </div>
+
+    <div class="divider"></div>
+
     <!-- ── PASSIVES TRAINING (Feature 2) ── -->
     <div class="training-card clickable" id="training-card">
       <div class="training-header">
@@ -854,6 +869,7 @@
       🗺 Routen verwalten
     </button>
     <button class="btn btn-ghost clickable" onclick="goToCalibrate()">Desktop neu kalibrieren</button>
+    <button class="btn btn-ghost clickable" onclick="ipcRenderer.invoke('open-mitarbeiter')" style="margin-top:4px;border-color:#1c2035;color:#4a5068">👥 Unsere Mitarbeiter</button>
   </div>
 </div>
 
