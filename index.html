@@ -1632,14 +1632,15 @@ async function startTraining(command) {
     if (mode === 'voice_followup') {
       showMiraBubble(text, 'speaking');
       miraSay(text, () => {
-        // Beep + Toast → User weiß: jetzt reden!
-        playBeep(660, 120);
-        setTimeout(() => playBeep(880, 160), 140);
-        toast('🎙️ Jetzt sprechen…', 'info');
-        showMiraBubble('Ich höre… sprich jetzt', 'listening');
-        voiceContextMode = true;
+        voiceContextMode = true;   // VOR startVoice setzen!
         stopWakeWordListening();
-        setTimeout(() => startVoice(), 300);
+        startVoice(() => {
+          // Mic ist jetzt aktiv → Beep + UI update
+          playBeep(660, 120);
+          setTimeout(() => playBeep(880, 160), 140);
+          toast('🎙️ Jetzt sprechen…', 'info');
+          showMiraBubble('Ich höre… sprich jetzt', 'listening');
+        });
       });
     } else {
       // Chat-Modus: nur Transcript-Card
@@ -1657,7 +1658,7 @@ async function startTraining(command) {
     }
   }
 
-  async function startVoice() {
+  async function startVoice(onStarted) {
     if (voiceActive) return;
     stopWakeWordListening(); // sicherstellen dass Wake-Word-Rec nicht kollidiert
 
@@ -1715,6 +1716,9 @@ async function startTraining(command) {
     voiceRecognition.onspeechend = () => {};
 
     voiceRecognition.start();
+
+    // Mic ist jetzt aktiv → Callback feuern (Beep, Toast etc.)
+    if (onStarted) setTimeout(onStarted, 80);
 
     setVoiceUI(true);
     startSilenceLoop();
@@ -1963,16 +1967,24 @@ async function startTraining(command) {
       } catch(e) {
         showMiraBubble('Was kann ich tun?', 'speaking');
         miraSay('Was kann ich für dich tun?', () => {
-          showMiraBubble('Ich höre...', 'listening');
-          voiceContextMode = true;
-          setTimeout(() => startVoice(), 350);
+          voiceContextMode = true;   // VOR startVoice
+          startVoice(() => {
+            playBeep(660, 120);
+            setTimeout(() => playBeep(880, 160), 140);
+            showMiraBubble('Ich höre...', 'listening');
+            toast('🎙️ Jetzt sprechen…', 'info');
+          });
         });
       }
     });
   }
 
   // ── Keyboard-Hotkey: Cmd+Shift+M → Hey MIRA Flow ─────────────────────────
-  ipcRenderer.on('hey-mira-hotkey', () => { onWakeWord(); });
+  ipcRenderer.on('hey-mira-hotkey', () => {
+    if (voiceActive) { stopVoice(true); return; }   // 2. Druck = stop + senden
+    if (voiceContextMode) return;                    // Kontext läuft noch, ignorieren
+    onWakeWord();
+  });
 
   // ── TTS opt-in: Standard = aus ────────────────────────────────────────────
   let miraTtsEnabled = false;
