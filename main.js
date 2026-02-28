@@ -219,10 +219,11 @@ function startLocalServer() {
   if (localServer) return;
 
   localServer = http.createServer(async (req, res) => {
-    // ── CORS für Browser-Frontend ──
+    // ── CORS + Private Network Access (Chrome blockiert HTTPS→localhost ohne diesen Header) ──
     res.setHeader('Access-Control-Allow-Origin', '*');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Private-Network', 'true');
     if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
     const url     = new URL(req.url, `http://127.0.0.1:${LOCAL_PORT}`);
