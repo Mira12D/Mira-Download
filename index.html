@@ -1582,13 +1582,20 @@ async function startTraining(command) {
   let voiceCountdownInt = null;
   let voiceContextMode  = false; // true = followup nach "Hey MIRA"
 
-  // ── MIRA spricht (TTS) ────────────────────────────────────────────────────
+  // ── MIRA spricht (TTS) — IPC-native zuerst, Web Speech als Fallback ──────
   function miraSay(text, onDone) {
+    // Nativer say-Befehl via main.js: kein User-Gesture nötig (Wake-Word-Kontext)
+    ipcRenderer.invoke('tts-speak', { text })
+      .then(res => {
+        if (res && res.done) { if (onDone) onDone(); }
+        else _miraSayWeb(text, onDone);
+      })
+      .catch(() => _miraSayWeb(text, onDone));
+  }
+  function _miraSayWeb(text, onDone) {
     speechSynthesis.cancel();
     const u = new SpeechSynthesisUtterance(text);
-    u.lang  = 'de-DE';
-    u.rate  = 1.05;
-    u.pitch = 1.0;
+    u.lang = 'de-DE'; u.rate = 1.05; u.pitch = 1.0;
     if (onDone) u.onend = onDone;
     speechSynthesis.speak(u);
   }
@@ -1915,14 +1922,22 @@ async function startTraining(command) {
   }
 
   async function onWakeWord() {
-    showMiraBubble('Einen Moment...', 'thinking');
-    try {
-      await ipcRenderer.invoke('voice-command', { text: 'hey mira' });
-      // mira-ask event kommt async zurück
-    } catch(e) {
-      hideMiraBubble(400);
-      setTimeout(startWakeWordListening, 1500);
-    }
+    // Sofortiges "Ja?" — dann Bildschirm scannen
+    showMiraBubble('Ja?', 'speaking');
+    miraSay('Ja?', async () => {
+      showMiraBubble('Ich schaue...', 'thinking');
+      try {
+        await ipcRenderer.invoke('voice-command', { text: 'hey mira' });
+        // mira-ask event kommt async zurück mit der eigentlichen Frage
+      } catch(e) {
+        showMiraBubble('Was kann ich tun?', 'speaking');
+        miraSay('Was kann ich für dich tun?', () => {
+          showMiraBubble('Ich höre...', 'listening');
+          voiceContextMode = true;
+          setTimeout(() => startVoice(), 350);
+        });
+      }
+    });
   }
 
   // Wake-Word nach kurzer Verzögerung starten

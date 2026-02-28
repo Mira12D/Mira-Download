@@ -5462,6 +5462,28 @@ ipcMain.handle('target-training-save-calibration', async (event, { avgErrorX, av
   }
 });
 
+// ── NATIVE TTS (kein User-Gesture nötig) ───────────────────────────────────
+ipcMain.handle('tts-speak', (event, { text }) => {
+  return new Promise((resolve) => {
+    const { spawn } = require('child_process');
+    const safe = (text || '').replace(/"/g, '').replace(/\n/g, ' ').substring(0, 300);
+    if (process.platform === 'darwin') {
+      // macOS: say -v Anna (Deutsche Stimme)
+      const proc = spawn('say', ['-v', 'Anna', safe]);
+      proc.on('close', () => resolve({ done: true }));
+      proc.on('error', () => resolve({ done: false }));
+    } else if (process.platform === 'win32') {
+      // Windows: PowerShell SAPI
+      const ps = `Add-Type -AssemblyName System.Speech; $v=New-Object System.Speech.Synthesis.SpeechSynthesizer; $v.Speak("${safe.replace(/"/g, '')}");`;
+      const proc = spawn('powershell', ['-Command', ps]);
+      proc.on('close', () => resolve({ done: true }));
+      proc.on('error', () => resolve({ done: false }));
+    } else {
+      resolve({ done: false });
+    }
+  });
+});
+
 // ═══════════════════════════════════════
 // APP LIFECYCLE
 // ═══════════════════════════════════════
