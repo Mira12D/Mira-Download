@@ -2126,7 +2126,6 @@ async function markTaskComplete(taskId, status) {
 // DIALOG BRIDGE — Website triggert, Electron öffnet nativen Dialog
 // ═══════════════════════════════════════
 
- const { dialog } = require('electron');
 let dialogPollInterval = null;
 
 async function startDialogBridge() {
