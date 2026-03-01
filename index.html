@@ -1701,12 +1701,13 @@ async function startTraining(command) {
         mcAddMiraMsg('✓ Alles klar, ich kümmere mich darum!');
         setTimeout(() => closeMiraChat(), 2200);
       } else {
-        mcAddMiraMsg('Hmm, das habe ich nicht verstanden – bitte nochmal.');
+        const reason = res?.reason || 'Unbekannter Fehler';
+        mcAddMiraMsg('❌ ' + reason);
         _mcEnableInput();
       }
-    }).catch(() => {
+    }).catch((err) => {
       _mcRemoveThinking();
-      mcAddMiraMsg('Verbindungsfehler – bitte nochmal.');
+      mcAddMiraMsg('❌ Verbindungsfehler: ' + (err?.message || ''));
       _mcEnableInput();
     });
   }

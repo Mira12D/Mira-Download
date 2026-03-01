@@ -4748,9 +4748,11 @@ ipcMain.handle('voice-context-answer', async (event, { text }) => {
       console.log(`✅ Context-Answer Task: "${text}"`);
       return { queued: true };
     }
-    return { queued: false, reason: data.error };
+    console.warn(`⚠️ Context-Answer Task fehlgeschlagen: ${data.error || JSON.stringify(data)}`);
+    return { queued: false, reason: data.error || 'Unbekannter Fehler' };
   } catch(e) {
-    return { queued: false, reason: e.message };
+    console.error(`❌ Context-Answer Netzwerkfehler: ${e.message}`);
+    return { queued: false, reason: 'Verbindung fehlgeschlagen: ' + e.message };
   }
 });
 
