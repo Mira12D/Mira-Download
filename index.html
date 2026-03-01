@@ -848,6 +848,15 @@
         <div class="stat-val" id="d-tasks">—</div>
         <div class="stat-lbl">Tasks übrig</div>
       </div>
+      <div class="stat-card" style="grid-column:1/-1">
+        <div style="display:flex;align-items:center;justify-content:space-between">
+          <div>
+            <div class="stat-val" id="d-token-balance" style="font-size:20px">—</div>
+            <div class="stat-lbl">Tokens</div>
+          </div>
+          <div id="d-token-low" style="font-size:10px;color:var(--red);display:none">⚠ Niedrig</div>
+        </div>
+      </div>
     </div>
 
     <div class="conn-card">
@@ -1520,6 +1529,13 @@ ipcRenderer.on('agent-online', () => {
     badge.style.color = '';
   }
   document.getElementById('d-status-sub').textContent = 'Bereit';
+});
+
+ipcRenderer.on('token-balance-updated', (event, { balance, low_balance }) => {
+  const el = document.getElementById('d-token-balance');
+  const low = document.getElementById('d-token-low');
+  if (el) el.textContent = typeof balance === 'number' ? balance.toFixed(1) : '—';
+  if (low) low.style.display = low_balance ? 'block' : 'none';
 });
 
 

@@ -529,6 +529,14 @@ function loadSavedToken() {
     sysLogMonitor.start({ api: API, token: savedToken });
     loadUserProfileSettings().catch(() => {});
     startKeepAlive();
+    // Token-Guthaben nach Login laden und ans UI schicken
+    fetch(`${API}/api/agent/token-balance?token=${savedToken}`)
+      .then(r => r.json())
+      .then(data => {
+        if (data.success && mainWindow) {
+          mainWindow.webContents.send('token-balance-updated', { balance: data.balance, low_balance: data.balance < 50 });
+        }
+      }).catch(() => {});
     return true;
   }
   return false;
@@ -631,6 +639,33 @@ Koordinaten in 1280x720 Pixel-Raum.` }
   } catch(e) {
     console.error('❌ miniFind error:', e.message);
     return { found: false, confidence: 0 };
+  }
+}
+
+// ═══════════════════════════════════════
+// TOKEN BILLING — trackUsage
+// Fire-and-forget: Fehler werden ignoriert, blockiert nie Tasks
+// ═══════════════════════════════════════
+async function trackUsage(amount, action = 'unknown') {
+  if (!userToken || !amount) return;
+  try {
+    const res = await fetch(`${API}/api/agent/track-usage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: userToken, action, amount })
+    });
+    const data = await res.json();
+    if (data.success && mainWindow) {
+      mainWindow.webContents.send('token-balance-updated', {
+        balance: data.balance,
+        low_balance: data.low_balance
+      });
+      if (data.low_balance) {
+        console.warn(`⚠️ Token-Guthaben niedrig: ${data.balance}`);
+      }
+    }
+  } catch(e) {
+    // Billing-Fehler nie weiterwerfen — Task läuft weiter
   }
 }
 
@@ -3895,6 +3930,9 @@ async function executeRouteStep(step) {
       await typeFormatted(cleanText);
       console.log(`   ⌨️ Getippt: "${cleanText.substring(0, 80).replace(/\n/g, '↵')}"`);
       contextManager.invalidate(); // Feld-Inhalt hat sich geändert
+      // Billing: 1.2 Token pro 10 Zeichen (aufgerundet)
+      const _typeCost = Math.ceil(cleanText.length / 10) * 1.2;
+      trackUsage(_typeCost, 'type').catch(() => {});
 
       if (endsWithEnter) {
         await sleep(300);
@@ -4273,6 +4311,7 @@ async function executeRouteStep(step) {
           await keyboard.type(fieldValue);
           contextManager.invalidate();
           console.log(`✅ fill_field AX: "${fieldName}"`);
+          trackUsage(1.2, 'fill_field').catch(() => {});
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
@@ -4308,6 +4347,7 @@ async function executeRouteStep(step) {
           await keyboard.type(fieldValue);
           contextManager.invalidate();
           console.log(`✅ fill_field Augen: ${fieldName} @ (${sx},${sy}) [raw x=${mfResult.x}→corrX=${corrX}]`);
+          trackUsage(1.2, 'fill_field').catch(() => {});
           tier2Hit = true;
         } else {
           console.warn(`⚠️ fill_field Augen: "${fieldName}" nach 2 Versuchen nicht gefunden`);
@@ -4358,6 +4398,7 @@ async function executeRouteStep(step) {
         await executeRouteStep({ action: 'fill_field', field_name: field, value: String(value), command: `${field} → ${value}` });
         await sleep(350);
       }
+      trackUsage(4.3, 'fill_from_file').catch(() => {});
       break;
     }
 
