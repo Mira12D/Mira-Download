@@ -4288,22 +4288,34 @@ async function executeRouteStep(step) {
       } catch(mfE) { console.warn(`⚠️ fill_field miniFind: ${mfE.message}`); }
       if (tier2Hit) break;
 
-      // Tier 3: Cmd+F / Ctrl+F — Label im Dokument suchen → Zeile → End → Tippen
-      // Zuverlässig für Google Docs / Word wenn visuelle Suche scheitert
+      // Tier 3: Cmd+F — Feld suchen, dann neben Label klicken (Verifikation via miniFind)
       try {
         console.log(`🔍 fill_field Tier3 Cmd+F: "${fieldName}"`);
         const findKey = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
         await keyboard.pressKey(findKey, Key.F);
         await sleep(500);
         await keyboard.type(fieldName);
-        await sleep(400);
-        await keyboard.pressKey(Key.Escape); // Suche schließen, Cursor bleibt an der Stelle
+        await sleep(500);
+        // Screenshot → prüfen ob Feld tatsächlich gefunden wurde
+        const sc3 = await takeCompressedScreenshot();
+        const verify = await miniFind(sc3, fieldName + ' Feld');
+        await keyboard.pressKey(Key.Escape);
         await sleep(200);
-        await keyboard.pressKey(Key.End);    // Ans Zeilenende
-        await sleep(80);
+        if (!verify.found) {
+          console.warn(`⚠️ fill_field Tier3: "${fieldName}" nicht im Dokument gefunden — überspringe`);
+          break; // kein blindes Tippen wenn Feld nicht existiert
+        }
+        // Feld gefunden → direkt per Maus klicken (besser als Cmd+F-Position)
+        const sx3 = Math.round(verify.x * (calibration?.scaleX || 1));
+        const sy3 = Math.round(verify.y * (calibration?.scaleY || 1));
+        await mouse.setPosition({ x: sx3, y: sy3 });
+        await mouse.leftClick();
+        await sleep(180);
+        await keyboard.pressKey(Key.End);
+        await sleep(60);
         await keyboard.type(fieldValue);
         contextManager.invalidate();
-        console.log(`✅ fill_field Cmd+F: "${fieldName}"`);
+        console.log(`✅ fill_field Cmd+F+Maus: "${fieldName}" @ (${sx3},${sy3})`);
       } catch(t3E) { console.warn(`⚠️ fill_field Tier3: ${t3E.message}`); }
       break;
     }
