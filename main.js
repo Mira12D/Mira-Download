@@ -4355,7 +4355,7 @@ async function executeRouteStep(step) {
       console.log(`📋 Form-Match: ${fieldMap.length} Felder — ${fieldMap.map(([k,v])=>`${k}:${v}`).join(', ')}`);
       // 5. Felder ausfüllen
       for (const [field, value] of fieldMap) {
-        await executeStep({ action: 'fill_field', field_name: field, value: String(value), command: `${field} → ${value}` }, taskId);
+        await executeRouteStep({ action: 'fill_field', field_name: field, value: String(value), command: `${field} → ${value}` });
         await sleep(350);
       }
       break;
