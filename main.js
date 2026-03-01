@@ -4266,25 +4266,15 @@ async function executeRouteStep(step) {
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
-      // Tier 2: mini-find via Screenshot
-      // Sucht nach dem INPUT-ELEMENT (Box, Eingabefeld) neben dem Label — nicht den Label selbst
+      // Tier 2: miniFind() — Augen benutzen, klickt neben den Doppelpunkt
       let tier2Hit = false;
       try {
         const sc2 = await takeCompressedScreenshot();
-        const axCtx = contextManager.toShortString(await contextManager.captureState());
-        const fRes = await fetch(`${API}/api/brain/mini-find`, {
-          method: 'POST',
-          headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            screenshot: sc2,
-            target: `Das Eingabefeld (Input-Box oder leere Stelle) RECHTS NEBEN oder NACH dem Text "${fieldName}:" in diesem Dokument/Formular. Wenn es ein Eingabe-Kästchen gibt klick mittig rein, sonst klick ans Ende der Zeile wo "${fieldName}:" steht.`,
-            context: axCtx
-          })
-        });
-        const fData = await fRes.json();
-        if (fData.x != null) {
-          const sx = Math.round(fData.x * (calibration?.scaleX || 1));
-          const sy = Math.round(fData.y * (calibration?.scaleY || 1));
+        // miniFind() benutzt korrekt token+element (nicht target/Authorization)
+        const mfResult = await miniFind(sc2, `Klickposition direkt nach "${fieldName}:" zum Eintippen`);
+        if (mfResult.found && mfResult.x != null) {
+          const sx = Math.round(mfResult.x * (calibration?.scaleX || 1));
+          const sy = Math.round(mfResult.y * (calibration?.scaleY || 1));
           await mouse.setPosition({ x: sx, y: sy });
           await mouse.leftClick();
           await sleep(180);
@@ -4292,10 +4282,10 @@ async function executeRouteStep(step) {
           await sleep(60);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
-          console.log(`✅ fill_field mini-find: "${fieldName}"`);
+          console.log(`✅ fill_field Augen: "${fieldName}" @ (${sx},${sy})`);
           tier2Hit = true;
         }
-      } catch(mfE) { console.warn(`⚠️ fill_field mini-find: ${mfE.message}`); }
+      } catch(mfE) { console.warn(`⚠️ fill_field miniFind: ${mfE.message}`); }
       if (tier2Hit) break;
 
       // Tier 3: Cmd+F / Ctrl+F — Label im Dokument suchen → Zeile → End → Tippen
