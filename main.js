@@ -4257,20 +4257,27 @@ async function executeRouteStep(step) {
           const fy = scaleWithCalibration(el.x, el.y).y;
           await mouse.setPosition({ x: Math.round(fx), y: Math.round(fy) });
           await mouse.leftClick();
-          await sleep(200);
+          await sleep(180);
+          await keyboard.pressKey(Key.End); // Cursor ans Zeilenende (nach Label)
+          await sleep(60);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
           console.log(`✅ fill_field AX: "${fieldName}"`);
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
-      // Tier 2: mini-find via Screenshot
+      // Tier 2: mini-find via Screenshot — klickt neben das Label
       try {
         const sc2 = await takeCompressedScreenshot();
+        const axCtx = contextManager.toShortString(await contextManager.captureState());
         const fRes = await fetch(`${API}/api/brain/mini-find`, {
           method: 'POST',
           headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ screenshot: sc2, target: fieldName, context: contextManager.toShortString(contextManager.captureState()) })
+          body: JSON.stringify({
+            screenshot: sc2,
+            target: `Eingabebereich neben dem Label "${fieldName}"`,
+            context: axCtx
+          })
         });
         const fData = await fRes.json();
         if (fData.x != null) {
@@ -4278,7 +4285,9 @@ async function executeRouteStep(step) {
           const sy = Math.round(fData.y * (calibration?.scaleY || 1));
           await mouse.setPosition({ x: sx, y: sy });
           await mouse.leftClick();
-          await sleep(200);
+          await sleep(180);
+          await keyboard.pressKey(Key.End); // Cursor ans Zeilenende
+          await sleep(60);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
           console.log(`✅ fill_field mini-find: "${fieldName}"`);
