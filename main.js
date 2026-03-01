@@ -594,16 +594,14 @@ async function miniFind(screenshotBase64, elementDescription) {
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshotBase64}`, detail: 'high' } },
-            { type: 'text', text: `Du siehst ein Formular oder Dokument. Finde das EINGABEFELD für: ${elementDescription}
+            { type: 'text', text: `Finde dieses Element im Screenshot: ${elementDescription}
 
-WICHTIG:
-- Das Label (z.B. "Name:" oder "Nachname:") steht LINKS bei x ≈ 50-170px — klicke NICHT darauf!
-- Das Eingabefeld (leere Box, Texteingabebereich, Unterstrich-Linie) steht RECHTS vom Label bei x ≈ 200-700px
-- Gib den Mittelpunkt des LEEREN EINGABEBEREICHS zurück (wo der Cursor beim Klick erscheint)
-- Beispiel: Label "Name:" bei x=100 → Eingabefeld bei x=350
+Wenn es ein Button/Icon/Tab ist: Gib dessen Mittelpunkt zurück.
+Wenn es ein Label-Text ist (z.B. "Name:", "Nachname:"): Gib die Position dieses Label-Textes zurück.
+Wenn es ein leeres Eingabefeld ist: Gib dessen Mittelpunkt zurück.
 
 Antworte NUR mit JSON:
-{"found": true, "x": 380, "y": 450, "confidence": 0.95, "description": "leeres Eingabefeld"}
+{"found": true, "x": 120, "y": 450, "confidence": 0.95, "description": "was du siehst"}
 oder:
 {"found": false, "confidence": 0}
 Koordinaten in 1280x720 Pixel-Raum.` }
@@ -4278,19 +4276,28 @@ async function executeRouteStep(step) {
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
-      // Tier 2: miniFind() — Augen + Maus, kein Cmd+F
-      // Element-String: kurz + kein verschachteltes Quote → GPT-4o-mini findet es zuverlässig
+      // Tier 2: miniFind() — Label finden → Maus rechts daneben klicken
+      // Einfacher Element-String ohne Quotes → GPT findet Label zuverlässig
       let tier2Hit = false;
       try {
         const sc2 = await takeCompressedScreenshot();
-        const mfResult = await miniFind(sc2, `Eingabefeld "${fieldName}" (leerer Bereich rechts vom Label)`);
+        // Label suchen (immer sichtbarer Text → zuverlässig), dann Offset → Eingabefeld
+        let mfResult = await miniFind(sc2, `Label ${fieldName}`);
+        // Versuch 2: Retry falls found=false (z.B. Screenshot zu früh)
+        if (!mfResult.found) {
+          await sleep(350);
+          const sc2b = await takeCompressedScreenshot();
+          mfResult = await miniFind(sc2b, `Label ${fieldName}`);
+        }
         if (mfResult.found && mfResult.x != null) {
-          // Sicherheits-Offset: x < 200 deutet auf Label-Treffer hin → +220px ins Eingabefeld
+          // Offset: Label liegt links (x ≈ 50-200), Eingabefeld rechts davon (+260px)
+          // Wenn Model schon Input-Bereich zurückgibt (x > 220) → leichten Offset trotzdem
           let corrX = mfResult.x;
-          if (corrX < 200) {
-            corrX = corrX + 220;
-            console.log(`⚠️ fill_field X-Korrektur: ${mfResult.x} → ${corrX} (Label-Offset)`);
+          if (corrX < 220) {
+            corrX = corrX + 260; // Label-Position → +260px ins Eingabefeld
+            console.log(`⚠️ fill_field X-Offset: ${mfResult.x} → ${corrX} (Label→Feld)`);
           }
+          // Koordinaten skalieren (1280x720 → echte Bildschirmpixel)
           const sx = Math.round(corrX * (calibration?.scaleX || 1));
           const sy = Math.round(mfResult.y * (calibration?.scaleY || 1));
           await mouse.setPosition({ x: sx, y: sy });
@@ -4302,39 +4309,13 @@ async function executeRouteStep(step) {
           contextManager.invalidate();
           console.log(`✅ fill_field Augen: ${fieldName} @ (${sx},${sy}) [raw x=${mfResult.x}→corrX=${corrX}]`);
           tier2Hit = true;
+        } else {
+          console.warn(`⚠️ fill_field Augen: "${fieldName}" nach 2 Versuchen nicht gefunden`);
         }
       } catch(mfE) { console.warn(`⚠️ fill_field miniFind: ${mfE.message}`); }
       if (tier2Hit) break;
 
-      // Tier 3: Cmd+F — Feld suchen, dann neben Label klicken (Verifikation via miniFind)
-      try {
-        console.log(`🔍 fill_field Tier3 Cmd+F: "${fieldName}"`);
-        const findKey = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
-        await keyboard.pressKey(findKey, Key.F);
-        await sleep(500);
-        await keyboard.type(fieldName);
-        await sleep(500);
-        // Screenshot → prüfen ob Feld tatsächlich gefunden wurde
-        const sc3 = await takeCompressedScreenshot();
-        const verify = await miniFind(sc3, fieldName + ' Feld');
-        await keyboard.pressKey(Key.Escape);
-        await sleep(200);
-        if (!verify.found) {
-          console.warn(`⚠️ fill_field Tier3: "${fieldName}" nicht im Dokument gefunden — überspringe`);
-          break; // kein blindes Tippen wenn Feld nicht existiert
-        }
-        // Feld gefunden → direkt per Maus klicken (besser als Cmd+F-Position)
-        const sx3 = Math.round(verify.x * (calibration?.scaleX || 1));
-        const sy3 = Math.round(verify.y * (calibration?.scaleY || 1));
-        await mouse.setPosition({ x: sx3, y: sy3 });
-        await mouse.leftClick();
-        await sleep(180);
-        await keyboard.pressKey(Key.End);
-        await sleep(60);
-        await keyboard.type(fieldValue);
-        contextManager.invalidate();
-        console.log(`✅ fill_field Cmd+F+Maus: "${fieldName}" @ (${sx3},${sy3})`);
-      } catch(t3E) { console.warn(`⚠️ fill_field Tier3: ${t3E.message}`); }
+      // Kein Tier 3 — Cmd+F gefährlich in Texteditoren
       break;
     }
 
