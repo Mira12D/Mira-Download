@@ -4331,28 +4331,30 @@ async function executeRouteStep(step) {
       // 2. Datei lesen
       const fileContent = await ftReadFile(foundF[0].path);
       if (!fileContent) { console.warn('❌ Datei leer'); break; }
-      // 3. AX State für Formularfelder
-      const axSnap  = contextManager.captureState(true);
-      const axShort = contextManager.toShortString(axSnap);
-      // 4. AI: Dateiinhalt → Feldzuordnung
-      const matchRes = await fetch(`${API}/api/brain/mini-find`, {
+      // 3. AX State für Formularfelder → sichtbare Feldnamen ermitteln
+      const axSnap   = await contextManager.captureState(true);
+      const axShort  = contextManager.toShortString(axSnap);
+      // 4. Datei analysieren + Formularfelder befüllen via Claude
+      const fname    = foundF[0].path.split('/').pop();
+      const fext     = (fname.match(/\.(\w+)$/) || [])[1] || '';
+      const matchRes = await fetch(`${API}/api/agent/analyze-file`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mode: 'form_match',
-          file_content: fileContent.substring(0, 2500),
-          ax_context: axShort,
-          instruction: 'Ordne den Dateiinhalt den sichtbaren Formularfeldern zu. Antworte NUR als JSON-Array: [{"field":"Feldname","value":"Wert"},...]'
+          token: userToken,
+          file_name: fname,
+          file_ext: fext,
+          extracted: fileContent.substring(0, 3000),
+          instruction: `Lies den Dateiinhalt und ordne die Werte den sichtbaren Formularfeldern zu.\nSichtbare Felder laut Screen: ${axShort}\nAntworte NUR als JSON-Objekt mit Feldnamen als Keys, z.B.: {"Name":"Mustafa","Nachname":"Erdal","Tag":"Dienstag"}`
         })
       });
       const matchData = await matchRes.json();
-      const fieldMap  = Array.isArray(matchData.fields) ? matchData.fields
-                      : Array.isArray(matchData.result) ? matchData.result
-                      : Array.isArray(matchData) ? matchData : [];
-      console.log(`📋 Form-Match: ${fieldMap.length} Felder`);
+      const rawFields = matchData?.parsed_data || {};
+      const fieldMap  = Object.entries(rawFields)
+        .filter(([k, v]) => k && v != null && String(v).trim() !== '' && String(v) !== 'null');
+      console.log(`📋 Form-Match: ${fieldMap.length} Felder — ${fieldMap.map(([k,v])=>`${k}:${v}`).join(', ')}`);
       // 5. Felder ausfüllen
-      for (const { field, value } of fieldMap) {
-        if (!field || value == null) continue;
+      for (const [field, value] of fieldMap) {
         await executeStep({ action: 'fill_field', field_name: field, value: String(value), command: `${field} → ${value}` }, taskId);
         await sleep(350);
       }
