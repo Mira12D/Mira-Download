@@ -4266,7 +4266,9 @@ async function executeRouteStep(step) {
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
-      // Tier 2: mini-find via Screenshot — klickt neben das Label
+      // Tier 2: mini-find via Screenshot
+      // Sucht nach dem INPUT-ELEMENT (Box, Eingabefeld) neben dem Label — nicht den Label selbst
+      let tier2Hit = false;
       try {
         const sc2 = await takeCompressedScreenshot();
         const axCtx = contextManager.toShortString(await contextManager.captureState());
@@ -4275,7 +4277,7 @@ async function executeRouteStep(step) {
           headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
           body: JSON.stringify({
             screenshot: sc2,
-            target: `Eingabebereich neben dem Label "${fieldName}"`,
+            target: `Das Eingabefeld (Input-Box oder leere Stelle) RECHTS NEBEN oder NACH dem Text "${fieldName}:" in diesem Dokument/Formular. Wenn es ein Eingabe-Kästchen gibt klick mittig rein, sonst klick ans Ende der Zeile wo "${fieldName}:" steht.`,
             context: axCtx
           })
         });
@@ -4286,13 +4288,33 @@ async function executeRouteStep(step) {
           await mouse.setPosition({ x: sx, y: sy });
           await mouse.leftClick();
           await sleep(180);
-          await keyboard.pressKey(Key.End); // Cursor ans Zeilenende
+          await keyboard.pressKey(Key.End);
           await sleep(60);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
           console.log(`✅ fill_field mini-find: "${fieldName}"`);
+          tier2Hit = true;
         }
       } catch(mfE) { console.warn(`⚠️ fill_field mini-find: ${mfE.message}`); }
+      if (tier2Hit) break;
+
+      // Tier 3: Cmd+F / Ctrl+F — Label im Dokument suchen → Zeile → End → Tippen
+      // Zuverlässig für Google Docs / Word wenn visuelle Suche scheitert
+      try {
+        console.log(`🔍 fill_field Tier3 Cmd+F: "${fieldName}"`);
+        const findKey = process.platform === 'darwin' ? Key.LeftSuper : Key.LeftControl;
+        await keyboard.pressKey(findKey, Key.F);
+        await sleep(500);
+        await keyboard.type(fieldName);
+        await sleep(400);
+        await keyboard.pressKey(Key.Escape); // Suche schließen, Cursor bleibt an der Stelle
+        await sleep(200);
+        await keyboard.pressKey(Key.End);    // Ans Zeilenende
+        await sleep(80);
+        await keyboard.type(fieldValue);
+        contextManager.invalidate();
+        console.log(`✅ fill_field Cmd+F: "${fieldName}"`);
+      } catch(t3E) { console.warn(`⚠️ fill_field Tier3: ${t3E.message}`); }
       break;
     }
 
