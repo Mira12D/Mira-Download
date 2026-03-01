@@ -594,7 +594,7 @@ async function miniFind(screenshotBase64, elementDescription) {
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshotBase64}`, detail: 'high' } },
-            { type: 'text', text: `Finde dieses Element: "${elementDescription}"\nAntworte NUR mit JSON:\n{"found": true, "x": 120, "y": 450, "confidence": 0.95, "description": "was du siehst"}\noder wenn nicht gefunden:\n{"found": false, "confidence": 0}\nKoordinaten für 1280x720.` }
+            { type: 'text', text: `Finde dieses Element im Screenshot: ${elementDescription}\n\nWenn es ein Label mit Doppelpunkt ist (z.B. "Name:"), gib Koordinaten RECHTS daneben (wo man eintippen würde).\nWenn es ein Input-Feld/Button/Icon ist, gib dessen Mittelpunkt.\n\nAntworte NUR mit JSON:\n{"found": true, "x": 120, "y": 450, "confidence": 0.95, "description": "was du siehst"}\noder:\n{"found": false, "confidence": 0}\nKoordinaten in 1280x720.` }
           ]
         }
       ], { model: 'gpt-4o-mini', max_tokens: 200 });
@@ -4266,23 +4266,23 @@ async function executeRouteStep(step) {
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
-      // Tier 2: miniFind() — Augen benutzen, klickt neben den Doppelpunkt
+      // Tier 2: miniFind() — Augen + Maus, kein Cmd+F
+      // Element-String: kurz + kein verschachteltes Quote → GPT-4o-mini findet es zuverlässig
       let tier2Hit = false;
       try {
         const sc2 = await takeCompressedScreenshot();
-        // miniFind() benutzt korrekt token+element (nicht target/Authorization)
-        const mfResult = await miniFind(sc2, `Klickposition direkt nach "${fieldName}:" zum Eintippen`);
+        const mfResult = await miniFind(sc2, fieldName + ' Feld');
         if (mfResult.found && mfResult.x != null) {
           const sx = Math.round(mfResult.x * (calibration?.scaleX || 1));
           const sy = Math.round(mfResult.y * (calibration?.scaleY || 1));
           await mouse.setPosition({ x: sx, y: sy });
           await mouse.leftClick();
           await sleep(180);
-          await keyboard.pressKey(Key.End);
+          await keyboard.pressKey(Key.End); // Cursor ans Zeilenende
           await sleep(60);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
-          console.log(`✅ fill_field Augen: "${fieldName}" @ (${sx},${sy})`);
+          console.log(`✅ fill_field Augen: ${fieldName} @ (${sx},${sy})`);
           tier2Hit = true;
         }
       } catch(mfE) { console.warn(`⚠️ fill_field miniFind: ${mfE.message}`); }
