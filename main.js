@@ -594,7 +594,19 @@ async function miniFind(screenshotBase64, elementDescription) {
           role: 'user',
           content: [
             { type: 'image_url', image_url: { url: `data:image/jpeg;base64,${screenshotBase64}`, detail: 'high' } },
-            { type: 'text', text: `Finde dieses Element im Screenshot: ${elementDescription}\n\nWenn es ein Label mit Doppelpunkt ist (z.B. "Name:"), gib Koordinaten RECHTS daneben (wo man eintippen würde).\nWenn es ein Input-Feld/Button/Icon ist, gib dessen Mittelpunkt.\n\nAntworte NUR mit JSON:\n{"found": true, "x": 120, "y": 450, "confidence": 0.95, "description": "was du siehst"}\noder:\n{"found": false, "confidence": 0}\nKoordinaten in 1280x720.` }
+            { type: 'text', text: `Du siehst ein Formular oder Dokument. Finde das EINGABEFELD für: ${elementDescription}
+
+WICHTIG:
+- Das Label (z.B. "Name:" oder "Nachname:") steht LINKS bei x ≈ 50-170px — klicke NICHT darauf!
+- Das Eingabefeld (leere Box, Texteingabebereich, Unterstrich-Linie) steht RECHTS vom Label bei x ≈ 200-700px
+- Gib den Mittelpunkt des LEEREN EINGABEBEREICHS zurück (wo der Cursor beim Klick erscheint)
+- Beispiel: Label "Name:" bei x=100 → Eingabefeld bei x=350
+
+Antworte NUR mit JSON:
+{"found": true, "x": 380, "y": 450, "confidence": 0.95, "description": "leeres Eingabefeld"}
+oder:
+{"found": false, "confidence": 0}
+Koordinaten in 1280x720 Pixel-Raum.` }
           ]
         }
       ], { model: 'gpt-4o-mini', max_tokens: 200 });
@@ -4271,9 +4283,15 @@ async function executeRouteStep(step) {
       let tier2Hit = false;
       try {
         const sc2 = await takeCompressedScreenshot();
-        const mfResult = await miniFind(sc2, fieldName + ' Feld');
+        const mfResult = await miniFind(sc2, `Eingabefeld "${fieldName}" (leerer Bereich rechts vom Label)`);
         if (mfResult.found && mfResult.x != null) {
-          const sx = Math.round(mfResult.x * (calibration?.scaleX || 1));
+          // Sicherheits-Offset: x < 200 deutet auf Label-Treffer hin → +220px ins Eingabefeld
+          let corrX = mfResult.x;
+          if (corrX < 200) {
+            corrX = corrX + 220;
+            console.log(`⚠️ fill_field X-Korrektur: ${mfResult.x} → ${corrX} (Label-Offset)`);
+          }
+          const sx = Math.round(corrX * (calibration?.scaleX || 1));
           const sy = Math.round(mfResult.y * (calibration?.scaleY || 1));
           await mouse.setPosition({ x: sx, y: sy });
           await mouse.leftClick();
@@ -4282,7 +4300,7 @@ async function executeRouteStep(step) {
           await sleep(60);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
-          console.log(`✅ fill_field Augen: ${fieldName} @ (${sx},${sy})`);
+          console.log(`✅ fill_field Augen: ${fieldName} @ (${sx},${sy}) [raw x=${mfResult.x}→corrX=${corrX}]`);
           tier2Hit = true;
         }
       } catch(mfE) { console.warn(`⚠️ fill_field miniFind: ${mfE.message}`); }
