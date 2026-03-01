@@ -724,11 +724,11 @@
     <div class="act-hero">
       <div class="act-eyebrow">Willkommen</div>
       <div class="act-title">Aktiviere<br>deinen Agent.</div>
-      <div class="act-sub">Gib deinen Code/AufladeCode ein um MIRA zu starten. Sie erledigt deine Arbeit – autonom.</div>
+      <div class="act-sub">Gib deinen 6-stelligen App-PIN ein. Du findest ihn in deinem MIRA-Account auf getmira.space.</div>
       <div class="input-wrap">
-        <input class="input-field clickable" id="inp-code" placeholder="AGENT-XXX-XXX-2026" autocomplete="off" />
+        <input class="input-field clickable" id="inp-code" placeholder="6-stelliger PIN (z.B. 482917)" autocomplete="off" maxlength="20" />
       </div>
-      <button class="btn btn-primary clickable" onclick="doActivate()">Aktivieren</button>
+      <button class="btn btn-primary clickable" onclick="doActivate()">Anmelden</button>
       <button class="btn btn-ghost clickable" onclick="goToCalibrate()">Nur Desktop kalibrieren</button>
     </div>
 
@@ -1020,6 +1020,9 @@
   <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;background:#e8ff4715;border-color:#e8ff4740;color:#e8ff47" onclick="ipcRenderer.invoke('open-setup-overlay')">
     ⚡ Büro Setup starten
   </button>
+  <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;margin-top:8px;background:#ff3b3015;border-color:#ff3b3040;color:#ff453a" onclick="handleLogout()">
+    🚪 Abmelden
+  </button>
 </div>
 
     <!-- Neue Route -->
@@ -1178,9 +1181,11 @@ function showRouteScreen() {
 
   async function doActivate() {
     const code = document.getElementById('inp-code').value.trim();
-    if (!code) { toast('Code eingeben', 'error'); return; }
-    toast('Aktiviere...', 'info');
-    const result = await ipcRenderer.invoke('activate-token', code);
+    if (!code) { toast('PIN oder Code eingeben', 'error'); return; }
+    toast('Verbinde...', 'info');
+    // 6-stellige Zahl → PIN-Login, sonst → alter Code-Weg
+    const isPin = /^\d{6}$/.test(code);
+    const result = await ipcRenderer.invoke(isPin ? 'activate-pin' : 'activate-token', code);
     if (result.success) {
       userToken = result.token;
       toast(result.message, 'success');
@@ -1190,7 +1195,7 @@ function showRouteScreen() {
         else { goToCalibrate(); }
       }, 800);
     } else {
-      toast(result.message, 'error');
+      toast(result.message || result.error, 'error');
     }
   }
 
@@ -1510,6 +1515,21 @@ async function fillDashboard(data) {
   showScreen('screen-activate');
   toast('Sitzung abgelaufen – bitte neu einloggen', 'error');
 });
+
+ipcRenderer.on('force-logout', (event, { reason } = {}) => {
+  stopStatsRefresh();
+  showScreen('screen-activate');
+  toast(reason === 'Subscription abgelaufen' ? 'Subscription abgelaufen – bitte verlängern' : 'Gerät deaktiviert – bitte neu anmelden', 'error');
+});
+
+async function handleLogout() {
+  const confirmed = confirm('Wirklich abmelden? MIRA wird gestoppt.');
+  if (!confirmed) return;
+  await ipcRenderer.invoke('logout');
+  stopStatsRefresh();
+  showScreen('screen-activate');
+  toast('Erfolgreich abgemeldet', 'success');
+}
 
 ipcRenderer.on('agent-offline', () => {
   const badge = document.getElementById('d-badge');

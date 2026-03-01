@@ -1286,6 +1286,15 @@ function startPolling() {
           return;
         }
 
+        if (!data.success && (data.error === 'Device nicht aktiviert' || data.error === 'Subscription abgelaufen' || data.force_logout)) {
+          console.log('🚪 Gerät deaktiviert — automatischer Logout');
+          stopPolling();
+          userToken = null; userTier = null; agentActive = false; _dk = null;
+          clearToken();
+          if (mainWindow) mainWindow.webContents.send('force-logout', { reason: data.error });
+          return;
+        }
+
         if (data.success && data.tasks && data.tasks.length > 0) {
           console.log(`📋 ${data.tasks.length} neue Tasks!`);
           for (let task of data.tasks) {
@@ -2383,6 +2392,38 @@ async function runTask(taskText) {
 
 ipcMain.handle('get-device-info', async () => {
   return { device_id: getDeviceId(), pin: userPin };
+});
+
+ipcMain.handle('activate-pin', async (event, pin) => {
+  try {
+    console.log('🔑 PIN-Login:', pin);
+    const response = await fetch(`${API}/api/auth/app-pin-login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin, device_id: getDeviceId() })
+    });
+    const data = await response.json();
+    if (data.success) {
+      userToken = data.token;
+      userTier = data.tier || 'starter';
+      tasksRemaining = data.tasks || 9999;
+      userPin = pin;
+      agentActive = true;
+      saveToken();
+      startPolling();
+      bootstrap().catch(() => {});
+      startLocalServer();
+      sysLogMonitor.start({ api: API, token: data.token });
+      loadUserProfileSettings().catch(() => {});
+      startKeepAlive();
+      return { success: true, message: data.message, tier: userTier, tasks: tasksRemaining, balance: data.balance };
+    } else {
+      return { success: false, message: data.error || data.message };
+    }
+  } catch(error) {
+    console.error('❌ PIN-Login Fehler:', error);
+    return { success: false, message: 'Verbindung fehlgeschlagen: ' + error.message };
+  }
 });
 
 ipcMain.handle('activate-token', async (event, code) => {
