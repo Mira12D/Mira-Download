@@ -1,0 +1,504 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MIRA Agent — Download</title>
+  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:      #070708;
+      --bg2:     #0d0d0f;
+      --surface: #111114;
+      --border:  rgba(255,255,255,0.07);
+      --text:    #f2f2f7;
+      --text2:   #8e8e9a;
+      --text3:   #3a3a48;
+      --green:   #34c759;
+      --green2:  #30d158;
+      --green-glow: rgba(52,199,89,0.18);
+      --blue:    #0a84ff;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Sora', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── Grain ── */
+    body::before {
+      content: '';
+      position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.035'/%3E%3C/svg%3E");
+      opacity: 0.5;
+    }
+
+    /* ── Glow orb ── */
+    body::after {
+      content: '';
+      position: fixed; top: -200px; left: 50%; transform: translateX(-50%);
+      width: 800px; height: 500px; border-radius: 50%;
+      background: radial-gradient(ellipse, rgba(52,199,89,0.07) 0%, transparent 70%);
+      pointer-events: none; z-index: 0;
+    }
+
+    /* ── Layout ── */
+    .page { position: relative; z-index: 1; }
+
+    /* ── Nav ── */
+    nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 20px 40px;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(20px);
+      position: sticky; top: 0; z-index: 100;
+      background: rgba(7,7,8,0.85);
+    }
+
+    .nav-logo {
+      display: flex; align-items: center; gap: 12px;
+    }
+
+    .nav-mark {
+      width: 34px; height: 34px; border-radius: 9px;
+      background: var(--text); color: #000;
+      display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 15px;
+      box-shadow: 0 0 0 1px rgba(255,255,255,0.1), 0 4px 16px rgba(0,0,0,0.5);
+    }
+
+    .nav-name { font-size: 14px; font-weight: 700; }
+    .nav-sub  { font-size: 11px; color: var(--text2); margin-top: 1px; }
+
+    .nav-version {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--text3);
+      background: var(--surface); border: 1px solid var(--border);
+      padding: 4px 10px; border-radius: 6px;
+    }
+
+    /* ── Hero ── */
+    .hero {
+      text-align: center;
+      padding: 100px 24px 60px;
+      max-width: 700px; margin: 0 auto;
+    }
+
+    .hero-badge {
+      display: inline-flex; align-items: center; gap: 7px;
+      background: var(--green-glow); border: 1px solid rgba(52,199,89,0.3);
+      color: var(--green); font-size: 12px; font-weight: 600;
+      padding: 6px 14px; border-radius: 20px; margin-bottom: 28px;
+    }
+
+    .hero-badge::before { content: '●'; font-size: 8px; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.3; } }
+
+    h1 {
+      font-size: clamp(38px, 7vw, 62px);
+      font-weight: 800; letter-spacing: -2px; line-height: 1.05;
+      margin-bottom: 18px;
+    }
+
+    h1 span { color: var(--green); }
+
+    .hero-sub {
+      font-size: 17px; color: var(--text2); line-height: 1.6;
+      font-weight: 400; max-width: 520px; margin: 0 auto 48px;
+    }
+
+    /* ── Download Buttons ── */
+    .dl-grid {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px; max-width: 560px; margin: 0 auto 20px;
+    }
+
+    @media (max-width: 520px) { .dl-grid { grid-template-columns: 1fr; } }
+
+    .dl-btn {
+      display: flex; flex-direction: column; align-items: flex-start;
+      padding: 20px 22px; border-radius: 14px; text-decoration: none;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      transition: all 0.2s ease;
+      cursor: pointer; position: relative; overflow: hidden;
+    }
+
+    .dl-btn::before {
+      content: ''; position: absolute; inset: 0;
+      background: linear-gradient(135deg, var(--green-glow) 0%, transparent 60%);
+      opacity: 0; transition: opacity 0.2s;
+    }
+
+    .dl-btn:hover { border-color: rgba(52,199,89,0.4); transform: translateY(-2px); box-shadow: 0 12px 40px rgba(0,0,0,0.4); }
+    .dl-btn:hover::before { opacity: 1; }
+    .dl-btn.disabled { opacity: 0.4; pointer-events: none; }
+
+    .dl-icon {
+      font-size: 28px; margin-bottom: 12px;
+      position: relative; z-index: 1;
+    }
+
+    .dl-platform {
+      font-size: 16px; font-weight: 700; margin-bottom: 4px;
+      position: relative; z-index: 1;
+    }
+
+    .dl-detail {
+      font-size: 12px; color: var(--text2);
+      position: relative; z-index: 1;
+    }
+
+    .dl-label {
+      margin-top: 10px; font-size: 11px; font-weight: 600;
+      color: var(--green); background: var(--green-glow);
+      border: 1px solid rgba(52,199,89,0.25);
+      padding: 3px 9px; border-radius: 5px;
+      position: relative; z-index: 1;
+    }
+
+    .version-hint {
+      text-align: center; font-size: 12px; color: var(--text3);
+      font-family: 'JetBrains Mono', monospace; margin-top: 4px;
+    }
+
+    /* ── Loading skeleton ── */
+    .skeleton {
+      background: linear-gradient(90deg, var(--surface) 25%, var(--bg2) 50%, var(--surface) 75%);
+      background-size: 200% 100%;
+      animation: shimmer 1.5s infinite; border-radius: 4px;
+      height: 14px; display: inline-block;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    /* ── Divider ── */
+    .section {
+      max-width: 700px; margin: 0 auto;
+      padding: 0 24px 80px;
+    }
+
+    .section-title {
+      font-size: 12px; font-weight: 600; letter-spacing: 1.5px;
+      text-transform: uppercase; color: var(--text3);
+      margin-bottom: 20px;
+    }
+
+    /* ── Install Cards ── */
+    .install-cards {
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 600px) { .install-cards { grid-template-columns: 1fr; } }
+
+    .install-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 14px; padding: 22px;
+    }
+
+    .install-card-header {
+      display: flex; align-items: center; gap: 10px;
+      margin-bottom: 16px;
+    }
+
+    .install-card-icon { font-size: 20px; }
+
+    .install-card-title { font-size: 14px; font-weight: 700; }
+    .install-card-sub   { font-size: 11px; color: var(--text2); margin-top: 1px; }
+
+    .steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+    .step {
+      display: flex; gap: 12px; align-items: flex-start;
+    }
+
+    .step-num {
+      width: 22px; height: 22px; border-radius: 7px; flex-shrink: 0;
+      background: var(--green-glow); border: 1px solid rgba(52,199,89,0.3);
+      color: var(--green); font-size: 11px; font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+
+    .step-text { font-size: 13px; color: var(--text2); line-height: 1.5; }
+    .step-text strong { color: var(--text); font-weight: 600; }
+
+    .code-block {
+      margin-top: 8px;
+      background: #0a0a0c; border: 1px solid var(--border);
+      border-radius: 8px; padding: 10px 14px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px; color: var(--green);
+      word-break: break-all; line-height: 1.6;
+      position: relative;
+    }
+
+    .copy-btn {
+      position: absolute; top: 6px; right: 8px;
+      background: none; border: none; cursor: pointer;
+      color: var(--text3); font-size: 13px; padding: 2px 6px;
+      border-radius: 4px; transition: color 0.15s;
+    }
+    .copy-btn:hover { color: var(--green); }
+
+    .warning-box {
+      background: rgba(255,159,10,0.08); border: 1px solid rgba(255,159,10,0.2);
+      border-radius: 10px; padding: 12px 16px; margin-top: 14px;
+      font-size: 12px; color: rgba(255,214,10,0.8); line-height: 1.6;
+    }
+
+    .warning-box strong { color: #ffd60a; }
+
+    /* ── Footer ── */
+    footer {
+      border-top: 1px solid var(--border);
+      text-align: center; padding: 28px;
+      font-size: 12px; color: var(--text3);
+    }
+
+    footer a { color: var(--text2); text-decoration: none; }
+    footer a:hover { color: var(--text); }
+
+    /* ── Error state ── */
+    .error-msg {
+      text-align: center; color: var(--text2); font-size: 13px;
+      padding: 16px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; margin-top: 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Nav -->
+  <nav>
+    <div class="nav-logo">
+      <div class="nav-mark">M</div>
+      <div>
+        <div class="nav-name">MIRA Agent</div>
+        <div class="nav-sub">Virtueller Mitarbeiter</div>
+      </div>
+    </div>
+    <div class="nav-version" id="nav-version">Lade Version…</div>
+  </nav>
+
+  <!-- Hero -->
+  <div class="hero">
+    <div class="hero-badge">Jetzt verfügbar</div>
+
+    <h1>Dein <span>KI-Mitarbeiter</span><br>für den PC</h1>
+
+    <p class="hero-sub">
+      MIRA lernt wie du arbeitest, führt Aufgaben aus, verarbeitet Dokumente
+      und automatisiert deinen Büroalltag — auf Mac und Windows.
+    </p>
+
+    <!-- Download Buttons -->
+    <div class="dl-grid" id="dl-grid">
+      <a class="dl-btn disabled" id="btn-mac-arm" href="#" onclick="return false">
+        <div class="dl-icon">🍎</div>
+        <div class="dl-platform">macOS</div>
+        <div class="dl-detail">Apple Silicon (M1/M2/M3)</div>
+        <div class="dl-label">Lade…</div>
+      </a>
+      <a class="dl-btn disabled" id="btn-mac-intel" href="#" onclick="return false">
+        <div class="dl-icon">🍎</div>
+        <div class="dl-platform">macOS</div>
+        <div class="dl-detail">Intel (x64)</div>
+        <div class="dl-label">Lade…</div>
+      </a>
+      <a class="dl-btn disabled" id="btn-win" href="#" onclick="return false">
+        <div class="dl-icon">🪟</div>
+        <div class="dl-platform">Windows</div>
+        <div class="dl-detail">64-bit Installer</div>
+        <div class="dl-label">Lade…</div>
+      </a>
+    </div>
+
+    <div class="version-hint" id="version-hint">Lade Release-Informationen…</div>
+  </div>
+
+  <!-- Install Instructions -->
+  <div class="section">
+    <div class="section-title">Installation</div>
+
+    <div class="install-cards">
+
+      <!-- Mac -->
+      <div class="install-card">
+        <div class="install-card-header">
+          <div class="install-card-icon">🍎</div>
+          <div>
+            <div class="install-card-title">macOS</div>
+            <div class="install-card-sub">Gatekeeper Bypass erforderlich</div>
+          </div>
+        </div>
+        <ol class="steps">
+          <li class="step">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>DMG öffnen</strong> und MIRA Agent in den <strong>Programme-Ordner</strong> ziehen</div>
+          </li>
+          <li class="step">
+            <div class="step-num">2</div>
+            <div class="step-text">
+              <strong>Terminal öffnen</strong> (Spotlight → Terminal) und ausführen:
+              <div class="code-block">
+                sudo xattr -rd com.apple.quarantine "/Applications/MIRA Agent.app"
+                <button class="copy-btn" onclick="copyCode(this)" title="Kopieren">⧉</button>
+              </div>
+            </div>
+          </li>
+          <li class="step">
+            <div class="step-num">3</div>
+            <div class="step-text">
+              App starten — entweder per Doppelklick oder:
+              <div class="code-block">
+                "/Applications/MIRA Agent.app/Contents/MacOS/MIRA Agent"
+                <button class="copy-btn" onclick="copyCode(this)" title="Kopieren">⧉</button>
+              </div>
+            </div>
+          </li>
+        </ol>
+        <div class="warning-box">
+          <strong>Warum?</strong> MIRA ist nicht durch Apple notarisiert.
+          Der Terminal-Befehl entfernt die Quarantäne-Flag einmalig.
+        </div>
+      </div>
+
+      <!-- Windows -->
+      <div class="install-card">
+        <div class="install-card-header">
+          <div class="install-card-icon">🪟</div>
+          <div>
+            <div class="install-card-title">Windows</div>
+            <div class="install-card-sub">NSIS Installer</div>
+          </div>
+        </div>
+        <ol class="steps">
+          <li class="step">
+            <div class="step-num">1</div>
+            <div class="step-text"><strong>Installer herunterladen</strong> (MIRA-Agent-Setup.exe)</div>
+          </li>
+          <li class="step">
+            <div class="step-num">2</div>
+            <div class="step-text">
+              <strong>Rechtsklick → Als Administrator ausführen</strong>
+              <br><span style="font-size:11px;color:var(--text3);margin-top:4px;display:block">
+                Windows SmartScreen: „Weitere Informationen" → „Trotzdem ausführen"
+              </span>
+            </div>
+          </li>
+          <li class="step">
+            <div class="step-num">3</div>
+            <div class="step-text">Installation abschließen — MIRA startet automatisch im System-Tray</div>
+          </li>
+          <li class="step">
+            <div class="step-num">4</div>
+            <div class="step-text"><strong>Aktivierungscode</strong> eingeben und MIRA einrichten</div>
+          </li>
+        </ol>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <footer>
+    MIRA Agent &nbsp;·&nbsp; <span id="footer-version">—</span>
+    &nbsp;·&nbsp;
+    <a href="https://github.com/Mira12D/Mira-Download/releases" target="_blank">Alle Releases</a>
+  </footer>
+
+</div>
+
+<script>
+  const REPO = 'Mira12D/Mira-Download';
+  const API  = `https://api.github.com/repos/${REPO}/releases/latest`;
+
+  async function loadRelease() {
+    try {
+      const res  = await fetch(API, { headers: { 'Accept': 'application/vnd.github+json' } });
+      if (!res.ok) throw new Error(`GitHub API: ${res.status}`);
+      const data = await res.json();
+
+      const version = data.tag_name || 'Unbekannt';
+      const assets  = data.assets  || [];
+
+      // Versionsnummer überall setzen
+      document.getElementById('nav-version').textContent     = version;
+      document.getElementById('version-hint').textContent    = `Version ${version} — ${formatDate(data.published_at)}`;
+      document.getElementById('footer-version').textContent  = version;
+
+      // Assets matchen
+      const macArmAsset   = assets.find(a => a.name.endsWith('-arm64.dmg'));
+      const macIntelAsset = assets.find(a => a.name.endsWith('.dmg') && !a.name.includes('arm64'));
+      const winAsset      = assets.find(a => a.name.endsWith('.exe'));
+
+      setupButton('btn-mac-arm',   macArmAsset,   version, 'Apple Silicon');
+      setupButton('btn-mac-intel', macIntelAsset, version, 'Intel (x64)');
+      setupButton('btn-win',       winAsset,      version, 'Windows 64-bit');
+
+    } catch (e) {
+      console.error('Release fetch failed:', e);
+      document.getElementById('nav-version').textContent  = 'Fehler';
+      document.getElementById('version-hint').innerHTML   =
+        '<span style="color:#ff453a">Release konnte nicht geladen werden — ' +
+        '<a href="https://github.com/' + REPO + '/releases" style="color:#ff453a" target="_blank">GitHub öffnen</a></span>';
+
+      const fallback = `https://github.com/${REPO}/releases`;
+      setFallbackButton('btn-mac-arm',   fallback);
+      setFallbackButton('btn-mac-intel', fallback);
+      setFallbackButton('btn-win',       fallback);
+    }
+  }
+
+  function setupButton(id, asset, version, label) {
+    const btn = document.getElementById(id);
+    if (!btn) return;
+    if (asset) {
+      btn.href = asset.browser_download_url;
+      btn.classList.remove('disabled');
+      btn.removeAttribute('onclick');
+      btn.querySelector('.dl-label').textContent = `Download ${version}`;
+      const detail = btn.querySelector('.dl-detail');
+      const mb = (asset.size / 1024 / 1024).toFixed(1);
+      detail.textContent = `${label} · ${mb} MB`;
+    } else {
+      btn.querySelector('.dl-label').textContent = 'Nicht verfügbar';
+      setFallbackButton(id, `https://github.com/${REPO}/releases`);
+    }
+  }
+
+  function setFallbackButton(id, url) {
+    const btn = document.getElementById(id);
+    btn.href = url;
+    btn.target = '_blank';
+    btn.classList.remove('disabled');
+    btn.removeAttribute('onclick');
+  }
+
+  function formatDate(iso) {
+    if (!iso) return '';
+    return new Date(iso).toLocaleDateString('de-DE', {
+      day: '2-digit', month: 'long', year: 'numeric'
+    });
+  }
+
+  function copyCode(btn) {
+    const block = btn.parentElement;
+    const text  = block.childNodes[0].textContent.trim();
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = '✓';
+      setTimeout(() => btn.textContent = '⧉', 1500);
+    });
+  }
+
+  loadRelease();
+</script>
+</body>
+</html>
