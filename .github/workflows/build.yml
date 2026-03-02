@@ -71,17 +71,17 @@ jobs:
           retention-days: 7
 
   # ─────────────────────────────────────────
-  # MAC: Swift Binary + DMG (x64 + arm64)
+  # MAC arm64: Swift Binary + DMG (Apple Silicon)
   # ─────────────────────────────────────────
-  build-mac:
-    name: Mac DMG (x64 + arm64)
-    runs-on: macos-latest
+  build-mac-arm64:
+    name: Mac DMG (Apple Silicon arm64)
+    runs-on: macos-latest   # arm64 runner
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Build ax-helper (Swift)
+      - name: Build ax-helper (Swift arm64)
         run: |
           swiftc ax-helper.swift -O -o resources/ax-helper
           chmod +x resources/ax-helper
@@ -105,15 +105,64 @@ jobs:
         env:
           NUT_TREE_TOKEN: ${{ secrets.NUT_TREE_TOKEN }}
 
-      - name: Build Mac DMG
-        run: npx electron-builder --mac --x64 --arm64
+      - name: Build Mac DMG (arm64)
+        run: npx electron-builder --mac --arm64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload Mac DMG
+      - name: Upload Mac DMG (arm64)
         uses: actions/upload-artifact@v4
         with:
-          name: MIRA-Agent-Mac
+          name: MIRA-Agent-Mac-arm64
+          path: |
+            dist/*-arm64.dmg
+            dist/latest-mac.yml
+          retention-days: 7
+
+  # ─────────────────────────────────────────
+  # MAC x64: Swift Binary + DMG (Intel)
+  # ─────────────────────────────────────────
+  build-mac-x64:
+    name: Mac DMG (Intel x64)
+    runs-on: macos-13       # Intel x64 runner
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build ax-helper (Swift x64)
+        run: |
+          swiftc ax-helper.swift -O -o resources/ax-helper
+          chmod +x resources/ax-helper
+
+      - name: Setup Python 3.11 (für node-gyp / distutils)
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+
+      - name: Install setuptools (distutils fix)
+        run: pip install setuptools
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          NUT_TREE_TOKEN: ${{ secrets.NUT_TREE_TOKEN }}
+
+      - name: Build Mac DMG (x64)
+        run: npx electron-builder --mac --x64
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload Mac DMG (x64)
+        uses: actions/upload-artifact@v4
+        with:
+          name: MIRA-Agent-Mac-x64
           path: |
             dist/*.dmg
             dist/latest-mac.yml
@@ -125,7 +174,7 @@ jobs:
   release:
     name: Create GitHub Release
     runs-on: ubuntu-latest
-    needs: [build-windows, build-mac]
+    needs: [build-windows, build-mac-arm64, build-mac-x64]
     permissions:
       contents: write
 
@@ -143,10 +192,16 @@ jobs:
           name: MIRA-Agent-Windows
           path: ./release
 
-      - name: Download Mac artifact
+      - name: Download Mac artifact (arm64)
         uses: actions/download-artifact@v4
         with:
-          name: MIRA-Agent-Mac
+          name: MIRA-Agent-Mac-arm64
+          path: ./release
+
+      - name: Download Mac artifact (x64)
+        uses: actions/download-artifact@v4
+        with:
+          name: MIRA-Agent-Mac-x64
           path: ./release
 
       - name: Create GitHub Release
