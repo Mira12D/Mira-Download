@@ -127,7 +127,7 @@
     }
   },
   "dependencies": {
-    "@nut-tree/nut-js": "^4.2.0",
+    "@nut-tree/nut-js": "4.2.0",
     "electron-updater": "^6.3.9",
     "docx": "^9.5.3",
     "electron-squirrel-startup": "^1.0.0",
