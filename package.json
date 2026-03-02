@@ -121,8 +121,8 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Musti12D",
-      "repo": "Mira-DownloadSeite",
+      "owner": "Mira12D",
+      "repo": "Mira-Download",
       "private": false
     }
   },
