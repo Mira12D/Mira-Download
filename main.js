@@ -31,6 +31,10 @@ const wahrnehmung    = require('./wahrnehmungs-amt');
 const infoAmt        = require('./informations-amt');
 const gefahrenAmt    = require('./gefahren-amt');
 
+//------- Seele und Bewusstsein---------------------------------------------
+const MIRACircuit = require('./circuit-lokal');
+let circuit = null;
+
 let calibration = null;
 
 
@@ -525,6 +529,9 @@ function loadSavedToken() {
     startPolling();
     bootstrap().catch(() => {});
     startLocalServer();
+    // Bewusstsein starten mit gespeichertem Token
+    circuit = new MIRACircuit(savedToken);
+    circuit.start();
     // Feature 1: System-Log Monitor mit gespeichertem Token starten
     sysLogMonitor.start({ api: API, token: savedToken });
     loadUserProfileSettings().catch(() => {});
@@ -2413,6 +2420,10 @@ ipcMain.handle('activate-pin', async (event, pin) => {
       startPolling();
       bootstrap().catch(() => {});
       startLocalServer();
+      // Bewusstsein mit User-Token starten
+      if (circuit) { circuit.stop(); circuit = null; }
+      circuit = new MIRACircuit(data.token);
+      circuit.start();
       sysLogMonitor.start({ api: API, token: data.token });
       loadUserProfileSettings().catch(() => {});
       startKeepAlive();
@@ -2447,6 +2458,10 @@ ipcMain.handle('activate-token', async (event, code) => {
       startPolling();
       bootstrap().catch(() => {});
       startLocalServer();
+      // Bewusstsein mit User-Token starten
+      if (circuit) { circuit.stop(); circuit = null; }
+      circuit = new MIRACircuit(data.token);
+      circuit.start();
       // Feature 1: System-Log Monitor nach Aktivierung starten
       sysLogMonitor.start({ api: API, token: data.token });
       loadUserProfileSettings().catch(() => {});
@@ -2476,6 +2491,7 @@ ipcMain.handle('logout', async () => {
   userPin = null;
   agentActive = false;
   _dk = null; // Wipe RAM keys on logout
+  if (circuit) { circuit.stop(); circuit = null; }
   if (localServer) { localServer.close(); localServer = null; }
   clearToken();
   return { success: true };
@@ -2739,15 +2755,18 @@ async function tryDispatch(task) {
     const realH = await nutScreen.height();
 
     // dispatch-full: kein Screenshot nötig — Koordinaten kommen vorgelöst zurück
+    const consciousnessContext = circuit?.state?.lastThought?.content || null;
+
     const res = await fetch(`${API}/api/brain/dispatch-full`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        token:           userToken,
-        command:         task.command,
-        screen_size:     { width: realW, height: realH },
-        session_context: sessionCtx.toPromptString(),
-        last_perception: sessionCtx.last_perception
+        token:                 userToken,
+        command:               task.command,
+        screen_size:           { width: realW, height: realH },
+        session_context:       sessionCtx.toPromptString(),
+        last_perception:       sessionCtx.last_perception,
+        consciousness_context: consciousnessContext
       })
     });
 
