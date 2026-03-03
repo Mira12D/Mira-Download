@@ -17,6 +17,8 @@ const { buildDesktopMap, scaleCoordinate, getMapContext } = require('./desktop-m
 const axLayer        = require('./ax-layer');
 const contextManager = require('./context-manager');
 const coordCache     = require('./coord-cache');
+const mathChef       = require('./mathematik/chef');      // Tier 0c: Math Pattern Matching
+const wissenstree    = require('./mathematik/wissenstree'); // Feldwissen
 const mailMonitor    = require('./mail-monitor');
 const recoveryEngine = require('./recovery-engine');
 const miraBrain      = require('./mira-brain');
@@ -3660,7 +3662,18 @@ async function executeRouteStep(step) {
         }
       }
 
-      // Screenshot nur wenn 0a+0b scheitern
+      // ── TIER 0c: Math Pattern Matching (<100ms, kein API) ──
+      if (!finalX) {
+        const mathResult = await mathChef.find(elementLabel).catch(() => null);
+        if (mathResult?.found) {
+          finalX = mathResult.centerX;
+          finalY = mathResult.centerY;
+          coordSource = 'math_pattern';
+          console.log(`🔢 Math: "${elementLabel}" → [${finalX}, ${finalY}] (Score: ${mathResult.score.toFixed(3)})`);
+        }
+      }
+
+      // Screenshot nur wenn 0a+0b+0c scheitern
       const preSc = finalX ? null : await takeCompressedScreenshot();
 
       // ── TIER 1: Server fragen — mit Kontext angereichert ──
@@ -3706,6 +3719,8 @@ async function executeRouteStep(step) {
           finalY = miniScaled.y;
           coordSource = 'mini';
           console.log(`👁️ Mini findet "${elementLabel}": x:${finalX} y:${finalY} (${miniResult.confidence})`);
+          // Auto-Lernen: nächstes Mal findet Math es ohne API
+          mathChef.lernVonErfolg(elementLabel, finalX, finalY, { app: ctx.app?.name, kontext: 'mini-find' }).catch(() => {});
         } else if (step.coordinate) {
           const scaled = scaleWithCalibration(
             step.coordinate[0], step.coordinate[1],
@@ -4434,6 +4449,11 @@ async function executeRouteStep(step) {
       // 3. AX State für Formularfelder → sichtbare Feldnamen ermitteln
       const axSnap   = await contextManager.captureState(true);
       const axShort  = contextManager.toShortString(axSnap);
+
+      // Wissentree: Feldnamen aus AX extrahieren und Kontext aufbauen
+      const axFeldLabels = (axSnap?.fields || []).map(f => f.label || f.title || '').filter(Boolean);
+      const wissenKontext = wissenstree.getKontextFürPrompt(axFeldLabels);
+
       // 4. Datei analysieren + Formularfelder befüllen via Claude
       const fname    = foundF[0].path.split('/').pop();
       const fext     = (fname.match(/\.(\w+)$/) || [])[1] || '';
@@ -4445,7 +4465,7 @@ async function executeRouteStep(step) {
           file_name: fname,
           file_ext: fext,
           extracted: fileContent.substring(0, 3000),
-          instruction: `Lies den Dateiinhalt und ordne die Werte den sichtbaren Formularfeldern zu.\nSichtbare Felder laut Screen: ${axShort}\nAntworte NUR als JSON-Objekt mit Feldnamen als Keys, z.B.: {"Name":"Mustafa","Nachname":"Erdal","Tag":"Dienstag"}`
+          instruction: `Lies den Dateiinhalt und ordne die Werte den sichtbaren Formularfeldern zu.\n\nWICHTIG — Feldtypen:\n${wissenKontext || 'Standard-Felder'}\n\nREGELN:\n- "Tag" = Zahl 1-31 (KEIN Name, KEIN Wochentag)\n- "Monat" = Zahl 1-12\n- "Jahr" = vierstellige Zahl z.B. 2026\n- "Datum" = Format TT.MM.JJJJ\n- Vorname/Name = Text, KEIN Datum, KEINE Zahl\n\nSichtbare Felder laut Screen: ${axShort}\nAntworte NUR als JSON-Objekt: {"Feldname":"Wert"}`
         })
       });
       const matchData = await matchRes.json();
@@ -5591,6 +5611,91 @@ ipcMain.handle('goal-submit', async (event, { goal, context, deadline }) => {
 ipcMain.handle('goal-recall', async (event, { query, limit }) => {
   const entries = await miraPlanner.recall(query, limit || 8);
   return { success: true, entries };
+});
+
+// ═══════════════════════════════════════
+// BRUTCAMP — Math Pattern Training IPC
+// ═══════════════════════════════════════
+
+const brutcamp = require('./mathematik/brutcamp');
+
+// Training-Session starten → gibt Fragen zurück
+ipcMain.handle('brutcamp-start', async () => {
+  try {
+    return await brutcamp.startTrainingSession();
+  } catch(e) {
+    return { error: e.message };
+  }
+});
+
+// User-Antwort verarbeiten + Pattern speichern
+ipcMain.handle('brutcamp-answer', async (event, { fragenId, antwort, regionBase64, zusatz }) => {
+  try {
+    const regionPng = regionBase64 ? Buffer.from(regionBase64, 'base64') : null;
+    return await brutcamp.verarbeiteAntwort(fragenId, antwort, regionPng, zusatz || {});
+  } catch(e) {
+    return { error: e.message };
+  }
+});
+
+// Alle gespeicherten Patterns auflisten
+ipcMain.handle('brutcamp-list', async () => {
+  try {
+    return { patterns: brutcamp.allePatterns() };
+  } catch(e) {
+    return { patterns: [], error: e.message };
+  }
+});
+
+// Pattern löschen (falsch trainiert)
+ipcMain.handle('brutcamp-delete', async (event, { key }) => {
+  try {
+    return { ok: brutcamp.löschePattern(key) };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Pattern manuell hinzufügen mit Screenshot-Region
+ipcMain.handle('brutcamp-capture-region', async (event, { x, y, w, h, label, kategorie }) => {
+  try {
+    const { cropRegion } = require('./mathematik/screen-capture');
+    const sc = await require('screenshot-desktop')({ format: 'png' });
+    const regionPng = await cropRegion(sc, { x, y, w, h });
+    await brutcamp.speicherePattern(label, kategorie || 'icon', regionPng, { kontext: 'Manuell aufgenommen' });
+    mathChef.clearCache();
+    return { ok: true, label };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Wissen über ein Formularfeld speichern
+ipcMain.handle('brutcamp-lern-feld', async (event, { feldLabel, typ, beschreibung, bereich }) => {
+  try {
+    wissenstree.lernFeld(feldLabel, { typ, beschreibung, bereich });
+    return { ok: true };
+  } catch(e) {
+    return { ok: false, error: e.message };
+  }
+});
+
+// Math-Stats: wie viele Patterns, letzter Treffer etc.
+ipcMain.handle('math-stats', async () => {
+  try {
+    const patterns = brutcamp.allePatterns();
+    return {
+      patternCount: patterns.length,
+      patterns: patterns.map(p => ({
+        label: p.label,
+        kategorie: p.kategorie,
+        trefferCount: p.trefferCount || 0,
+        gelernt: p.gelernt
+      }))
+    };
+  } catch(e) {
+    return { patternCount: 0, patterns: [] };
+  }
 });
 
 // ═══════════════════════════════════════
