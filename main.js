@@ -17,8 +17,9 @@ const { buildDesktopMap, scaleCoordinate, getMapContext } = require('./desktop-m
 const axLayer        = require('./ax-layer');
 const contextManager = require('./context-manager');
 const coordCache     = require('./coord-cache');
-const mathChef       = require('./mathematik/chef');      // Tier 0c: Math Pattern Matching
+const mathChef       = require('./mathematik/chef');       // Tier 0c: Math Pattern Matching
 const wissenstree    = require('./mathematik/wissenstree'); // Feldwissen
+const mathCommander  = require('./mathematik/commander');   // Tier 0d: Lokaler Intent-Dispatcher
 const mailMonitor    = require('./mail-monitor');
 const recoveryEngine = require('./recovery-engine');
 const miraBrain      = require('./mira-brain');
@@ -2260,7 +2261,7 @@ async function executeTaskFromQueue(task) {
         await markTaskComplete(task.id, 'success');
 
       } else {
-        // ── 2a. Lokaler Pre-Dispatcher — kein API-Call nötig ──
+        // ── 2a. Lokaler Pre-Dispatcher — Hotkeys + einfache Web-Befehle (<1ms) ──
         const localSteps = localDispatch(task.command);
         if (localSteps) {
           console.log(`⚡ Local dispatch: "${task.command}" (kein API)`);
@@ -2272,8 +2273,24 @@ async function executeTaskFromQueue(task) {
           return;
         }
 
-        // ── 2b. Dispatcher — device_knowledge + GPT-mini nutzen ──
-        console.log(`🧠 Kein Route-Match → Dispatcher versuchen`);
+        // ── 2b. Math Commander — Intent + Pattern-Suche + AX (kein API) ──
+        const cmdResult = await mathCommander.dispatch(task.command, { chef: mathChef, axLayer }).catch(() => null);
+        if (cmdResult) {
+          console.log(`🧠 Commander: "${cmdResult.intent}" → ${cmdResult.steps.length} Steps`);
+          for (const step of cmdResult.steps) {
+            if (step.action === 'wait') {
+              await sleep(step.value || 500);
+            } else {
+              await executeRouteStep(step);
+              await sleep(200);
+            }
+          }
+          await markTaskComplete(task.id, 'success');
+          return;
+        }
+
+        // ── 2c. Dispatcher — device_knowledge + GPT-mini nutzen ──
+        console.log(`🧠 Kein lokaler Match → Server-Dispatcher`);
         const dispatched = await tryDispatch(task);
 
         if (dispatched) {
@@ -2876,6 +2893,60 @@ function localDispatch(command) {
   if (/\b(play|pause|abspielen?|anhalten?)\b/i.test(cmd) &&
       !/youtube|spotify|netflix|musik.*abspiel|video.*abspiel/i.test(cmd))
     return [{ action: 'key', value: 'space', command: cmd }];
+
+  // ── Web-Suche & URL öffnen — kein device_knowledge nötig ─────────────────
+  // "google das Wetter", "suche nach X", "such X", "zeig mir X"
+  const webSearch = cmd.match(
+    /\b(?:google(?:\s+mal)?|such(?:e)?(?:\s+nach)?|find(?:e)?(?:\s+mal)?|zeig(?:\s+mir)?(?:\s+mal)?|schau(?:\s+mal)?(?:\s+nach)?)\s+(.+)/i
+  );
+  if (webSearch) {
+    const q = webSearch[1].trim();
+    return [{ action: 'open_url', value: `https://www.google.com/search?q=${encodeURIComponent(q)}`, command: cmd }];
+  }
+
+  // "öffne google.com", "geh auf youtube.com", "browser auf example.com"
+  const urlOpen = cmd.match(
+    /\b(?:öffne?|geh\s+(?:auf|zu)|starte?|browser(?:\s+auf)?|navigier(?:e)?(?:\s+zu)?|zeig(?:\s+mir)?)\s+(https?:\/\/\S+|[a-z0-9-]+\.[a-z]{2,}(?:\/\S*)?)/i
+  );
+  if (urlOpen) {
+    let url = urlOpen[1].trim();
+    if (!/^https?:\/\//.test(url)) url = 'https://' + url;
+    return [{ action: 'open_url', value: url, command: cmd }];
+  }
+
+  // "youtube wetter", "spotify öffnen", bekannte Plattformen direkt
+  const platforms = {
+    youtube:     'https://www.youtube.com',
+    spotify:     'https://open.spotify.com',
+    netflix:     'https://www.netflix.com',
+    gmail:       'https://mail.google.com',
+    'google mail': 'https://mail.google.com',
+    'google maps': 'https://maps.google.com',
+    maps:        'https://maps.google.com',
+    whatsapp:    'https://web.whatsapp.com',
+    instagram:   'https://www.instagram.com',
+    linkedin:    'https://www.linkedin.com',
+    twitter:     'https://www.twitter.com',
+    facebook:    'https://www.facebook.com',
+    github:      'https://github.com',
+    notion:      'https://www.notion.so',
+    chatgpt:     'https://chatgpt.com',
+    deepl:       'https://www.deepl.com',
+    google:      'https://www.google.com',
+  };
+  for (const [name, url] of Object.entries(platforms)) {
+    if (cmd.includes(name)) {
+      // Gibt es einen Suchbegriff dahinter? z.B. "youtube katzen videos"
+      const after = cmd.replace(new RegExp(`.*?${name}\\s*`), '').trim();
+      if (after && !['öffnen', 'öffne', 'starte', 'starten', 'aufmachen', 'auf', 'mal'].includes(after)) {
+        if (name === 'youtube') {
+          return [{ action: 'open_url', value: `https://www.youtube.com/results?search_query=${encodeURIComponent(after)}`, command: cmd }];
+        }
+        return [{ action: 'open_url', value: `${url}/search?q=${encodeURIComponent(after)}`, command: cmd }];
+      }
+      return [{ action: 'open_url', value: url, command: cmd }];
+    }
+  }
 
   return null; // → weiter zu tryDispatch (API)
 }
