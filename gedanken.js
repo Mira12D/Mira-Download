@@ -172,8 +172,9 @@ class ThoughtGenerator {
   }
 }
 
-Array.prototype.random = function() {
-  return this[Math.floor(Math.random() * this.length)];
-};
+Object.defineProperty(Array.prototype, 'random', {
+  value: function() { return this[Math.floor(Math.random() * this.length)]; },
+  enumerable: false, writable: true, configurable: true
+});
 
 module.exports = ThoughtGenerator;

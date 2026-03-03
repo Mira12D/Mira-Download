@@ -957,6 +957,20 @@
 
     <div class="divider"></div>
 
+    <!-- BrutCamp: Math Pattern Training -->
+    <div class="training-card clickable" id="brutcamp-card" onclick="openBrutcamp()" style="margin-bottom:8px;border-color:rgba(52,199,89,0.2)">
+      <div class="training-header">
+        <div class="training-icon" id="brutcamp-icon">🔢</div>
+        <div>
+          <div class="training-title">Sehen lernen</div>
+          <div class="training-sub" id="brutcamp-sub">MIRA lernt Icons, Buttons und Felder — mathematisch.</div>
+        </div>
+      </div>
+      <div style="margin-top:6px;font-size:10px;font-family:'JetBrains Mono',monospace;color:var(--text3)" id="brutcamp-count">
+        0 Patterns trainiert
+      </div>
+    </div>
+
     <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('kb-open')" style="margin-bottom:8px">
       🧠 Wissensbase bearbeiten
     </button>
@@ -1324,6 +1338,97 @@ async function fillDashboard(data) {
       setTrainingUI(true, prog);
     }
   }
+
+  // ══════════════════════════════════
+  // BRUTCAMP — Math Pattern Training
+  // ══════════════════════════════════
+
+  async function loadBrutcampStats() {
+    const res = await ipcRenderer.invoke('math-stats').catch(() => ({ patternCount: 0 }));
+    const el  = document.getElementById('brutcamp-count');
+    if (el) el.textContent = `${res.patternCount} Pattern${res.patternCount !== 1 ? 's' : ''} trainiert`;
+  }
+
+  async function openBrutcamp() {
+    // Modal öffnen
+    document.getElementById('brutcamp-modal').style.display = 'flex';
+    await loadBrutcampPatternList();
+  }
+
+  function closeBrutcamp() {
+    document.getElementById('brutcamp-modal').style.display = 'none';
+    loadBrutcampStats();
+  }
+
+  async function loadBrutcampPatternList() {
+    const res   = await ipcRenderer.invoke('brutcamp-list').catch(() => ({ patterns: [] }));
+    const list  = document.getElementById('brutcamp-pattern-list');
+    const empty = document.getElementById('brutcamp-empty');
+
+    if (!res.patterns.length) {
+      list.innerHTML  = '';
+      empty.style.display = 'block';
+      return;
+    }
+    empty.style.display = 'none';
+    list.innerHTML = res.patterns.map(p => `
+      <div class="brutcamp-pattern-row" id="bp-${p.key}">
+        <div class="brutcamp-pattern-info">
+          <div class="brutcamp-pattern-label">${p.label}</div>
+          <div class="brutcamp-pattern-meta">${p.kategorie} · ${p.trefferCount || 0}× genutzt · ${new Date(p.gelernt).toLocaleDateString('de-DE')}</div>
+        </div>
+        <button class="brutcamp-del-btn" onclick="deletePattern('${p.key}')">✕</button>
+      </div>
+    `).join('');
+  }
+
+  async function deletePattern(key) {
+    await ipcRenderer.invoke('brutcamp-delete', { key });
+    await loadBrutcampPatternList();
+    await loadBrutcampStats();
+    toast(`Pattern gelöscht`, 'info');
+  }
+
+  async function startBrutcampCapture() {
+    const label     = document.getElementById('bc-label').value.trim();
+    const kategorie = document.getElementById('bc-kategorie').value;
+    if (!label) { toast('Bitte einen Namen eingeben', 'warning'); return; }
+
+    toast('Screenshot wird gemacht — platziere das Element auf dem Screen...', 'info');
+    document.getElementById('brutcamp-modal').style.display = 'none';
+
+    await new Promise(r => setTimeout(r, 1500)); // kurz warten
+
+    // Ganzer Screen aufnehmen, User-Input für Region (vereinfacht: mittlerer Bereich)
+    const res = await ipcRenderer.invoke('brutcamp-capture-region', {
+      x: 0, y: 0, w: 800, h: 600, // TODO: Region-Auswahl
+      label, kategorie
+    });
+
+    document.getElementById('brutcamp-modal').style.display = 'flex';
+    if (res.ok) {
+      toast(`✅ "${label}" gelernt!`, 'success');
+      document.getElementById('bc-label').value = '';
+      await loadBrutcampPatternList();
+      await loadBrutcampStats();
+    } else {
+      toast(`Fehler: ${res.error}`, 'error');
+    }
+  }
+
+  async function saveFeldWissen() {
+    const feld    = document.getElementById('bc-feld-name').value.trim();
+    const typ     = document.getElementById('bc-feld-typ').value;
+    const desc    = document.getElementById('bc-feld-desc').value.trim();
+    if (!feld || !desc) { toast('Feld-Name und Beschreibung erforderlich', 'warning'); return; }
+    await ipcRenderer.invoke('brutcamp-lern-feld', { feldLabel: feld, typ, beschreibung: desc });
+    toast(`✅ Feld "${feld}" = ${typ} gelernt!`, 'success');
+    document.getElementById('bc-feld-name').value = '';
+    document.getElementById('bc-feld-desc').value = '';
+  }
+
+  // Stats beim Start laden
+  loadBrutcampStats();
 
   // ══════════════════════════════════
   // CALIBRATION
@@ -2056,6 +2161,83 @@ async function startTraining(command) {
     <button class="mc-send" id="mc-send" onclick="sendMiraChat()" disabled>↑</button>
   </div>
 </div>
+
+<!-- ══════════════════════════════════════════════════ -->
+<!-- BRUTCAMP MODAL                                      -->
+<!-- ══════════════════════════════════════════════════ -->
+<div id="brutcamp-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.85);z-index:9999;align-items:center;justify-content:center;backdrop-filter:blur(8px)">
+  <div style="background:#0d0d0f;border:1px solid rgba(255,255,255,0.08);border-radius:18px;width:560px;max-height:85vh;overflow-y:auto;padding:28px;position:relative">
+
+    <!-- Header -->
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:24px">
+      <div>
+        <div style="font-size:18px;font-weight:800;letter-spacing:-0.5px">🔢 Sehen lernen</div>
+        <div style="font-size:12px;color:#8e8e9a;margin-top:3px">MIRA lernt Icons und Felder — mathematisch, kein API</div>
+      </div>
+      <button onclick="closeBrutcamp()" style="background:none;border:none;color:#8e8e9a;font-size:20px;cursor:pointer;padding:4px 8px;border-radius:8px">✕</button>
+    </div>
+
+    <!-- Tab: Pattern Training -->
+    <div style="background:#111114;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:18px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#3a3a48;margin-bottom:14px">Pattern hinzufügen</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <input id="bc-label" placeholder="Name (z.B. Chrome, Speichern-Button)" style="flex:1;background:#070708;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:9px 12px;color:#f2f2f7;font-size:13px;outline:none">
+        <select id="bc-kategorie" style="background:#070708;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:9px 12px;color:#f2f2f7;font-size:13px;outline:none">
+          <option value="app">App</option>
+          <option value="button">Button</option>
+          <option value="icon">Icon</option>
+          <option value="feld">Feld</option>
+        </select>
+      </div>
+      <button onclick="startBrutcampCapture()" style="width:100%;background:rgba(52,199,89,0.12);border:1px solid rgba(52,199,89,0.3);border-radius:8px;padding:10px;color:#34c759;font-size:13px;font-weight:600;cursor:pointer">
+        📸 Screenshot aufnehmen & speichern
+      </button>
+    </div>
+
+    <!-- Tab: Feld-Wissen -->
+    <div style="background:#111114;border:1px solid rgba(255,255,255,0.06);border-radius:12px;padding:18px;margin-bottom:16px">
+      <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#3a3a48;margin-bottom:14px">Feld-Wissen beibringen</div>
+      <div style="display:flex;gap:10px;margin-bottom:10px">
+        <input id="bc-feld-name" placeholder='Feldname (z.B. "Tag")' style="flex:1;background:#070708;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:9px 12px;color:#f2f2f7;font-size:13px;outline:none">
+        <select id="bc-feld-typ" style="background:#070708;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:9px 12px;color:#f2f2f7;font-size:13px;outline:none">
+          <option value="zahl">Zahl</option>
+          <option value="datum">Datum</option>
+          <option value="text">Text</option>
+          <option value="email">E-Mail</option>
+          <option value="telefon">Telefon</option>
+        </select>
+      </div>
+      <input id="bc-feld-desc" placeholder='Beschreibung (z.B. "Tag des Monats, 1-31")' style="width:100%;background:#070708;border:1px solid rgba(255,255,255,0.07);border-radius:8px;padding:9px 12px;color:#f2f2f7;font-size:13px;outline:none;margin-bottom:10px;box-sizing:border-box">
+      <button onclick="saveFeldWissen()" style="width:100%;background:rgba(10,132,255,0.12);border:1px solid rgba(10,132,255,0.3);border-radius:8px;padding:10px;color:#0a84ff;font-size:13px;font-weight:600;cursor:pointer">
+        📚 Feldwissen speichern
+      </button>
+    </div>
+
+    <!-- Gespeicherte Patterns -->
+    <div style="font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:#3a3a48;margin-bottom:12px">Gespeicherte Patterns</div>
+    <div id="brutcamp-empty" style="text-align:center;color:#3a3a48;font-size:13px;padding:20px;display:block">
+      Noch keine Patterns trainiert.<br>Zeig MIRA was sie erkennen soll.
+    </div>
+    <div id="brutcamp-pattern-list"></div>
+
+  </div>
+</div>
+
+<style>
+  .brutcamp-pattern-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; background: #111114;
+    border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; margin-bottom: 8px;
+  }
+  .brutcamp-pattern-label { font-size: 13px; font-weight: 600; }
+  .brutcamp-pattern-meta  { font-size: 11px; color: #8e8e9a; margin-top: 2px; font-family: 'JetBrains Mono', monospace; }
+  .brutcamp-del-btn {
+    background: none; border: 1px solid rgba(255,69,58,0.3); border-radius: 6px;
+    color: #ff453a; font-size: 12px; cursor: pointer; padding: 4px 8px;
+    transition: background 0.15s;
+  }
+  .brutcamp-del-btn:hover { background: rgba(255,69,58,0.1); }
+</style>
 
 </body>
 </html>
