@@ -130,6 +130,24 @@ function erkennIntent(command) {
   if (/\b(was\s+steht|les\s+(?:mal\s+)?(?:vor|den?\s+bildschirm)|zeig\s+(?:mir\s+)?was\s+(?:da|hier|dort)\s+steht|lies\s+(?:den?\s+)?(?:bildschirm|screen))\b/i.test(cmd))
     return { intent: 'screen_read' };
 
+  // ── Formular aus Datei ausfüllen — ZUERST (spezifischer als file_transfer) ──
+  // "nimm mitarbeiter.pdf und trage formular ein", "fülle formular mit datei aus"
+  const formFileM = cmd.match(
+    /(?:nimm|nehme?|aus|von|mit)\s+(.+?(?:\.pdf|\.docx?|\.xlsx?|\.txt|aus\s+downloads?|aus\s+schreibtisch).*?)\s+(?:und\s+)?(?:trag|füll|eingeb|eintrag|ausfüll)\s+(?:\w+\s+)*(?:formular|form|felder?|maske|das\s+offene|ein)/i
+  );
+  if (formFileM) {
+    const srcRaw  = formFileM[1].trim();
+    // Dateiname aus dem Text extrahieren
+    const fileM   = srcRaw.match(/([a-zäöü0-9\s_-]+\.(?:pdf|docx?|xlsx?|txt|csv))/i);
+    const dirM    = srcRaw.match(/(?:aus\s+)?(downloads?|schreibtisch|desktop|dokumente?|documents?)/i);
+    return {
+      intent:      'form_fill_from_file',
+      source_file: fileM ? fileM[1].trim() : srcRaw,
+      source_dir:  dirM  ? dirM[1].toLowerCase() : 'downloads',
+      raw:         command
+    };
+  }
+
   // ── Datei-Transfer: "nimm X und trag in Y" ────────────────────────────
   const transferM = cmd.match(
     /\b(?:nimm|nehme?|aus)\s+(.+?)\s+(?:und\s+)?(?:trag|füge?|schreib|eintrag)\s*(?:es\s+)?(?:in|nach|ins?)\s+(.+)/i
@@ -137,7 +155,7 @@ function erkennIntent(command) {
   if (transferM)
     return { intent: 'file_transfer', source: transferM[1].trim(), target: transferM[2].trim(), raw: command };
 
-  // ── Formular ausfüllen ─────────────────────────────────────────────────
+  // ── Formular ausfüllen (ohne Datei) ───────────────────────────────────
   if (/\b(füll|ausfüll)\b.*\b(formular|form|felder?|maske)\b/i.test(cmd))
     return { intent: 'form_fill', raw: command };
 
@@ -295,6 +313,13 @@ async function bauSteps(intent, { chef, axLayer }) {
       s.push(key(IS_MAC ? 'cmd+shift+4' : 'super+shift+s'));
       break;
 
+    // ── Formular aus Datei ausfüllen — PDF lesen + Server-AI für Feldmapping ─
+    case 'form_fill_from_file':
+      // Commander gibt den Intent zurück, aber KEINE lokalen Steps —
+      // stattdessen: enriched_command für Server bauen (source_file + source_dir)
+      // Das passiert über den "enriched"-Rückgabepfad im dispatch()
+      return { __server_task: 'form_fill_from_file', source_file: intent.source_file, source_dir: intent.source_dir };
+
     // ── Bildschirm lesen / komplexe Transfers ─────────────────────────────
     case 'screen_read':
     case 'file_transfer':
@@ -322,14 +347,17 @@ async function dispatch(command, { chef, axLayer } = {}) {
 
   console.log(`🧠 Commander: "${command.substring(0, 60)}" → ${intent.intent}`);
 
-  const steps = await bauSteps(intent, { chef: chef || null, axLayer: axLayer || null });
-  if (!steps) {
+  const result = await bauSteps(intent, { chef: chef || null, axLayer: axLayer || null });
+  if (!result) {
     console.log(`🧠 Commander: "${intent.intent}" braucht Server-AI`);
     return null;
   }
 
-  console.log(`⚡ Commander: ${steps.length} Steps lokal (kein API)`);
-  return { intent: intent.intent, steps };
+  // Server-Task (kein lokales Step-Array, sondern strukturierter Weiterleiter)
+  if (result.__server_task) return result;
+
+  console.log(`⚡ Commander: ${result.length} Steps lokal (kein API)`);
+  return { intent: intent.intent, steps: result };
 }
 
 module.exports = { dispatch, erkennIntent };
