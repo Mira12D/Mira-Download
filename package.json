@@ -114,6 +114,7 @@
       "icon.ico",
       "icon.png",
       "package.json",
+      "mathematik/**/*",
       "node_modules/**/*"
     ],
     "directories": {
