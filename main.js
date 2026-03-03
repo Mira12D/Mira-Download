@@ -17,9 +17,10 @@ const { buildDesktopMap, scaleCoordinate, getMapContext } = require('./desktop-m
 const axLayer        = require('./ax-layer');
 const contextManager = require('./context-manager');
 const coordCache     = require('./coord-cache');
-const mathChef       = require('./mathematik/chef');       // Tier 0c: Math Pattern Matching
-const wissenstree    = require('./mathematik/wissenstree'); // Feldwissen
-const mathCommander  = require('./mathematik/commander');   // Tier 0d: Lokaler Intent-Dispatcher
+const mathChef        = require('./mathematik/chef');          // Tier 0c: Math Pattern Matching
+const wissenstree     = require('./mathematik/wissenstree');   // Feldwissen
+const mathCommander   = require('./mathematik/commander');     // Tier 0d: Lokaler Intent-Dispatcher
+const schaltzentrale  = require('./mathematik/schaltzentrale'); // Consciousness-Dispatcher
 const mailMonitor    = require('./mail-monitor');
 const recoveryEngine = require('./recovery-engine');
 const miraBrain      = require('./mira-brain');
@@ -37,6 +38,20 @@ const gefahrenAmt    = require('./gefahren-amt');
 //------- Seele und Bewusstsein---------------------------------------------
 const MIRACircuit = require('./circuit-lokal');
 let circuit = null;
+
+// Startet das Bewusstsein und kabel Gedanken in den MIRA-Chat
+function startCircuit(token) {
+  if (circuit) { circuit.stop(); circuit = null; }
+  circuit = new MIRACircuit(token);
+  circuit.start();
+  // Innerer Monolog → MIRA-Chat (nur wenn Gewicht > 0.5 — keine trivialen Gedanken)
+  circuit.on('thought', ({ content, weight, mood }) => {
+    if (weight > 0.5 && mainWindow) {
+      mainWindow.webContents.send('mira-thought', { content, mood });
+    }
+  });
+  return circuit;
+}
 
 let calibration = null;
 
@@ -533,8 +548,7 @@ function loadSavedToken() {
     bootstrap().catch(() => {});
     startLocalServer();
     // Bewusstsein starten mit gespeichertem Token
-    circuit = new MIRACircuit(savedToken);
-    circuit.start();
+    startCircuit(savedToken);
     // Feature 1: System-Log Monitor mit gespeichertem Token starten
     sysLogMonitor.start({ api: API, token: savedToken });
     loadUserProfileSettings().catch(() => {});
@@ -2263,68 +2277,35 @@ async function executeTaskFromQueue(task) {
         await markTaskComplete(task.id, 'success');
 
       } else {
-        // ── 2a. Lokaler Pre-Dispatcher — Hotkeys + einfache Web-Befehle (<1ms) ──
-        const localSteps = localDispatch(task.command);
-        if (localSteps) {
-          console.log(`⚡ Local dispatch: "${task.command}" (kein API)`);
-          for (const step of localSteps) {
-            await executeRouteStep(step);
-            await sleep(150);
-          }
-          await markTaskComplete(task.id, 'success');
-          return;
-        }
+        // ── Schaltzentrale — Consciousness-based Dispatch ──────────────────
+        const szResult = await schaltzentrale.dispatch(task, {
+          executeRouteStep,
+          executeAction,
+          sleep,
+          userToken,
+          API,
+          mathChef,
+          axLayer,
+          sessionCtx,
+          circuit,
+          nutScreen,
+          extractedValues,
+          notifyUser: (type, text) => {
+            if (mainWindow) mainWindow.webContents.send('mira-chat-message', { type, text });
+          },
+        });
 
-        // ── 2b. Math Commander — Intent + Pattern-Suche + AX (kein API) ──
-        // Guard: Server-reformulierte Commands (z.B. "Aufgabe bezogen auf Bildschirm...")
-        // enthalten Wahrnehmungs-Kontext → commander würde falschen Intent matchen → überspringen
-        const _isServerCmd = /^aufgabe bezogen|^\{"|^RUN_ROUTE:|^\[NUTZER_INFO/i.test(task.command.trim())
-          || task.command.includes('(unknown:') || task.command.includes('[NUTZER_INFO');
-        const cmdResult = _isServerCmd
-          ? null
-          : await mathCommander.dispatch(task.command, { chef: mathChef, axLayer }).catch(() => null);
-        if (cmdResult) {
-          // ── Sonderfall: form_fill_from_file → strukturiert an Server ──
-          if (cmdResult.__server_task === 'form_fill_from_file') {
-            console.log(`📄 Commander: form_fill_from_file → ${cmdResult.source_file} aus ${cmdResult.source_dir}`);
-            const ffTask = {
-              ...task,
-              command: JSON.stringify({
-                type: 'screen_fill_from_file',
-                source_file: cmdResult.source_file,
-                source_dir:  cmdResult.source_dir
-              })
-            };
-            const dispatched2 = await tryDispatch(ffTask);
-            if (dispatched2) { await markTaskComplete(task.id, 'success'); return; }
-            // Wenn Server offline → Fallback
-          } else {
-            console.log(`🧠 Commander: "${cmdResult.intent}" → ${cmdResult.steps.length} Steps`);
-            for (const step of cmdResult.steps) {
-              if (step.action === 'wait') {
-                await sleep(step.value || 500);
-              } else {
-                await executeRouteStep(step);
-                await sleep(200);
-              }
-            }
-            await markTaskComplete(task.id, 'success');
-            return;
-          }
-        }
-
-        // ── 2c. Dispatcher — device_knowledge + GPT-mini nutzen ──
-        console.log(`🧠 Kein lokaler Match → Server-Dispatcher`);
-        const dispatched = await tryDispatch(task);
-
-        if (dispatched) {
-          console.log(`✅ Dispatcher erfolgreich`);
+        if (szResult === 'success') {
           await markTaskComplete(task.id, 'success');
         } else {
-          // ── 3. Fallback — alter execute Weg ──
-          console.log(`⚡ Dispatcher kein Match → execute Fallback`);
+          // ── Letzter Fallback — alter /api/agent/execute Weg ────────────
+          console.log(`⚡ Schaltzentrale kein Match → execute Fallback`);
           if (!userToken || !sc) {
-            console.warn(`⚠️ Fallback skip: kein Token oder Screenshot — Task wird als failed markiert`);
+            console.warn(`⚠️ Fallback skip: kein Token oder Screenshot`);
+            if (mainWindow) mainWindow.webContents.send('mira-chat-message', {
+              type: 'error',
+              text: userToken ? '📸 Screenshot nicht verfügbar.' : '⚠️ Kein Token — bitte einloggen.'
+            });
             await markTaskComplete(task.id, 'failed');
             return;
           }
@@ -2593,9 +2574,7 @@ ipcMain.handle('activate-pin', async (event, pin) => {
       bootstrap().catch(() => {});
       startLocalServer();
       // Bewusstsein mit User-Token starten
-      if (circuit) { circuit.stop(); circuit = null; }
-      circuit = new MIRACircuit(data.token);
-      circuit.start();
+      startCircuit(data.token);
       sysLogMonitor.start({ api: API, token: data.token });
       loadUserProfileSettings().catch(() => {});
       startKeepAlive();
@@ -2631,9 +2610,7 @@ ipcMain.handle('activate-token', async (event, code) => {
       bootstrap().catch(() => {});
       startLocalServer();
       // Bewusstsein mit User-Token starten
-      if (circuit) { circuit.stop(); circuit = null; }
-      circuit = new MIRACircuit(data.token);
-      circuit.start();
+      startCircuit(data.token);
       // Feature 1: System-Log Monitor nach Aktivierung starten
       sysLogMonitor.start({ api: API, token: data.token });
       loadUserProfileSettings().catch(() => {});
@@ -2844,13 +2821,8 @@ function sleep(ms) {
 const extractedValues = new Map();
 
 // ─────────────────────────────────────────────────────────────────────
-// localDispatch — clientseitiger Pre-Dispatcher ohne API-Call.
-//
-// Erkennt ~50 "pure Hotkey" Intents lokal per Regex (<1ms).
-// Für diese Intents werden Steps direkt gebaut und ausgeführt —
-// weder Netzwerk noch server-seitige KI nötig.
-//
-// Rückgabe: Array von Steps (sofort ausführbar) oder null.
+// localDispatch — VERALTET, jetzt in mathematik/schaltzentrale.js
+// Bleibt für Legacy-Aufrufe aus recoveryEngine / passiveTrainer
 // ─────────────────────────────────────────────────────────────────────
 function localDispatch(command) {
   const IS_MAC = process.platform === 'darwin';
@@ -2975,53 +2947,8 @@ function localDispatch(command) {
   return null; // → weiter zu tryDispatch (API)
 }
 
-async function tryDispatch(task) {
-  try {
-    const realW = await nutScreen.width();
-    const realH = await nutScreen.height();
-
-    // dispatch-full: kein Screenshot nötig — Koordinaten kommen vorgelöst zurück
-    const consciousnessContext = circuit?.state?.lastThought?.content || null;
-
-    const res = await fetch(`${API}/api/brain/dispatch-full`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token:                 userToken,
-        command:               task.command,
-        screen_size:           { width: realW, height: realH },
-        session_context:       sessionCtx.toPromptString(),
-        last_perception:       sessionCtx.last_perception,
-        consciousness_context: consciousnessContext
-      })
-    });
-
-    const data = await res.json();
-
-    if (!data.success) {
-      console.log(`⚠️ dispatch-full: ${data.error || 'kein Intent'} | fehlend: ${data.missing?.join(', ') || '—'}`);
-      return false;
-    }
-
-    console.log(`🎯 dispatch-full: "${data.intent}" → ${data.steps.length} Steps (${data.stats?.direct ?? '?'} direkt ⚡, ${data.stats?.needs_screenshot ?? '?'} mit Screenshot 📸)`);
-
-    extractedValues.clear(); // Frisch für jeden Task
-
-    for (let i = 0; i < data.steps.length; i++) {
-      const step = { ...data.steps[i] };
-      const icon = step.needs_screenshot ? '📸' : '⚡';
-      console.log(`▶️ Step ${i+1}/${data.steps.length} ${icon}: ${step.action} "${step.command || step.value || ''}"`);
-      await executeRouteStep(step);
-      await sleep(500); // Kürzer — wait-Steps kommen bereits vom Server
-    }
-
-    return true;
-
-  } catch(e) {
-    console.error('❌ tryDispatch Fehler:', e.message);
-    return false;
-  }
-}
+// tryDispatch — VERALTET, jetzt in schaltzentrale.serverDispatch
+// Wird nicht mehr direkt aufgerufen.
 
 // ═══════════════════════════════════════
 // Warning / Security-Dialog Dismiss + Retry

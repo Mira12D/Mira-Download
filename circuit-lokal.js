@@ -110,7 +110,14 @@ class MIRACircuit extends EventEmitter {
       // Schritt 7: Gedanken SPEICHERN (für Dispatcher)
       this.state.lastThought = selectedThought;
       this.state.lastActivity = Date.now();
-      
+
+      // Schritt 7b: Gedanken nach außen emittieren (→ main.js → MIRA-Chat)
+      this.emit('thought', {
+        content: selectedThought.content,
+        weight:  selectedThought.weight,
+        mood:    this.state.currentMood,
+      });
+
       // Schritt 8: Gedanken INJIZIEREN (für Dispatcher bereitstellen)
       await injectToDispatcher(selectedThought);
       
