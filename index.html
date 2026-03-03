@@ -1919,6 +1919,36 @@ async function startTraining(command) {
     });
   }
 
+  // ── Fehler & Systemmeldungen im MIRA-Chat anzeigen ───────────────────────
+  ipcRenderer.on('mira-chat-message', (event, { type, text }) => {
+    if (!miraChatOpen) openMiraChat();
+    const msgs = document.getElementById('mc-messages');
+    const m = document.createElement('div');
+    m.className = 'mc-msg mira';
+    m.style.cssText = type === 'error'
+      ? 'border-color:rgba(255,59,48,0.4);background:rgba(255,59,48,0.08);'
+      : 'border-color:rgba(255,159,10,0.4);background:rgba(255,159,10,0.07);';
+    m.textContent = text;
+    msgs.appendChild(m);
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
+  // ── MIRA Innerer Monolog — Gedanken sichtbar machen ──────────────────────
+  ipcRenderer.on('mira-thought', (event, { content, mood }) => {
+    const msgs = document.getElementById('mc-messages');
+    if (!msgs) return;
+    // Nur zeigen wenn Chat offen, kein Extra-Öffnen für Gedanken
+    if (!miraChatOpen) return;
+    const m = document.createElement('div');
+    m.className = 'mc-msg mira mc-thought';
+    m.style.cssText = 'opacity:0.55;font-style:italic;font-size:11.5px;border-color:rgba(52,199,89,0.08);background:rgba(52,199,89,0.04);';
+    m.textContent = `💭 ${content}`;
+    msgs.appendChild(m);
+    msgs.scrollTop = msgs.scrollHeight;
+    // Gedanken nach 8 Sek. wieder ausblenden
+    setTimeout(() => { m.style.transition = 'opacity 1.5s'; m.style.opacity = '0'; setTimeout(() => m.remove(), 1600); }, 8000);
+  });
+
   // ── MIRA fragt zurück (mira-ask event vom Server) ────────────────────────
   ipcRenderer.on('mira-ask', (event, { text, mode }) => {
     if (mode === 'voice_followup') {
