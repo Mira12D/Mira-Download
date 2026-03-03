@@ -538,6 +538,8 @@ function loadSavedToken() {
     sysLogMonitor.start({ api: API, token: savedToken });
     loadUserProfileSettings().catch(() => {});
     startKeepAlive();
+    // Community-Patterns + Feldwissen beim Start laden
+    syncCommunityPatterns(savedToken).catch(() => {});
     // Token-Guthaben nach Login laden und ans UI schicken
     fetch(`${API}/api/agent/token-balance?token=${savedToken}`)
       .then(r => r.json())
@@ -581,6 +583,133 @@ async function loadUserProfileSettings() {
   } catch(e) {
     console.warn('⚠️ Profil laden fehlgeschlagen:', e.message);
   }
+}
+
+// ═══════════════════════════════════════
+// COMMUNITY PATTERN SYNC
+// ═══════════════════════════════════════
+
+async function syncCommunityPatterns(token) {
+  if (!token) return;
+  const fs   = require('fs');
+  const path = require('path');
+  const PATTERNS_DIR = path.join(__dirname, 'reme-memory', 'patterns');
+  const INDEX_PATH   = path.join(PATTERNS_DIR, 'index.json');
+
+  try {
+    // ── 1. Community-Patterns herunterladen ───────────────────────────────
+    const res = await fetch(`${API}/api/patterns/download?token=${token}&min_trust=0.3`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.success || !Array.isArray(data.patterns)) return;
+
+    fs.mkdirSync(PATTERNS_DIR, { recursive: true });
+
+    let index = {};
+    if (fs.existsSync(INDEX_PATH)) {
+      try { index = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); } catch {}
+    }
+
+    let neu = 0;
+    for (const p of data.patterns) {
+      if (!p.pattern_hash || !p.png_base64) continue;
+      const existiert = Object.values(index).some(v => v.hash === p.pattern_hash);
+      if (existiert) continue;
+
+      const key      = (p.label || 'unbekannt').toLowerCase().replace(/[^a-z0-9äöü]/g, '-').replace(/-+/g, '-');
+      const safeKey  = `${key}-${p.pattern_hash.substring(0, 6)}`;
+      const filename = `${safeKey}.png`;
+      const filepath = path.join(PATTERNS_DIR, filename);
+
+      fs.writeFileSync(filepath, Buffer.from(p.png_base64, 'base64'));
+
+      index[safeKey] = {
+        label:        p.label || 'unbekannt',
+        kategorie:    p.kategorie || 'icon',
+        datei:        filename,
+        hash:         p.pattern_hash,
+        gelernt:      new Date().toISOString(),
+        trefferCount: 0,
+        community:    true,
+        trust:        p.trust_score || 0
+      };
+      neu++;
+    }
+
+    if (neu > 0) {
+      fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2), 'utf8');
+      mathChef.clearCache();
+      console.log(`🌍 ${neu} Community-Pattern(s) synchronisiert`);
+    }
+
+    // ── 2. Globales Feldwissen herunterladen ──────────────────────────────
+    const fwRes = await fetch(`${API}/api/patterns/feldwissen?token=${token}`);
+    if (fwRes.ok) {
+      const fwData = await fwRes.json();
+      if (fwData.success && Array.isArray(fwData.felder)) {
+        for (const f of fwData.felder) {
+          if (f.feld_label && f.typ) {
+            wissenstree.lernFeld(f.feld_label, {
+              typ:         f.typ,
+              beschreibung: f.beschreibung || '',
+              bereich:     f.bereich_min != null ? [f.bereich_min, f.bereich_max] : null
+            });
+          }
+        }
+        if (fwData.felder.length > 0) {
+          console.log(`📚 ${fwData.felder.length} Feldwissen-Einträge synchronisiert`);
+        }
+      }
+    }
+  } catch(e) {
+    console.warn('⚠️ Community-Sync fehlgeschlagen:', e.message);
+  }
+}
+
+// Lädt neu gelernte lokale Patterns (noch ohne community:true) in die Community hoch
+async function uploadNewPatternsToCommunity(token) {
+  if (!token) return;
+  const fs     = require('fs');
+  const path   = require('path');
+  const crypto = require('crypto');
+  const PATTERNS_DIR = path.join(__dirname, 'reme-memory', 'patterns');
+  const INDEX_PATH   = path.join(PATTERNS_DIR, 'index.json');
+  if (!fs.existsSync(INDEX_PATH)) return;
+
+  let index = {};
+  try { index = JSON.parse(fs.readFileSync(INDEX_PATH, 'utf8')); } catch { return; }
+
+  const lokal = Object.entries(index).filter(([, v]) => !v.community && !v.uploaded);
+  for (const [key, v] of lokal) {
+    const filepath = path.join(PATTERNS_DIR, v.datei);
+    if (!fs.existsSync(filepath)) continue;
+    try {
+      const imgBuf      = fs.readFileSync(filepath);
+      const png_base64  = imgBuf.toString('base64');
+      const pattern_hash = v.hash || crypto.createHash('sha256').update(imgBuf).digest('hex');
+
+      const res = await fetch(`${API}/api/patterns/upload`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token,
+          label:        v.label,
+          kategorie:    v.kategorie || 'icon',
+          png_base64,
+          pattern_hash
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        index[key].uploaded = true;
+        index[key].hash     = pattern_hash;
+        console.log(`☁️  Pattern hochgeladen: "${v.label}"`);
+      }
+    } catch(e) {
+      console.warn('⚠️ Pattern-Upload fehlgeschlagen:', e.message);
+    }
+  }
+  try { fs.writeFileSync(INDEX_PATH, JSON.stringify(index, null, 2), 'utf8'); } catch {}
 }
 
 // ═══════════════════════════════════════
@@ -5619,20 +5748,27 @@ ipcMain.handle('goal-recall', async (event, { query, limit }) => {
 
 const brutcamp = require('./mathematik/brutcamp');
 
-// Training-Session starten → gibt Fragen zurück
+// Interaktive Session starten — AX scannt Screen, Math prüft bekannte Elemente
 ipcMain.handle('brutcamp-start', async () => {
   try {
-    return await brutcamp.startTrainingSession();
+    return await brutcamp.startInteractiveSession(axLayer, mathChef);
   } catch(e) {
+    console.error('BrutCamp Start:', e.message);
     return { error: e.message };
   }
 });
 
-// User-Antwort verarbeiten + Pattern speichern
-ipcMain.handle('brutcamp-answer', async (event, { fragenId, antwort, regionBase64, zusatz }) => {
+// User-Antwort → nächste Frage + Pattern in Community hochladen
+ipcMain.handle('brutcamp-answer', async (event, { sessionId, antwort, korrektur }) => {
   try {
-    const regionPng = regionBase64 ? Buffer.from(regionBase64, 'base64') : null;
-    return await brutcamp.verarbeiteAntwort(fragenId, antwort, regionPng, zusatz || {});
+    const result = await brutcamp.antwortGeben(sessionId, antwort, korrektur);
+
+    // Nach jeder echten Lerneinheit: neu gespeicherte Patterns in Community teilen
+    if (userToken && antwort && antwort.toLowerCase() !== 'überspringen') {
+      uploadNewPatternsToCommunity(userToken).catch(() => {});
+    }
+
+    return result;
   } catch(e) {
     return { error: e.message };
   }
