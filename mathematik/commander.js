@@ -81,11 +81,34 @@ function erkennIntent(command) {
       /\b(schreib|erstell|verfass|mach)\b/i.test(cmd))
     return { intent: 'word_write', raw: command };
 
-  // ── Mail / Outlook ─────────────────────────────────────────────────────
-  if (/\b(mail|email|e-mail|outlook)\b/i.test(cmd)) {
+  // ── Mail von Absender suchen / prüfen (VOR generischem mail-Block) ──────
+  // "ist eine mail von mustafa gekommen", "gibt es mails von X", "prüf ob X geschrieben hat"
+  // "mail von X in notizen eintragen", "checke mails von X und trag in notizen ein"
+  const mailVonM = cmd.match(
+    /\b(?:ist|war|gibt[\s-]?es|habe?n?|prüf(?:e)?|check|schau(?:e)?|kam(?:en)?)\b.{0,20}?\b(?:e?-?mail|nachricht|post)\b.{0,15}?\bvon\s+([a-zäöü][a-zäöü\s]{1,25}?)(?:\s+ge?komm|\s+da\b|\s+vorhanden|\s+angekommen|[?,]|$)/i
+  ) || cmd.match(
+    /\b(?:e?-?mail|nachricht)\b.{0,10}?\bvon\s+([a-zäöü][a-zäöü\s]{1,25?}?)\s*(?:les|check|prüf|öffn|anschau|lesen?|checken?|prüfen?|in\s+notiz|eintrag)/i
+  );
+  if (mailVonM) {
+    const sender = (mailVonM[1] || '').replace(/\b(mal|die|das|der|mir|bitte|ob|eine?|auch)\b/gi, '').trim();
+    if (sender.length > 1) {
+      const zuNotizen = /\b(notiz|notizen|notes?|eintrag|schreib|hinzufüg)\b/i.test(cmd);
+      return { intent: zuNotizen ? 'mail_to_notizen' : 'mail_from_check', sender };
+    }
+  }
+
+  // ── Mail → Word/Excel/Notizen Transfer ────────────────────────────────
+  // "emails in word eintragen", "mail in notizen schreiben", "mails nach excel"
+  if (/\b(mail|email|e-mail|mails?|posteingang)\b/i.test(cmd)) {
+    if (/\b(word|dokument|docx)\b/i.test(cmd))
+      return { intent: 'mail_to_word', raw: command };
+    if (/\b(excel|tabelle|xlsx)\b/i.test(cmd))
+      return { intent: 'mail_to_excel', raw: command };
+    if (/\b(notiz|notizen|notes?)\b/i.test(cmd))
+      return { intent: 'mail_to_notizen', raw: command };
     if (/\b(schreib|send|verfass|erstell|antwort)\b/i.test(cmd))
       return { intent: 'mail_write', raw: command };
-    if (/\b(les|lier|öffne?|check|schau|zeig|ruf\s+ab)\b/i.test(cmd))
+    if (/\b(les|lier|öffne?|check|schau|zeig|ruf\s+ab|ab.*check|check.*ab)\b/i.test(cmd))
       return { intent: 'mail_read' };
     return { intent: 'mail_open' };
   }
@@ -158,6 +181,13 @@ function erkennIntent(command) {
   // ── Formular ausfüllen (ohne Datei) ───────────────────────────────────
   if (/\b(füll|ausfüll)\b.*\b(formular|form|felder?|maske)\b/i.test(cmd))
     return { intent: 'form_fill', raw: command };
+
+  // ── Notizen / Apple Notes ─────────────────────────────────────────────
+  // "öffne Notizen", "neue Notiz", "notiz machen" → neue Notiz + Schreibfläche fokussieren
+  if (/\b(notize?n?|neue?\s+notiz|notiz\s+(?:erstell|mach|anlegen|öffne?))\b/i.test(cmd)) {
+    const textM = cmd.match(/(?:und\s+)?(?:schreib|tipp|erfass|notier)\s+(?:mir\s+)?(.+)/i);
+    return { intent: 'notizen_open', text: textM ? textM[1].trim() : null };
+  }
 
   // ── App öffnen generisch — ZULETZT, um spezifischere Regeln nicht zu überschreiben ──
   const appM = cmd.match(
@@ -283,9 +313,14 @@ async function bauSteps(intent, { chef, axLayer }) {
       break;
     }
 
+    case 'mail_from_check':
+    case 'mail_to_notizen':
+    case 'mail_to_word':
+    case 'mail_to_excel':
     case 'mail_read':
     case 'mail_write':
-      // Mail öffnen lokal, Inhaltsverarbeitung → Server
+      // Mail-Inhalte + Vision-Auswertung + Transfers → Server-AI
+      // Server bekommt intent.sender als Metadaten über tryDispatch
       return null;
 
     // ── Kalender ──────────────────────────────────────────────────────────
@@ -319,6 +354,21 @@ async function bauSteps(intent, { chef, axLayer }) {
       // stattdessen: enriched_command für Server bauen (source_file + source_dir)
       // Das passiert über den "enriched"-Rückgabepfad im dispatch()
       return { __server_task: 'form_fill_from_file', source_file: intent.source_file, source_dir: intent.source_dir };
+
+    // ── Notizen / Apple Notes ─────────────────────────────────────────────
+    // Öffnen + neue Notiz anlegen + Schreibfläche (Body) fokussieren
+    case 'notizen_open': {
+      // 1. App öffnen via Spotlight/Start
+      s.push(...spotlight(IS_MAC ? 'Notizen' : 'Sticky Notes'));
+      // 2. Neue Notiz erstellen (cmd+N / ctrl+N)
+      s.push(key(IS_MAC ? 'cmd+n' : 'ctrl+n'), wait(600));
+      // 3. Titel-Feld → Notiz-Body (Tab)
+      //    In Apple Notes landet der Cursor nach cmd+N im Titel-Feld
+      s.push(key('tab'), wait(300));
+      // 4. Optional: Text direkt eintippen wenn im Befehl angegeben
+      if (intent.text) s.push(typ(intent.text));
+      break;
+    }
 
     // ── Bildschirm lesen / komplexe Transfers ─────────────────────────────
     case 'screen_read':

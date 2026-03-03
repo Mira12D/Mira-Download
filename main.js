@@ -85,7 +85,7 @@ app.disableHardwareAcceleration();
 
 // Task-Guard: id → startTime (ms). Tasks older than 5min werden als stale entfernt.
 const runningTasks = new Map();
-const RUNNING_TASK_TTL = 5 * 60 * 1000; // 5 Minuten
+const RUNNING_TASK_TTL = 90 * 1000; // 90 Sekunden — danach gilt Task als stale
 
 // Letztes aktives Artifact (vom Frontend via IPC gesetzt, für Voice-Routing)
 let lastActiveArtifact       = null;
@@ -1939,8 +1939,10 @@ async function executeTaskFromQueue(task) {
         }
       }
 
-      // ── create_excel: direkt neue Datei erstellen, kein Suchen ───────
-      const isDirectCreate = action === 'create_excel';
+      // ── Direkt erstellen: kein Datei-Scan nötig ──────────────────────
+      // write_brief = Dokument aus Instruction erstellen (kein Quell-Scan)
+      // create_excel = neue Excel-Tabelle (kein Quell-Scan)
+      const isDirectCreate = action === 'create_excel' || action === 'write_brief';
 
       // ── 1. DATEIEN SUCHEN (nur wenn kein direktes Erstellen) ──────────
       let foundFiles = [];
@@ -3237,19 +3239,24 @@ async function ftFindFiles(patterns, sourceDirs) {
 
   const found = [];
   const SKIP = new Set(['node_modules','.git','.Trash','Library','Applications','System']);
+  // Wenn kein Pattern angegeben → nur oberste Ebene + max 20 Treffer
+  const hasPattern   = patterns && patterns.length > 0 && patterns.some(p => p && p.trim());
+  const MAX_FILES    = hasPattern ? 100 : 20;
+  const MAX_DEPTH    = hasPattern ? 4    : 1;
 
   function walk(dir, depth) {
-    if (depth > 4) return;
+    if (depth > MAX_DEPTH) return;
+    if (found.length >= MAX_FILES) return; // Hard-Cap
     let entries;
     try { entries = fs.readdirSync(dir); } catch { return; }
     for (const entry of entries) {
+      if (found.length >= MAX_FILES) return;
       if (entry.startsWith('.') || SKIP.has(entry)) continue;
       const full = path.join(dir, entry);
       let stat; try { stat = fs.statSync(full); } catch { continue; }
       if (stat.isDirectory()) { walk(full, depth + 1); continue; }
       const nameLower = entry.toLowerCase();
-      const matches = !patterns || patterns.length === 0
-        || patterns.some(p => nameLower.includes(p.toLowerCase()));
+      const matches = !hasPattern || patterns.some(p => nameLower.includes(p.toLowerCase()));
       if (matches) found.push({ name: entry, path: full, ext: path.extname(entry).replace('.','').toLowerCase(), mtime: stat.mtime, size: stat.size });
     }
   }
