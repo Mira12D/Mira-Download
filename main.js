@@ -2274,19 +2274,41 @@ async function executeTaskFromQueue(task) {
         }
 
         // ── 2b. Math Commander — Intent + Pattern-Suche + AX (kein API) ──
-        const cmdResult = await mathCommander.dispatch(task.command, { chef: mathChef, axLayer }).catch(() => null);
+        // Guard: Server-reformulierte Commands (z.B. "Aufgabe bezogen auf Bildschirm...")
+        // enthalten Wahrnehmungs-Kontext → commander würde falschen Intent matchen → überspringen
+        const _isServerCmd = /^aufgabe bezogen|^\{"|^RUN_ROUTE:|^\[NUTZER_INFO/i.test(task.command.trim())
+          || task.command.includes('(unknown:') || task.command.includes('[NUTZER_INFO');
+        const cmdResult = _isServerCmd
+          ? null
+          : await mathCommander.dispatch(task.command, { chef: mathChef, axLayer }).catch(() => null);
         if (cmdResult) {
-          console.log(`🧠 Commander: "${cmdResult.intent}" → ${cmdResult.steps.length} Steps`);
-          for (const step of cmdResult.steps) {
-            if (step.action === 'wait') {
-              await sleep(step.value || 500);
-            } else {
-              await executeRouteStep(step);
-              await sleep(200);
+          // ── Sonderfall: form_fill_from_file → strukturiert an Server ──
+          if (cmdResult.__server_task === 'form_fill_from_file') {
+            console.log(`📄 Commander: form_fill_from_file → ${cmdResult.source_file} aus ${cmdResult.source_dir}`);
+            const ffTask = {
+              ...task,
+              command: JSON.stringify({
+                type: 'screen_fill_from_file',
+                source_file: cmdResult.source_file,
+                source_dir:  cmdResult.source_dir
+              })
+            };
+            const dispatched2 = await tryDispatch(ffTask);
+            if (dispatched2) { await markTaskComplete(task.id, 'success'); return; }
+            // Wenn Server offline → Fallback
+          } else {
+            console.log(`🧠 Commander: "${cmdResult.intent}" → ${cmdResult.steps.length} Steps`);
+            for (const step of cmdResult.steps) {
+              if (step.action === 'wait') {
+                await sleep(step.value || 500);
+              } else {
+                await executeRouteStep(step);
+                await sleep(200);
+              }
             }
+            await markTaskComplete(task.id, 'success');
+            return;
           }
-          await markTaskComplete(task.id, 'success');
-          return;
         }
 
         // ── 2c. Dispatcher — device_knowledge + GPT-mini nutzen ──
@@ -4312,26 +4334,70 @@ async function executeRouteStep(step) {
       break;
 
     case 'key': {
+      const _isMac2 = process.platform === 'darwin';
+      const _cmd    = _isMac2 ? Key.LeftSuper : Key.LeftControl;
+      const _win    = Key.LeftSuper;
       const keyMap = {
-        'enter':         Key.Enter,
-        'tab':           Key.Tab,
-        'escape':        Key.Escape,
-        'space':         Key.Space,
-        'backspace':     Key.Backspace,
-        'ctrl+a':        [Key.LeftControl, Key.A],
-        'ctrl+c':        [Key.LeftControl, Key.C],
-        'ctrl+v':        [Key.LeftControl, Key.V],
-        'ctrl+f':        [Key.LeftControl, Key.F],
-        'ctrl+s':        [Key.LeftControl, Key.S],
-        'ctrl+z':        [Key.LeftControl, Key.Z],
-        'ctrl+t':        [Key.LeftControl, Key.T],
-        'ctrl+w':        [Key.LeftControl, Key.W],
-        'ctrl+p':        [Key.LeftControl, Key.P],
-        'ctrl+g':        [Key.LeftControl, Key.G],
-        'ctrl+end':      [Key.LeftControl, Key.End],
-        'ctrl+home':     [Key.LeftControl, Key.Home],
-        'ctrl+shift+s':  [Key.LeftControl, Key.LeftShift, Key.S],
-        'alt+tab':       [Key.LeftAlt, Key.Tab],
+        'enter':           Key.Enter,
+        'return':          Key.Enter,
+        'tab':             Key.Tab,
+        'escape':          Key.Escape,
+        'esc':             Key.Escape,
+        'space':           Key.Space,
+        'backspace':       Key.Backspace,
+        'delete':          Key.Delete,
+        'up':              Key.Up,
+        'down':            Key.Down,
+        'left':            Key.Left,
+        'right':           Key.Right,
+        'f5':              Key.F5,
+        // Ctrl/Cmd combos
+        'ctrl+a':          [Key.LeftControl, Key.A],
+        'cmd+a':           [Key.LeftSuper,   Key.A],
+        'ctrl+c':          [Key.LeftControl, Key.C],
+        'cmd+c':           [Key.LeftSuper,   Key.C],
+        'ctrl+v':          [Key.LeftControl, Key.V],
+        'cmd+v':           [Key.LeftSuper,   Key.V],
+        'ctrl+x':          [Key.LeftControl, Key.X],
+        'cmd+x':           [Key.LeftSuper,   Key.X],
+        'ctrl+z':          [Key.LeftControl, Key.Z],
+        'cmd+z':           [Key.LeftSuper,   Key.Z],
+        'ctrl+f':          [Key.LeftControl, Key.F],
+        'cmd+f':           [Key.LeftSuper,   Key.F],
+        'ctrl+s':          [Key.LeftControl, Key.S],
+        'cmd+s':           [Key.LeftSuper,   Key.S],
+        'ctrl+t':          [Key.LeftControl, Key.T],
+        'cmd+t':           [Key.LeftSuper,   Key.T],
+        'ctrl+w':          [Key.LeftControl, Key.W],
+        'cmd+w':           [Key.LeftSuper,   Key.W],
+        'ctrl+p':          [Key.LeftControl, Key.P],
+        'cmd+p':           [Key.LeftSuper,   Key.P],
+        'ctrl+g':          [Key.LeftControl, Key.G],
+        'cmd+r':           [Key.LeftSuper,   Key.R],
+        'ctrl+r':          [Key.LeftControl, Key.R],
+        'ctrl+end':        [Key.LeftControl, Key.End],
+        'cmd+end':         [Key.LeftSuper,   Key.End],
+        'ctrl+home':       [Key.LeftControl, Key.Home],
+        'cmd+home':        [Key.LeftSuper,   Key.Home],
+        'ctrl+shift+s':    [Key.LeftControl, Key.LeftShift, Key.S],
+        'cmd+shift+s':     [Key.LeftSuper,   Key.LeftShift, Key.S],
+        'cmd+shift+4':     [Key.LeftSuper,   Key.LeftShift, Key.Num4],
+        'super+shift+s':   [Key.LeftSuper,   Key.LeftShift, Key.S],
+        'alt+tab':         [Key.LeftAlt,     Key.Tab],
+        'cmd+tab':         [Key.LeftSuper,   Key.Tab],
+        // Spotlight / Start-Menu
+        'cmd+space':       [Key.LeftSuper,   Key.Space],
+        'super':           [Key.LeftSuper],
+        'super+d':         [Key.LeftSuper,   Key.D],
+        'super+l':         [Key.LeftSuper,   Key.L],
+        // Browser / Nav
+        'cmd+[':           [Key.LeftSuper,   Key.LeftBracket],
+        'cmd+]':           [Key.LeftSuper,   Key.RightBracket],
+        'alt+left':        [Key.LeftAlt,     Key.Left],
+        'alt+right':       [Key.LeftAlt,     Key.Right],
+        // Adaptive: wenn Mac → cmd, sonst ctrl (für generische Befehle vom Server)
+        'cmd+n':           [_cmd, Key.N],
+        'cmd+o':           [_cmd, Key.O],
       };
       const k = keyMap[(step.value || step.command)?.toLowerCase()];
       if (Array.isArray(k)) {
