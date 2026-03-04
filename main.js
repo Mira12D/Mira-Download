@@ -3740,10 +3740,18 @@ async function executeRouteStep(step) {
       await sleep(500);
       break;
 
-    case 'open_url':
+    case 'open_url': {
       await require('electron').shell.openExternal(step.value || step.command);
+      // Nach URL-Navigation: alle Browser-Caches sofort löschen (Seite komplett neu)
+      coordCache.invalidateApp('com.google.Chrome');
+      coordCache.invalidateApp('com.apple.Safari');
+      coordCache.invalidateApp('com.operasoftware.Opera');
+      coordCache.invalidateApp('com.microsoft.edgemac');
+      coordCache.invalidateApp('org.mozilla.firefox');
+      contextManager.invalidate();
       await sleep(5000);
       break;
+    }
 
     // ═══════════════════════════════════════
     // CLICK — context.js VOR dem Klick
@@ -3784,38 +3792,10 @@ async function executeRouteStep(step) {
       const ctxString = contextManager.toPromptString(ctx);
       console.log(`📋 Kontext: ${contextManager.toShortString(ctx)}`);
 
-      // ── TIER -1: Koordinaten-Cache (persistent, kein Subprocess, <1ms) ──
-      if (!finalX) {
-        const cached = coordCache.get(ctx.app?.bundleId, elementLabel);
-        if (cached) {
-          // Fix 2: Fingerprint vorhanden → Element im aktuellen AX-Baum suchen
-          // (fängt App-Verschiebung / Resize auf, da Koordinaten veraltet sein können)
-          if (cached.fingerprint) {
-            const fpResult = axLayer.findByFingerprint(cached.fingerprint, { bundleId: ctx.app?.bundleId });
-            if (fpResult.found) {
-              finalX = fpResult.centerX;
-              finalY = fpResult.centerY;
-              coordSource = 'fingerprint';
-              console.log(`🔍 Fingerprint-Match: "${elementLabel}" → [${finalX}, ${finalY}] (AX-Position aktuell)`);
-            } else {
-              // Fingerprint nicht im aktuellen Baum → cached Koordinaten als Fallback
-              finalX = cached.x;
-              finalY = cached.y;
-              coordSource = 'cache';
-              console.log(`🗂️ Cache (Fingerprint miss): "${elementLabel}" → [${finalX}, ${finalY}] (hits: ${cached.hitCount})`);
-            }
-          } else {
-            finalX = cached.x;
-            finalY = cached.y;
-            coordSource = 'cache';
-            console.log(`🗂️ Cache: "${elementLabel}" → [${finalX}, ${finalY}] (hits: ${cached.hitCount}, via ${cached.tier})`);
-          }
-        }
-      }
-
       // ── TIER 0a: Im gecachten State suchen (JS, <1ms, kein Subprocess) ──
+      // AX-Live immer VOR Cache — echte aktuelle Position gewinnt immer.
       const stateResult = contextManager.findInState(ctx, elementLabel);
-      if (stateResult && !finalX) {
+      if (stateResult) {
         finalX = stateResult.centerX;
         finalY = stateResult.centerY;
         coordSource = 'ctx_state';
@@ -3832,6 +3812,32 @@ async function executeRouteStep(step) {
           coordSource = 'ax';
           finalFingerprint = { axLabel: axResult.title || elementLabel, axRole: axResult.role || null, axParent: null };
           console.log(`♿ AX Layer: "${elementLabel}" → [${finalX}, ${finalY}] (confidence: ${Math.round(axResult.confidence * 100)}%)`);
+        }
+      }
+
+      // ── TIER -1: Koordinaten-Cache (nur wenn AX nichts gefunden hat) ──
+      // Fingerprint ohne Match → Pixel-Koordinaten VERWERFEN (veraltet/verschoben).
+      if (!finalX) {
+        const cached = coordCache.get(ctx.app?.bundleId, elementLabel);
+        if (cached) {
+          if (cached.fingerprint) {
+            const fpResult = axLayer.findByFingerprint(cached.fingerprint, { bundleId: ctx.app?.bundleId });
+            if (fpResult.found) {
+              finalX = fpResult.centerX;
+              finalY = fpResult.centerY;
+              coordSource = 'fingerprint';
+              console.log(`🔍 Fingerprint-Match: "${elementLabel}" → [${finalX}, ${finalY}] (AX-Position aktuell)`);
+            } else {
+              // Fingerprint miss → gespeicherte Pixel-Coords sind unzuverlässig → skip
+              coordCache.invalidate(ctx.app?.bundleId, elementLabel);
+              console.log(`🗂️ Cache (Fingerprint miss) → verworfen: "${elementLabel}"`);
+            }
+          } else {
+            finalX = cached.x;
+            finalY = cached.y;
+            coordSource = 'cache';
+            console.log(`🗂️ Cache: "${elementLabel}" → [${finalX}, ${finalY}] (hits: ${cached.hitCount}, via ${cached.tier})`);
+          }
         }
       }
 
@@ -4175,8 +4181,24 @@ async function executeRouteStep(step) {
         .replace(/\s*-$/, '')
         .trim();
 
-      await typeFormatted(cleanText);
-      console.log(`   ⌨️ Getippt: "${cleanText.substring(0, 80).replace(/\n/g, '↵')}"`);
+      // Mehrzeiliger Text → Clipboard-Paste (sofort, kein Timeout-Risiko)
+      if (cleanText.includes('\n')) {
+        const { clipboard } = require('electron');
+        clipboard.writeText(cleanText);
+        await sleep(100);
+        if (IS_MAC) {
+          await keyboard.pressKey(Key.LeftSuper, Key.V);
+          await keyboard.releaseKey(Key.LeftSuper, Key.V);
+        } else {
+          await keyboard.pressKey(Key.LeftControl, Key.V);
+          await keyboard.releaseKey(Key.LeftControl, Key.V);
+        }
+        await sleep(200);
+        console.log(`   📋 Eingefügt (Clipboard): "${cleanText.substring(0, 80).replace(/\n/g, '↵')}"`);
+      } else {
+        await typeFormatted(cleanText);
+        console.log(`   ⌨️ Getippt: "${cleanText.substring(0, 80).replace(/\n/g, '↵')}"`);
+      }
       contextManager.invalidate(); // Feld-Inhalt hat sich geändert
       // Billing: 1.2 Token pro 10 Zeichen (aufgerundet)
       const _typeCost = Math.ceil(cleanText.length / 10) * 1.2;
@@ -4349,13 +4371,16 @@ async function executeRouteStep(step) {
         // Adaptive: wenn Mac → cmd, sonst ctrl (für generische Befehle vom Server)
         'cmd+n':           [_cmd, Key.N],
         'cmd+o':           [_cmd, Key.O],
+        'cmd+enter':       [Key.LeftSuper,   Key.Enter],
+        'ctrl+enter':      [Key.LeftControl, Key.Enter],
+        'alt+s':           [Key.LeftAlt,     Key.S],
       };
       const k = keyMap[(step.value || step.command)?.toLowerCase()];
       if (Array.isArray(k)) {
         await keyboard.pressKey(...k);
         await keyboard.releaseKey(...k);
         console.log(`   ⌨️ Key: ${step.value || step.command}`);
-      } else if (k) {
+      } else if (k !== undefined && k !== null) {
         await keyboard.pressKey(k);
         await keyboard.releaseKey(k);
         console.log(`   ↵ Key: ${step.value || step.command}`);
@@ -4623,10 +4648,9 @@ async function executeRouteStep(step) {
           const fx = scaleWithCalibration(el.x, el.y).x;
           const fy = scaleWithCalibration(el.x, el.y).y;
           await mouse.setPosition({ x: Math.round(fx), y: Math.round(fy) });
-          await mouse.leftClick();
-          await sleep(180);
-          await keyboard.pressKey(Key.End); // Cursor ans Zeilenende (nach Label)
-          await sleep(60);
+          await mouse.leftClick(); await sleep(60);
+          await mouse.leftClick(); await sleep(60);
+          await mouse.leftClick(); await sleep(100);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
           console.log(`✅ fill_field AX: "${fieldName}"`);
@@ -4634,42 +4658,34 @@ async function executeRouteStep(step) {
           break;
         }
       } catch(axE) { console.warn(`⚠️ fill_field AX: ${axE.message}`); }
-      // Tier 2: miniFind() — Label finden → Maus rechts daneben klicken
-      // Einfacher Element-String ohne Quotes → GPT findet Label zuverlässig
+      // Tier 2: miniFind() — Label finden → +260px rechts ins Eingabefeld klicken
       let tier2Hit = false;
       try {
         const sc2 = await takeCompressedScreenshot();
-        // Label suchen (immer sichtbarer Text → zuverlässig), dann Offset → Eingabefeld
-        let mfResult = await miniFind(sc2, `Label ${fieldName}`);
-        // Versuch 2: Retry falls found=false (z.B. Screenshot zu früh)
+        const _fnCap   = fieldName.charAt(0).toUpperCase() + fieldName.slice(1);
+        const _fnLower = fieldName.toLowerCase();
+        let mfResult = await miniFind(sc2, `Formularfeld-Beschriftung "${_fnCap}" oder "${_fnLower}"`);
         if (!mfResult.found) {
-          await sleep(350);
+          await sleep(300);
           const sc2b = await takeCompressedScreenshot();
-          mfResult = await miniFind(sc2b, `Label ${fieldName}`);
+          mfResult = await miniFind(sc2b, `Label ${_fnCap}`);
         }
         if (mfResult.found && mfResult.x != null) {
-          // Offset: Label liegt links (x ≈ 50-200), Eingabefeld rechts davon (+260px)
-          // Wenn Model schon Input-Bereich zurückgibt (x > 220) → leichten Offset trotzdem
-          let corrX = mfResult.x;
-          if (corrX < 220) {
-            corrX = corrX + 260; // Label-Position → +260px ins Eingabefeld
-            console.log(`⚠️ fill_field X-Offset: ${mfResult.x} → ${corrX} (Label→Feld)`);
-          }
-          // Koordinaten skalieren (1280x720 → echte Bildschirmpixel)
+          // Immer +260px rechts vom gefundenen Label-Punkt → landet im Eingabefeld
+          const corrX = Math.min(mfResult.x + 260, 750);
           const sx = Math.round(corrX * (calibration?.scaleX || 1));
           const sy = Math.round(mfResult.y * (calibration?.scaleY || 1));
           await mouse.setPosition({ x: sx, y: sy });
-          await mouse.leftClick();
-          await sleep(180);
-          await keyboard.pressKey(Key.End); // Cursor ans Zeilenende
-          await sleep(60);
+          await mouse.leftClick(); await sleep(60);
+          await mouse.leftClick(); await sleep(60);
+          await mouse.leftClick(); await sleep(100);
           await keyboard.type(fieldValue);
           contextManager.invalidate();
-          console.log(`✅ fill_field Augen: ${fieldName} @ (${sx},${sy}) [raw x=${mfResult.x}→corrX=${corrX}]`);
+          console.log(`✅ fill_field: ${fieldName} @ (${sx},${sy}) [raw=${mfResult.x}→${corrX}]`);
           trackUsage(1.2, 'fill_field').catch(() => {});
           tier2Hit = true;
         } else {
-          console.warn(`⚠️ fill_field Augen: "${fieldName}" nach 2 Versuchen nicht gefunden`);
+          console.warn(`⚠️ fill_field: "${fieldName}" nicht gefunden`);
         }
       } catch(mfE) { console.warn(`⚠️ fill_field miniFind: ${mfE.message}`); }
       if (tier2Hit) break;
@@ -4690,36 +4706,45 @@ async function executeRouteStep(step) {
       // 2. Datei lesen
       const fileContent = await ftReadFile(foundF[0].path);
       if (!fileContent) { console.warn('❌ Datei leer'); break; }
-      // 3. AX State für Formularfelder → sichtbare Feldnamen ermitteln
-      const axSnap   = await contextManager.captureState(true);
-      const axShort  = contextManager.toShortString(axSnap);
+      // 3. AX-Layer: echte Feldnamen aus dem offenen Formular lesen
+      let axFormFields = [];
+      try {
+        const axSnap = contextManager.captureState ? contextManager.captureState() : null;
+        const snap   = axSnap?.then ? await axSnap : axSnap;
+        axFormFields = (snap?.fields || []).map(f => f.label || f.title || '').filter(Boolean);
+      } catch(_) {}
+      // Fallback: Standard-Felder wenn AX nichts findet (saubere Namen, keine Klammern)
+      const fallbackFields = ['Name', 'Nachname', 'Tag', 'Monat', 'Jahr', 'Datum', 'Geburtsdatum', 'Email', 'Telefon', 'PLZ', 'Ort', 'Adresse', 'Betrag'];
+      const cleanFields = axFormFields.length > 0 ? axFormFields : fallbackFields;
+      console.log(`📋 Formularfelder (AX): ${axFormFields.length > 0 ? axFormFields.join(', ') : '(Fallback)'}`);
 
-      // Wissentree: Feldnamen aus AX extrahieren und Kontext aufbauen
-      const axFeldLabels = (axSnap?.fields || []).map(f => f.label || f.title || '').filter(Boolean);
-      const wissenKontext = wissenstree.getKontextFürPrompt(axFeldLabels);
-
-      // 4. Datei analysieren + Formularfelder befüllen via Claude
-      const fname    = foundF[0].path.split('/').pop();
-      const fext     = (fname.match(/\.(\w+)$/) || [])[1] || '';
-      const matchRes = await fetch(`${API}/api/agent/analyze-file`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          token: userToken,
-          file_name: fname,
-          file_ext: fext,
-          extracted: fileContent.substring(0, 3000),
-          instruction: `Lies den Dateiinhalt und ordne die Werte den sichtbaren Formularfeldern zu.\n\nWICHTIG — Feldtypen:\n${wissenKontext || 'Standard-Felder'}\n\nREGELN:\n- "Tag" = Zahl 1-31 (KEIN Name, KEIN Wochentag)\n- "Monat" = Zahl 1-12\n- "Jahr" = vierstellige Zahl z.B. 2026\n- "Datum" = Format TT.MM.JJJJ\n- Vorname/Name = Text, KEIN Datum, KEINE Zahl\n\nSichtbare Felder laut Screen: ${axShort}\nAntworte NUR als JSON-Objekt: {"Feldname":"Wert"}`
-        })
-      });
-      const matchData = await matchRes.json();
+      // 4. Datei analysieren — Werte zu Feldern zuordnen
+      const fname = foundF[0].path.split('/').pop();
+      const fext  = (fname.match(/\.(\w+)$/) || [])[1] || '';
+      let matchData = { parsed_data: {} };
+      try {
+        // Hinweis: AbortController + signal ist inkompatibel mit node-fetch v2 → weglassen
+        const matchRes = await fetch(`${API}/api/agent/analyze-file`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token:     userToken,
+            file_name: fname,
+            file_ext:  fext,
+            extracted: fileContent.substring(0, 3000),
+            instruction: cleanFields.join(', ')
+          })
+        });
+        matchData = await matchRes.json();
+      } catch(ffE) { console.warn(`⚠️ analyze-file: ${ffE.message}`); }
       const rawFields = matchData?.parsed_data || {};
       const fieldMap  = Object.entries(rawFields)
         .filter(([k, v]) => k && v != null && String(v).trim() !== '' && String(v) !== 'null');
       console.log(`📋 Form-Match: ${fieldMap.length} Felder — ${fieldMap.map(([k,v])=>`${k}:${v}`).join(', ')}`);
-      // 5. Felder ausfüllen
+      // 5. Felder ausfüllen — Feldname großschreiben damit miniFind Label findet
       for (const [field, value] of fieldMap) {
-        await executeRouteStep({ action: 'fill_field', field_name: field, value: String(value), command: `${field} → ${value}` });
+        const displayField = field.charAt(0).toUpperCase() + field.slice(1);
+        await executeRouteStep({ action: 'fill_field', field_name: displayField, value: String(value), command: `${displayField} → ${value}` });
         await sleep(350);
       }
       trackUsage(4.3, 'fill_from_file').catch(() => {});
@@ -5335,28 +5360,33 @@ ipcMain.handle('training-next-step', async () => {
 
   const sc = await takeCompressedScreenshot();
 
-  // Beste Koordinate via resolve-step
+  // Manuell bestätigte Koordinate hat höchste Priorität — kein resolve-step
   let x = step.coordinate?.[0] || 0;
   let y = step.coordinate?.[1] || 0;
 
-  try {
-    const ctxRes = await fetch(`${API}/api/brain/resolve-step`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        token: userToken,
-        step,
-        screen_size: { width: realW, height: realH },
-        screenshot: sc
-      })
-    });
-    const ctxData = await ctxRes.json();
-    if (ctxData.success && ctxData.coordinate) {
-      x = ctxData.coordinate[0];
-      y = ctxData.coordinate[1];
+  if (!step.coordinate || step.coordinate[0] === 0) {
+    // Keine gespeicherte Koordinate → resolve-step fragen
+    try {
+      const ctxRes = await fetch(`${API}/api/brain/resolve-step`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: userToken,
+          step,
+          screen_size: { width: realW, height: realH },
+          screenshot: sc
+        })
+      });
+      const ctxData = await ctxRes.json();
+      if (ctxData.success && ctxData.coordinate) {
+        x = ctxData.coordinate[0];
+        y = ctxData.coordinate[1];
+      }
+    } catch(e) {
+      console.warn('resolve-step Fehler:', e.message);
     }
-  } catch(e) {
-    console.warn('resolve-step Fehler:', e.message);
+  } else {
+    console.log(`📍 Training: gespeicherte Koordinate verwendet [${x}, ${y}]`);
   }
 
   // Maus hinbewegen damit User sieht wo MIRA klicken würde
@@ -5405,6 +5435,55 @@ ipcMain.handle('training-feedback', async (event, { feedback, correct_x, correct
   });
 
   console.log(`✅ Step ${activeTraining.current + 1} gespeichert: "${step.command}" feedback=${feedback}`);
+
+  // ── Wenn Step "senden" enthält → unter "senden" in coord-cache speichern ──
+  // Damit der mail_write Senden-Step die trainierte Position findet
+  const isSendenStep = /send(en)?|abschick|absend/i.test(shortLabel);
+  if (isSendenStep) {
+    const finalX = feedback === 'correct' ? clicked.x : correct_x;
+    const finalY = feedback === 'correct' ? clicked.y : correct_y;
+    if (finalX && finalY) {
+      // In coord-cache unter "senden" speichern (für alle Browser)
+      for (const bid of ['com.google.Chrome','com.operasoftware.Opera','com.apple.Safari','org.mozilla.firefox','com.microsoft.edgemac']) {
+        coordCache.set(bid, 'senden', finalX, finalY, 1.0, 'training', null);
+      }
+      console.log(`📧 Senden-Koordinate in Cache: [${finalX}, ${finalY}]`);
+    }
+  }
+
+  // ── Koordinate in der Route aktualisieren wenn falsch ──
+  if (feedback === 'wrong' && correct_x != null && correct_y != null) {
+    const idx = activeTraining.current;
+    if (activeTraining.steps[idx]) {
+      activeTraining.steps[idx].coordinate = [correct_x, correct_y];
+      console.log(`📍 Route-Koordinate korrigiert: Step ${idx + 1} → [${correct_x}, ${correct_y}]`);
+      // Auch coord-cache für dieses Label löschen — damit nächste Ausführung die korrekte Pos nimmt
+      try {
+        const ctx = await contextManager.captureState().catch?.() || contextManager.captureState();
+        const bundleId = (ctx?.app?.bundleId) || null;
+        if (bundleId) coordCache.invalidate(bundleId, shortLabel);
+        // Alle Browser löschen (falls Label browser-weit gecacht)
+        for (const bid of ['com.google.Chrome','com.operasoftware.Opera','com.apple.Safari','org.mozilla.firefox']) {
+          coordCache.invalidate(bid, shortLabel);
+        }
+      } catch {}
+    }
+    // Route persistieren
+    try {
+      await fetch(`${API}/api/agent/route/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          token: userToken,
+          name: activeTraining.route_name,
+          steps: activeTraining.steps
+        })
+      });
+      console.log(`💾 Route "${activeTraining.route_name}" mit korrigierten Koordinaten gespeichert`);
+    } catch (e) {
+      console.warn('⚠️ Route konnte nicht gespeichert werden:', e.message);
+    }
+  }
 
   // Weiter
   activeTraining.current++;
