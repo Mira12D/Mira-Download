@@ -1530,6 +1530,7 @@ async function executeTaskFromQueue(task) {
     await markTaskComplete(task.id, 'failed').catch(() => {});
   }
   runningTasks.set(task.id, Date.now());
+  if (mainWindow) mainWindow.webContents.send('task-started');
 
   console.log(`⚙️ Executing: ${task.command.substring(0, 80)}`);
   try {
@@ -2295,6 +2296,7 @@ async function executeTaskFromQueue(task) {
           notifyUser: (type, text) => {
             if (mainWindow) mainWindow.webContents.send('mira-chat-message', { type, text });
           },
+          abortFn: () => abortCurrentTask,
         });
 
         if (szResult === 'success') {
@@ -2323,9 +2325,11 @@ async function executeTaskFromQueue(task) {
               knowledge_context: fallbackBib.found ? fallbackBib.context : null,
             })
           });
-          const data = await response.json();
-          if (!data.success) throw new Error(data.message);
-          for (let action of data.actions) {
+          let data;
+          try { data = await response.json(); }
+          catch(je) { throw new Error(`Server Antwort kein JSON: ${je.message}`); }
+          if (!data.success) throw new Error(data.message || data.error || 'execute-Fehler');
+          for (let action of (data.actions || [])) {
             if (action.action === 'mouse_move' && action.coordinate) {
               action.coordinate[0] = Math.round(action.coordinate[0] * scaleX);
               action.coordinate[1] = Math.round(action.coordinate[1] * scaleY);
@@ -2346,6 +2350,9 @@ async function executeTaskFromQueue(task) {
     await markTaskComplete(task.id, 'failed');
   } finally {
     runningTasks.delete(task.id);
+    if (runningTasks.size === 0 && mainWindow) {
+      mainWindow.webContents.send('task-done');
+    }
   }
 }
 // ═══════════════════════════════════════
@@ -2826,6 +2833,9 @@ function sleep(ms) {
 
 // Zwischenspeicher für extract_store → type_stored (A→B Transfers)
 const extractedValues = new Map();
+
+// Totschalter — auf true setzen um laufenden Task abzubrechen
+let abortCurrentTask = false;
 
 // ─────────────────────────────────────────────────────────────────────
 // localDispatch — VERALTET, jetzt in mathematik/schaltzentrale.js
@@ -4530,6 +4540,33 @@ async function executeRouteStep(step) {
       break;
     }
 
+    // ── show_artifact: Extrahierten Inhalt als Artifact-Karte im MIRA-Chat zeigen ──
+    case 'show_artifact': {
+      const artifactValue = extractedValues.get(step.key);
+      if (artifactValue && mainWindow) {
+        const raw = typeof artifactValue === 'object' ? JSON.stringify(artifactValue, null, 2) : String(artifactValue);
+        // JSON-Objekte in lesbaren Text umwandeln
+        let display = raw;
+        try {
+          const obj = JSON.parse(raw);
+          if (typeof obj === 'object' && obj !== null) {
+            display = Object.entries(obj)
+              .filter(([, v]) => v !== null && v !== undefined && v !== '')
+              .map(([k, v]) => `${k}: ${v}`)
+              .join('\n');
+          }
+        } catch(_) {}
+        mainWindow.webContents.send('mira-artifact', {
+          title: step.command || step.key,
+          content: display,
+        });
+        console.log(`🖼️ show_artifact [${step.key}]: "${display.substring(0, 100).replace(/\n/g, '↵')}"`);
+      } else if (!artifactValue) {
+        console.warn(`⚠️ show_artifact: kein Wert für key "${step.key}"`);
+      }
+      break;
+    }
+
     case 'wait':
       await sleep(step.value || 1000);
       break;
@@ -5091,6 +5128,24 @@ ipcMain.handle('set-active-artifact', (event, artifact) => {
   return true;
 });
 
+
+// ── Totschalter — laufenden Task sofort als failed markieren ─────────────────
+ipcMain.on('kill-current-task', async () => {
+  if (runningTasks.size === 0) {
+    console.log('🛑 Totschalter: kein laufender Task');
+    if (mainWindow) mainWindow.webContents.send('task-killed', { hadTask: false });
+    return;
+  }
+  abortCurrentTask = true;
+  const ids = [...runningTasks.keys()];
+  console.log(`🛑 Totschalter: ${ids.length} Task(s) abgebrochen`);
+  for (const id of ids) {
+    await markTaskComplete(id, 'failed').catch(() => {});
+  }
+  runningTasks.clear();
+  setTimeout(() => { abortCurrentTask = false; }, 1000); // Reset nach 1s
+  if (mainWindow) mainWindow.webContents.send('task-killed', { hadTask: true });
+});
 
 ipcMain.on('recording-next-round', (event, { offset }) => {
   // stepOffset merken für nächste Keypresses
