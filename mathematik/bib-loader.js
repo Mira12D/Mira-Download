@@ -133,7 +133,8 @@ function findRelevant(command, { maxSections = 2, maxChars = 1200 } = {}) {
     .filter(x => x.score > 0)
     .sort((a, b) => b.score - a.score);
 
-  if (scored.length === 0) return { found: false, context: '', sections: [] };
+  // Mindest-Score: verhindert False-Positives (z.B. Excel-Artikel für "iran krieg notizen")
+  if (scored.length === 0 || scored[0].score < 4) return { found: false, context: '', sections: [] };
 
   // Top-Abschnitte zusammenbauen (Zeichenlimit)
   const results  = [];
