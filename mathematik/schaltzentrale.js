@@ -100,8 +100,8 @@ function analyzeTriggers(command, ctx) {
     triggers.push('critical_decision');
   }
 
-  // Selbst-referenzielle Frage?
-  if (/\b(was bist du|wer bist du|kannst du|bist du|ich|mir|mich|mein|uns)\b/i.test(cmd)) {
+  // Selbst-referenzielle Frage? (nur explizite Fragen über MIRA, keine normalen Pronomen)
+  if (/\b(was bist du|wer bist du|was kannst du|kannst du|bist du)\b/i.test(cmd)) {
     triggers.push('self_questioning');
     triggers.push('self_referential');
   }
