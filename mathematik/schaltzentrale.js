@@ -16,6 +16,7 @@
 
 const fetch        = require('node-fetch');
 const mathCommander = require('./commander');
+const bibLoader    = require('./bib-loader');
 
 // ── Bewusstseinsebenen ─────────────────────────────────────────────────────
 const LEVEL = {
@@ -249,6 +250,12 @@ async function serverDispatch(task, ctx) {
     const realH = await nutScreen.height();
     const consciousnessContext = circuit?.state?.lastThought?.content || null;
 
+    // Wissensbibliothek: relevante Abschnitte lokal suchen (kein API)
+    const bib = bibLoader.findRelevant(task.command);
+    if (bib.found) {
+      console.log(`📚 BibLoader: "${bib.sections[0]}" → als Kontext mitgeschickt`);
+    }
+
     const res = await fetch(`${API}/api/brain/dispatch-full`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -259,6 +266,7 @@ async function serverDispatch(task, ctx) {
         session_context:       sessionCtx?.toPromptString() || '',
         last_perception:       sessionCtx?.last_perception || null,
         consciousness_context: consciousnessContext,
+        knowledge_context:     bib.found ? bib.context : null,
       })
     });
 

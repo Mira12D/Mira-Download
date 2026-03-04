@@ -115,6 +115,7 @@
       "icon.png",
       "package.json",
       "mathematik/**/*",
+      "reme-memory/knowledge/bib/**/*",
       "node_modules/**/*"
     ],
     "directories": {
