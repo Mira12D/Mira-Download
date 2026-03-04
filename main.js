@@ -2313,10 +2313,15 @@ async function executeTaskFromQueue(task) {
           }
           const scaleX = realW / 1280;
           const scaleY = realH / 720;
+          const fallbackBib = bibLoader.findRelevant(task.command);
           const response = await fetch(`${API}/api/agent/execute`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: userToken, task: task.command, screenshot: sc, screen_size: { width: realW, height: realH } })
+            body: JSON.stringify({
+              token: userToken, task: task.command, screenshot: sc,
+              screen_size: { width: realW, height: realH },
+              knowledge_context: fallbackBib.found ? fallbackBib.context : null,
+            })
           });
           const data = await response.json();
           if (!data.success) throw new Error(data.message);
