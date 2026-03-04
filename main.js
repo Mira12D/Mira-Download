@@ -21,6 +21,7 @@ const mathChef        = require('./mathematik/chef');          // Tier 0c: Math 
 const wissenstree     = require('./mathematik/wissenstree');   // Feldwissen
 const mathCommander   = require('./mathematik/commander');     // Tier 0d: Lokaler Intent-Dispatcher
 const schaltzentrale  = require('./mathematik/schaltzentrale'); // Consciousness-Dispatcher
+const bibLoader       = require('./mathematik/bib-loader');    // Telekolleg-Wissensbibliothek
 const mailMonitor    = require('./mail-monitor');
 const recoveryEngine = require('./recovery-engine');
 const miraBrain      = require('./mira-brain');
@@ -547,6 +548,7 @@ function loadSavedToken() {
     startPolling();
     bootstrap().catch(() => {});
     startLocalServer();
+    bibLoader.warmup(); // Telekolleg-Bib vorwärmen
     // Bewusstsein starten mit gespeichertem Token
     startCircuit(savedToken);
     // Feature 1: System-Log Monitor mit gespeichertem Token starten
