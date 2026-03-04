@@ -100,8 +100,8 @@ function analyzeTriggers(command, ctx) {
     triggers.push('critical_decision');
   }
 
-  // Selbst-referenzielle Frage? (nur explizite Fragen über MIRA, keine normalen Pronomen)
-  if (/\b(was bist du|wer bist du|was kannst du|kannst du|bist du)\b/i.test(cmd)) {
+  // Selbst-referenzielle Frage? (nur explizite Identitätsfragen über MIRA, NICHT Aufgaben-Anfragen)
+  if (/\b(was bist du|wer bist du|was kannst du|bist du eine? ki|bist du ein? mensch)\b/i.test(cmd)) {
     triggers.push('self_questioning');
     triggers.push('self_referential');
   }
@@ -289,6 +289,7 @@ async function serverDispatch(task, ctx) {
     if (extractedValues) extractedValues.clear();
 
     for (let i = 0; i < data.steps.length; i++) {
+      if (ctx.abortFn?.()) { console.log('🛑 Schaltzentrale: Task abgebrochen'); break; }
       const step = { ...data.steps[i] };
       const icon = step.needs_screenshot ? '📸' : '⚡';
       console.log(`▶️ Step ${i+1}/${data.steps.length} ${icon}: ${step.action} "${step.command || step.value || ''}"`);

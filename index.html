@@ -658,6 +658,26 @@
     .mc-thinking span:nth-child(3){animation-delay:.4s}
     @keyframes mcT { 0%,80%,100%{transform:scale(.5);opacity:.25} 40%{transform:scale(1);opacity:1} }
 
+    /* ── Artifact-Karte: Lese-Zusammenfassungen von MIRA ──────────────────── */
+    .mc-artifact {
+      max-width:100% !important;
+      background:rgba(10,200,150,0.06) !important;
+      border:1px solid rgba(10,200,150,0.2) !important;
+      padding:0 !important;
+      border-radius:12px !important;
+      overflow:hidden;
+    }
+    .artifact-title {
+      font-size:10px; font-weight:700; letter-spacing:.06em; text-transform:uppercase;
+      color:rgba(10,200,150,0.7); padding:7px 12px 5px;
+      border-bottom:1px solid rgba(10,200,150,0.12);
+    }
+    .artifact-body {
+      font-size:12.5px; line-height:1.55; color:rgba(255,255,255,0.85);
+      padding:9px 12px 11px; white-space:pre-wrap; max-height:260px;
+      overflow-y:auto; scrollbar-width:thin; scrollbar-color:rgba(255,255,255,0.1) transparent;
+    }
+
     .mc-input-area {
       display:flex; gap:8px; padding:10px 14px 14px;
       border-top:1px solid rgba(255,255,255,0.06); flex-shrink:0;
@@ -837,6 +857,14 @@
       <div class="logo-sub" id="d-status-sub">Bereit</div>
     </div>
     <div class="header-badge show" id="d-badge"><span class="status-dot"></span>Aktiv</div>
+    <button id="kill-btn" onclick="killCurrentTask()" title="Task sofort stoppen" style="
+      margin-left:8px;background:none;border:1px solid rgba(255,69,58,0.0);cursor:pointer;
+      color:#3d4460;font-size:13px;padding:4px 8px;border-radius:8px;
+      transition:color .15s,background .15s,border-color .15s;line-height:1;display:none;
+    " onmouseover="this.style.color='#ff453a';this.style.background='rgba(255,69,58,0.12)';this.style.borderColor='rgba(255,69,58,0.3)'"
+       onmouseout="this.style.color='#ff6b6b';this.style.background='rgba(255,69,58,0.06)';this.style.borderColor='rgba(255,69,58,0.15)'">
+      ■ Stop
+    </button>
     <button onclick="handleLogout()" title="Abmelden" style="
       margin-left:8px;background:none;border:none;cursor:pointer;
       color:#3d4460;font-size:16px;padding:4px 6px;border-radius:8px;
@@ -1918,6 +1946,54 @@ async function startTraining(command) {
       _mcEnableInput();
     });
   }
+
+  // ── Totschalter — Kill Button ────────────────────────────────────────────
+  function killCurrentTask() {
+    ipcRenderer.send('kill-current-task');
+  }
+
+  // Kill-Button anzeigen wenn Task läuft (task-status events)
+  ipcRenderer.on('task-killed', (event, { hadTask }) => {
+    const btn = document.getElementById('kill-btn');
+    if (btn) btn.style.display = 'none';
+    if (hadTask) toast('🛑 Task gestoppt', 'error');
+  });
+
+  // Intern: kill-btn ein/ausblenden je nach laufendem Task
+  // Wird über polling-status getriggert — einfachste Lösung: zeige nach 2s, verstecke bei task-killed
+  ipcRenderer.on('task-started', () => {
+    const btn = document.getElementById('kill-btn');
+    if (btn) {
+      btn.style.display = 'inline-flex';
+      btn.style.alignItems = 'center';
+      btn.style.color = '#ff6b6b';
+      btn.style.background = 'rgba(255,69,58,0.06)';
+      btn.style.borderColor = 'rgba(255,69,58,0.15)';
+    }
+  });
+  ipcRenderer.on('task-done', () => {
+    const btn = document.getElementById('kill-btn');
+    if (btn) btn.style.display = 'none';
+  });
+
+  // ── MIRA Artifact: Zusammenfassung als Karte im Chat ─────────────────────
+  ipcRenderer.on('mira-artifact', (event, { title, content }) => {
+    if (!miraChatOpen) openMiraChat();
+    const msgs = document.getElementById('mc-messages');
+    if (!msgs) return;
+    const card = document.createElement('div');
+    card.className = 'mc-msg mira mc-artifact';
+    const titleEl = document.createElement('div');
+    titleEl.className = 'artifact-title';
+    titleEl.textContent = title;
+    const bodyEl = document.createElement('div');
+    bodyEl.className = 'artifact-body';
+    bodyEl.textContent = content; // textContent für XSS-Schutz
+    card.appendChild(titleEl);
+    card.appendChild(bodyEl);
+    msgs.appendChild(card);
+    msgs.scrollTop = msgs.scrollHeight;
+  });
 
   // ── Fehler & Systemmeldungen im MIRA-Chat anzeigen ───────────────────────
   ipcRenderer.on('mira-chat-message', (event, { type, text }) => {
