@@ -1892,39 +1892,91 @@ async function executeTaskFromQueue(task) {
             } catch(_) {}
           }
 
-          if (!artRow?.data_base64) throw new Error('Artifact nicht gefunden oder leer');
+          const artType  = (artRow?.type || 'xlsx').toLowerCase();
+          const rowsArr  = Array.isArray(rows_to_add) ? rows_to_add : (rows_to_add ? [rows_to_add] : [{}]);
+          let newB64, mime, logMsg, rowCount = rowsArr.length;
 
-          const buf = Buffer.from(artRow.data_base64, 'base64');
+          // ── DOCX — Word-Artifact ──────────────────────────────────────────
+          if (artType === 'docx') {
+            const { Document, Packer, Paragraph, TextRun } = require('docx');
+            const today = new Date().toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
 
-          // 2. ExcelJS laden
-          const wb = new ExcelJS.Workbook();
-          await wb.xlsx.load(buf);
-          const ws = wb.worksheets[0];
-          if (!ws) throw new Error('Keine Arbeitsmappe im Artifact');
+            // Alten Inhalt via mammoth extrahieren (docx-lib kann nicht lesen, nur schreiben)
+            let existingLines = [];
+            if (artRow?.data_base64) {
+              try {
+                const mammoth = require('mammoth');
+                const result  = await mammoth.extractRawText({ buffer: Buffer.from(artRow.data_base64, 'base64') });
+                existingLines = result.value.split('\n').filter(l => l.trim());
+              } catch(_) {}
+            }
 
-          // 3. Header-Zeile lesen
-          const headers = [];
-          ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
-            headers[col - 1] = cell.value?.toString() || '';
-          });
+            const paragraphs = [];
+            // Bestehende Zeilen wiederherstellen
+            for (const line of existingLines) {
+              paragraphs.push(new Paragraph({ children: [new TextRun({ text: line, font: 'Arial' })] }));
+            }
+            // Trennlinie + neue Einträge
+            if (existingLines.length) {
+              paragraphs.push(new Paragraph({ children: [new TextRun({ text: '─────────────────────────────', color: 'AAAAAA' })] }));
+              paragraphs.push(new Paragraph({ children: [new TextRun({ text: 'Ergänzt am ' + today, size: 20, color: '888888', italics: true })] }));
+            }
+            for (const rowObj of rowsArr) {
+              const line = typeof rowObj === 'string' ? rowObj
+                : Object.entries(rowObj).map(([k,v]) => `${k}: ${v}`).join(' | ');
+              paragraphs.push(new Paragraph({ children: [new TextRun({ text: line, font: 'Arial' })] }));
+            }
+            const doc = new Document({ sections: [{ properties: {}, children: paragraphs }] });
+            newB64  = Buffer.from(await Packer.toBuffer(doc)).toString('base64');
+            mime    = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+            logMsg  = `✅ ${rowsArr.length} Absatz/Absätze in Word-Artifact eingetragen.`;
 
-          // 4. Neue Zeilen einfügen
-          const rowsArr = Array.isArray(rows_to_add) ? rows_to_add : (rows_to_add ? [rows_to_add] : [{}]);
-          for (const rowObj of rowsArr) {
-            const newRow = headers.map(h => rowObj[h] !== undefined ? rowObj[h] : '');
-            ws.addRow(newRow);
+          // ── TXT / TEXT / CODE — Rohtext ───────────────────────────────────
+          } else if (['txt','text','code','md'].includes(artType)) {
+            const existing = artRow?.data_base64 ? Buffer.from(artRow.data_base64, 'base64').toString('utf8') : '';
+            const today    = new Date().toLocaleDateString('de-DE', { day:'2-digit', month:'2-digit', year:'numeric' });
+            const newLines = rowsArr.map(r => typeof r === 'string' ? r
+              : Object.entries(r).map(([k,v]) => `${k}: ${v}`).join('\n')).join('\n');
+            const updated  = existing ? `${existing}\n\n--- Ergänzt ${today} ---\n${newLines}` : newLines;
+            newB64  = Buffer.from(updated, 'utf8').toString('base64');
+            mime    = 'text/plain';
+            logMsg  = `✅ Text in Artifact eingetragen.`;
+
+          // ── XLSX (default) — Excel-Artifact ──────────────────────────────
+          } else {
+            const wb = new ExcelJS.Workbook();
+            if (artRow?.data_base64) {
+              try { await wb.xlsx.load(Buffer.from(artRow.data_base64, 'base64')); } catch(_) {}
+            }
+            let ws = wb.worksheets[0];
+            let headers = [];
+            if (!ws) {
+              ws = wb.addWorksheet('Daten');
+              headers = Object.keys(rowsArr[0] || {});
+              if (headers.length) ws.addRow(headers);
+            } else {
+              ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => {
+                headers[col - 1] = cell.value?.toString() || '';
+              });
+              if (!headers.filter(Boolean).length) {
+                headers = Object.keys(rowsArr[0] || {});
+                ws.insertRow(1, headers);
+              }
+            }
+            for (const rowObj of rowsArr) {
+              ws.addRow(headers.map(h => rowObj[h] !== undefined ? rowObj[h] : ''));
+            }
+            rowCount = ws.rowCount - 1;
+            newB64   = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+            mime     = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+            logMsg   = `✅ ${rowsArr.length} Zeile(n) eingetragen. Gesamt: ${rowCount} Zeilen.`;
           }
 
-          // 5. Als base64 serialisieren
-          const updBuf   = await wb.xlsx.writeBuffer();
-          const newB64   = Buffer.from(updBuf).toString('base64');
-          const rowCount = ws.rowCount - 1; // ohne Header
+          await ftLog(logMsg, 'step');
 
-          await ftLog(`✅ ${rowsArr.length} Zeile(n) eingetragen. Gesamt: ${rowCount} Zeilen.`, 'step');
-
-          // 6. Artifact in DB updaten — direkt via Supabase
-          const oldMeta = artRow.metadata || {};
-          const newMeta = { ...oldMeta, rows: rowCount };
+          // DB updaten
+          const oldMeta = artRow?.metadata || {};
+          const newMeta = artType === 'xlsx' ? { ...oldMeta, rows: rowCount } : { ...oldMeta };
           await directSupabase('PATCH', `/artifacts?id=eq.${artifact_id}`, {
             data_base64: newB64,
             metadata: newMeta,
@@ -1934,9 +1986,8 @@ async function executeTaskFromQueue(task) {
           const artSummary = {
             is_artifact_update: true, artifact_id, artifact_name,
             rows_written: rowsArr.length, files_count: 1,
-            file_base64: newB64,
-            mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-            target_filename: artifact_name || 'Artifact.xlsx'
+            file_base64: newB64, mime,
+            target_filename: artifact_name || `Artifact.${artType}`
           };
           await ftLog(null, 'done', { done: true, summary: artSummary });
           await fetchWithTimeout(`${API}/api/agent/complete`, {
@@ -2217,7 +2268,7 @@ async function executeTaskFromQueue(task) {
       }
       if (!route) { await markTaskComplete(task.id, 'failed'); return; }
       for (let i = 0; i < route.steps.length; i++) {
-        const step = { ...route.steps[i] };
+        const step = { ...route.steps[i], from_route: true };
         await executeRouteStep(step);
         await sleep(1200);
         const validSc = await takeCompressedScreenshot();
@@ -2260,7 +2311,7 @@ async function executeTaskFromQueue(task) {
         const route = listData.routes?.find(r => r.id === preprocessData.route_id);
         if (!route) { await markTaskComplete(task.id, 'failed'); return; }
         for (let i = 0; i < route.steps.length; i++) {
-          const step = { ...route.steps[i] };
+          const step = { ...route.steps[i], from_route: true };
           await executeRouteStep(step);
           await sleep(1200);
           const validSc = await takeCompressedScreenshot();
@@ -3183,6 +3234,8 @@ async function ftFindFiles(patterns, sourceDirs) {
 
   const found = [];
   const SKIP = new Set(['node_modules','.git','.Trash','Library','Applications','System']);
+  // Entwickler/Konfig-Dateien nie als User-Dokumente zurückgeben
+  const SKIP_EXTS = new Set(['js','ts','jsx','tsx','mjs','cjs','json','md','yaml','yml','env','npmrc','gitignore','lock','sh','py','rb','go','rs','c','cpp','h','swift','cs','java','sql']);
   // Wenn kein Pattern angegeben → nur oberste Ebene + max 20 Treffer
   const hasPattern   = patterns && patterns.length > 0 && patterns.some(p => p && p.trim());
   const MAX_FILES    = hasPattern ? 100 : 20;
@@ -3200,8 +3253,10 @@ async function ftFindFiles(patterns, sourceDirs) {
       let stat; try { stat = fs.statSync(full); } catch { continue; }
       if (stat.isDirectory()) { walk(full, depth + 1); continue; }
       const nameLower = entry.toLowerCase();
+      const ext = path.extname(entry).replace('.','').toLowerCase();
+      if (SKIP_EXTS.has(ext)) continue; // keine Dev/Konfig-Dateien
       const matches = !hasPattern || patterns.some(p => nameLower.includes(p.toLowerCase()));
-      if (matches) found.push({ name: entry, path: full, ext: path.extname(entry).replace('.','').toLowerCase(), mtime: stat.mtime, size: stat.size });
+      if (matches) found.push({ name: entry, path: full, ext, mtime: stat.mtime, size: stat.size });
     }
   }
 
@@ -3772,10 +3827,25 @@ async function executeRouteStep(step) {
       let coordSource    = 'training';
       let finalFingerprint = null;   // AX-Fingerprint für Cache-Persistenz (Fix 2)
 
+      // ── TIER -2a: Trainierte Route-Koordinate (from_route=true) ──────────
+      // Route wurde manuell trainiert → gespeicherte Koordinaten sind autoritativ.
+      // Kein AX, kein KI — User hat das selbst gezeigt.
+      if (step.from_route && step.coordinate) {
+        const scaled = scaleWithCalibration(
+          step.coordinate[0], step.coordinate[1],
+          step.screen_width || realW, step.screen_height || realH,
+          calibration
+        );
+        finalX = scaled.x;
+        finalY = scaled.y;
+        coordSource = 'route_training';
+        console.log(`🗺️ Route-Koordinate: "${elementLabel}" → [${finalX}, ${finalY}] (trainiert)`);
+      }
+
       // ── TIER -2: dispatch-full Koordinate (vorgelöst, kein KI nötig) ──
       // Wenn der Server needs_screenshot:false gesetzt hat, ist die Koordinate
       // aus device_knowledge bereits authorativ — kein resolve-step nötig.
-      if (step.needs_screenshot === false && step.coordinate) {
+      if (!finalX && step.needs_screenshot === false && step.coordinate) {
         const scaled = scaleWithCalibration(
           step.coordinate[0], step.coordinate[1],
           step.screen_width || realW, step.screen_height || realH,
@@ -4751,6 +4821,123 @@ async function executeRouteStep(step) {
       break;
     }
 
+    // ── Artifact aus Datei befüllen ───────────────────────────────────────
+    case 'artifact_edit_from_file': {
+      const foundF = await ftFindFiles([step.source_file], step.source_dir ? [step.source_dir] : undefined);
+      if (!foundF.length) { console.warn(`❌ artifact_edit_from_file: "${step.source_file}" nicht gefunden`); break; }
+      const fileContent = await ftReadFile(foundF[0].path);
+      if (!fileContent) break;
+      const fname = foundF[0].path.split('/').pop();
+      const fext  = (fname.match(/\.(\w+)$/) || [])[1] || '';
+      let parsed_data = {};
+      try {
+        const r = await fetch(`${API}/api/agent/analyze-file`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, file_name: fname, file_ext: fext, extracted: fileContent.substring(0, 3000), instruction: 'Extrahiere alle Daten als JSON. Jede Information als Schlüssel-Wert-Paar.' })
+        });
+        parsed_data = (await r.json()).parsed_data || {};
+      } catch(e) { console.warn('⚠️ artifact_edit analyze-file:', e.message); }
+      const artId   = step.artifact_id   || lastActiveArtifact?.id;
+      const artName = step.artifact_name || lastActiveArtifact?.name || fname;
+      if (artId) {
+        try {
+          const ExcelJS = require('exceljs');
+          const artRows = await directSupabase('GET', `/artifacts?id=eq.${artId}&limit=1&select=*`);
+          const artRow  = artRows?.[0];
+          if (!artRow?.data_base64) throw new Error('Artifact nicht gefunden');
+          const wb = new ExcelJS.Workbook();
+          await wb.xlsx.load(Buffer.from(artRow.data_base64, 'base64'));
+          const ws = wb.worksheets[0];
+          const headers = [];
+          ws.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => { headers[col - 1] = String(cell.value || ''); });
+          ws.addRow(headers.map(h => parsed_data[h] ?? ''));
+          const newB64 = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+          const rowCount = ws.rowCount - 1;
+          await directSupabase('PATCH', `/artifacts?id=eq.${artId}`, { data_base64: newB64, metadata: { ...(artRow.metadata || {}), rows: rowCount }, updated_at: new Date().toISOString() });
+          console.log(`✅ artifact_edit_from_file: ${rowCount} Zeilen`);
+          mainWindow.webContents.send('mira-artifact', { title: `📊 ${artName} — aktualisiert`, content: `${Object.entries(parsed_data).map(([k,v]) => `${k}: ${v}`).join('\n')}\n\n→ ${rowCount} Zeilen gesamt` });
+        } catch(e) {
+          console.error('❌ artifact_edit_from_file:', e.message);
+          mainWindow.webContents.send('mira-artifact', { title: '❌ Artifact Fehler', content: e.message });
+        }
+      } else {
+        mainWindow.webContents.send('mira-artifact', { title: `📊 ${artName}`, content: Object.entries(parsed_data).map(([k,v]) => `${k}: ${v}`).join('\n') });
+      }
+      break;
+    }
+
+    // ── Neues Artifact aus Datei erstellen ───────────────────────────────
+    case 'artifact_create_from_file': {
+      const foundF = await ftFindFiles([step.source_file], step.source_dir ? [step.source_dir] : undefined);
+      if (!foundF.length) { console.warn(`❌ artifact_create_from_file: "${step.source_file}" nicht gefunden`); break; }
+      const fileContent = await ftReadFile(foundF[0].path);
+      if (!fileContent) break;
+      const fname = foundF[0].path.split('/').pop();
+      const fext  = (fname.match(/\.(\w+)$/) || [])[1] || '';
+      let parsed_data = {};
+      try {
+        const r = await fetch(`${API}/api/agent/analyze-file`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, file_name: fname, file_ext: fext, extracted: fileContent.substring(0, 3000), instruction: 'Extrahiere alle Daten als JSON.' })
+        });
+        parsed_data = (await r.json()).parsed_data || {};
+      } catch(e) { console.warn('⚠️ artifact_create analyze-file:', e.message); }
+      const artName = step.artifact_name || fname.replace(/\.[^.]+$/, '');
+      try {
+        const ExcelJS = require('exceljs');
+        const wb = new ExcelJS.Workbook();
+        const ws = wb.addWorksheet('Daten');
+        const headers = Object.keys(parsed_data);
+        ws.addRow(headers);
+        ws.addRow(headers.map(h => parsed_data[h] ?? ''));
+        const newB64 = Buffer.from(await wb.xlsx.writeBuffer()).toString('base64');
+        const artRes = await fetch(`${API}/api/artifacts`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${userToken}` },
+          body: JSON.stringify({ name: artName, type: 'xlsx', data_base64: newB64, rows: 1 })
+        });
+        const artData = await artRes.json();
+        const newId = artData?.artifact?.id || artData?.id;
+        if (newId) lastActiveArtifact = { id: newId, name: artName, type: 'xlsx' };
+        console.log(`✅ artifact_create_from_file: "${artName}" id=${newId}`);
+        mainWindow.webContents.send('mira-artifact', { title: `📊 ${artName} — neu erstellt`, content: Object.entries(parsed_data).map(([k,v]) => `${k}: ${v}`).join('\n') });
+      } catch(e) {
+        console.error('❌ artifact_create_from_file:', e.message);
+        mainWindow.webContents.send('mira-artifact', { title: `📊 ${artName}`, content: Object.entries(parsed_data).map(([k,v]) => `${k}: ${v}`).join('\n') });
+      }
+      break;
+    }
+
+    // ── Dokument/Datei zusammenfassen ────────────────────────────────────
+    case 'document_summarize': {
+      let fileContent = '';
+      let fname = 'Dokument';
+      if (step.source_file) {
+        const foundF = await ftFindFiles([step.source_file], step.source_dir ? [step.source_dir] : undefined);
+        if (foundF.length) { fileContent = await ftReadFile(foundF[0].path) || ''; fname = foundF[0].path.split('/').pop(); }
+      }
+      if (!fileContent) {
+        try {
+          const snap = contextManager.captureState ? await contextManager.captureState() : null;
+          fileContent = snap ? contextManager.toPromptString(snap) : '';
+          fname = snap?.windowTitle || 'Aktuelles Dokument';
+        } catch(_) {}
+      }
+      if (!fileContent) { console.warn('⚠️ document_summarize: kein Inhalt'); break; }
+      try {
+        const r = await fetch(`${API}/api/agent/analyze-file`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, file_name: fname, file_ext: 'txt', extracted: fileContent.substring(0, 4000), instruction: 'Zusammenfassung', mode: 'summarize' })
+        });
+        const j = await r.json();
+        const summary = j.summary_text || JSON.stringify(j.parsed_data) || 'Keine Zusammenfassung';
+        mainWindow.webContents.send('mira-artifact', { title: `📄 ${fname} — Zusammenfassung`, content: summary });
+      } catch(e) {
+        console.error('❌ document_summarize:', e.message);
+        mainWindow.webContents.send('mira-artifact', { title: '❌ Fehler', content: e.message });
+      }
+      break;
+    }
+
     default:
       console.log(`⚠️ Unbekannter Step-Typ: ${step.action}`);
   }
@@ -5045,26 +5232,51 @@ ipcMain.handle('voice-command', async (event, { text }) => {
     }
 
     // ── Artifact-Insert Erkennung ──
-    // Wenn ein aktives Artifact gesetzt ist und der Befehl wie "füge X Y ein" klingt,
-    // direkt als file-task routen statt durch den Dispatcher (der es nicht versteht)
-    const isInsertCmd = /\b\d+\b/.test(command) &&
-      /\b(f[üu]g\w*|erg[äa]nz\w*|hinzu\w*|eintrag\w*|trag\w*|füg\w*)\b/i.test(command);
+    // Wenn ein aktives Artifact gesetzt ist + Befehl ist ein Dokument-Task
+    // → direkt als artifact_edit routen, NICHT durch Server-Dispatcher (der macht sonst form_fill)
+    const hasFileRef   = /\b\w[\w\-]*\.(pdf|docx?|xlsx?|csv|txt|png|jpg)\b/i.test(command);
+    const hasInsertKw  = /\b(f[üu]g\w*|erg[äa]nz\w*|hinzu\w*|eintrag\w*|trag\w*|füg\w*|zusammenfass\w*|fass\w*|übertrag\w*|import\w*)\b/i.test(command);
+    const hasHierRein  = /\b(hier\s*(rein|ein|drin)|in\s*(das|die|den)\s*(dokument|artifact|tabelle|liste))\b/i.test(command);
+    const isInsertCmd  = (hasFileRef || hasHierRein) && hasInsertKw;
 
     if (isInsertCmd && lastActiveArtifact) {
-      console.log(`📂 Voice → file-task (Artifact: ${lastActiveArtifact.name})`);
+      console.log(`📂 Voice → artifact_edit (Artifact: ${lastActiveArtifact.name})`);
+      // Dateiname aus Befehl extrahieren
+      const fileMatch = command.match(/\b([\w\-]+\.(pdf|docx?|xlsx?|csv|txt))\b/i);
+      const srcFile   = fileMatch?.[1] || null;
+      // Direkt als file-task mit artifact_edit Action einreihen (kein Server-Roundtrip für Klassifizierung)
+      const taskPayload = {
+        token:   userToken,
+        command: command,
+        type:    'file_task',
+        parsed:  {
+          action:        'artifact_edit',
+          artifact_id:   lastActiveArtifact.id,
+          artifact_name: lastActiveArtifact.name,
+          search_patterns: srcFile ? [srcFile] : [],
+          instruction:   command,
+        }
+      };
+      try {
+        const res  = await fetch(`${API}/api/agent/queue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(taskPayload)
+        });
+        const data = await res.json();
+        if (data.success || data.task_id || data.queued) {
+          console.log(`✅ artifact_edit eingereiht: ${data.task_id || 'ok'}`);
+          return { queued: true };
+        }
+      } catch(_) {}
+      // Fallback: als normaler Queue-Eintrag mit Artifact-Kontext
       const fileCmd = `${command} [ARBEITE_IN_ARTIFACT: ${lastActiveArtifact.name}, ID: ${lastActiveArtifact.id}]`;
-      const res = await fetch(`${API}/api/agent/file-task`, {
+      await fetch(`${API}/api/agent/queue`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${userToken}`, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ command: fileCmd })
-      });
-      const data = await res.json();
-      if (data.success && data.task_id) {
-        console.log(`✅ Voice file-task eingereiht: ${data.task_id}`);
-        // Frontend informieren damit es den file-task-progress pollt
-        if (mainWindow) mainWindow.webContents.send('start-file-task-poll', { task_id: data.task_id });
-        return { queued: true, file_task: true, task_id: data.task_id };
-      }
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: userToken, command: fileCmd, source: 'voice' })
+      }).catch(() => {});
+      return { queued: true };
     }
 
     // ── Normaler Weg: Kontext aufnehmen + in Queue einreihen ──
@@ -5101,6 +5313,42 @@ ipcMain.handle('voice-context-answer', async (event, { text }) => {
   if (!text?.trim()) return { queued: false, reason: 'empty' };
   if (!userToken)    return { queued: false, reason: 'not_connected' };
 
+  const command = text.trim();
+
+  // ── Artifact-Insert: wenn aktives Artifact + Dokument-Befehl → direkt als artifact_edit ──
+  if (lastActiveArtifact) {
+    const hasFileRef  = /\b\w[\w\-]*\.(pdf|docx?|xlsx?|csv|txt|png|jpg)\b/i.test(command);
+    const hasInsertKw = /\b(f[üu]g\w*|erg[äa]nz\w*|hinzu\w*|eintrag\w*|trag\w*|füg\w*|zusammenfass\w*|fass\w*|übertrag\w*|import\w*)\b/i.test(command);
+    const hasHierRein = /\b(hier\s*(rein|ein|drin)|in\s*(das|die|den)\s*(dokument|artifact|tabelle|liste))\b/i.test(command);
+    if ((hasFileRef || hasHierRein) && hasInsertKw) {
+      console.log(`📂 Chat → artifact_edit (Artifact: ${lastActiveArtifact.name})`);
+      const fileMatch = command.match(/\b([\w\-]+\.(pdf|docx?|xlsx?|csv|txt))\b/i);
+      const srcFile   = fileMatch?.[1] || null;
+      try {
+        const res = await fetch(`${API}/api/agent/queue`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: userToken, command,
+            type:  'file_task',
+            parsed: {
+              action:          'artifact_edit',
+              artifact_id:     lastActiveArtifact.id,
+              artifact_name:   lastActiveArtifact.name,
+              search_patterns: srcFile ? [srcFile] : [],
+              instruction:     command,
+            }
+          })
+        });
+        const data = await res.json();
+        if (data.success || data.task_id || data.queued) {
+          console.log(`✅ artifact_edit (Chat) eingereiht`);
+          return { queued: true };
+        }
+      } catch(_) {}
+    }
+  }
+
   const perception = pendingContextPerception;
   pendingContextPerception = null;
 
@@ -5111,11 +5359,11 @@ ipcMain.handle('voice-context-answer', async (event, { text }) => {
 
   let enrichedCommand;
   if (isForm && scene) {
-    enrichedCommand = `Fülle das sichtbare Formular aus. Was ich auf dem Bildschirm sehe: ${scene}. Der Nutzer sagt dazu: ${text.trim()}`;
+    enrichedCommand = `Fülle das sichtbare Formular aus. Was ich auf dem Bildschirm sehe: ${scene}. Der Nutzer sagt dazu: ${command}`;
   } else if (scene) {
-    enrichedCommand = `Aufgabe bezogen auf aktuellen Bildschirm (${appType || 'App'}: ${scene}): ${text.trim()}`;
+    enrichedCommand = `Aufgabe bezogen auf aktuellen Bildschirm (${appType || 'App'}: ${scene}): ${command}`;
   } else {
-    enrichedCommand = text.trim();
+    enrichedCommand = command;
   }
   console.log(`🔮 Context-Task: "${enrichedCommand.substring(0, 120)}..."`);
 

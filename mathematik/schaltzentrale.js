@@ -321,9 +321,62 @@ async function serverDispatch(task, ctx) {
  *
  * @returns {'success'|'needs_fallback'|'failed'}
  */
+// ── Lokaler Routen-Fuzzy-Match ─────────────────────────────────────────────
+// Gibt { id, name, steps } zurück wenn Command zu einer gespeicherten Route passt.
+// Vergleich: Wörter des Routen-Namens im Befehl erkennbar (mindestens 1 Keyword-Wort).
+// Stopwörter werden ignoriert. Routen-Cache: 30s TTL um API-Calls zu sparen.
+let _routeCache = null;
+let _routeCacheTs = 0;
+
+async function findMatchingRoute(command, { API, userToken }) {
+  if (!API || !userToken) return null;
+  const now = Date.now();
+  if (!_routeCache || now - _routeCacheTs > 30000) {
+    try {
+      const r = await fetch(`${API}/api/agent/route/list?token=${userToken}`);
+      const d = await r.json();
+      _routeCache   = d.routes || [];
+      _routeCacheTs = now;
+    } catch { return null; }
+  }
+  if (!_routeCache.length) return null;
+
+  const cmd   = command.toLowerCase();
+  const STOP  = new Set(['öffne','mach','starte','zeig','mache','bitte','mal','auf','an','den','die','das','der','ein','eine','mir','ich','und','oder','für','mit','in','im','von','zu','zum','zur','am','bitte','hier','dort']);
+
+  for (const route of _routeCache) {
+    const nameWords = route.name.toLowerCase().split(/[\s\-_]+/).filter(w => w.length > 2 && !STOP.has(w));
+    if (!nameWords.length) continue;
+    // Alle Keyword-Wörter des Routen-Namens müssen im Befehl vorkommen
+    const allMatch = nameWords.every(w => cmd.includes(w));
+    // Oder: mind. 1 markantes Wort (>4 Buchstaben) trifft
+    const anyLong  = nameWords.some(w => w.length > 4 && cmd.includes(w));
+    if (allMatch || anyLong) {
+      console.log(`🗺️ Route-Match: "${route.name}" für Befehl: "${command.slice(0,60)}"`);
+      return route;
+    }
+  }
+  return null;
+}
+
 async function dispatch(task, ctx) {
-  const { executeRouteStep, sleep, mathChef, axLayer } = ctx;
+  const { executeRouteStep, sleep, mathChef, axLayer, API, userToken } = ctx;
   const command = task.command || '';
+
+  // ── ROUTE-CHECK — höchste Priorität, vor allen Layern ─────────────────
+  // Wenn User eine Route trainiert hat die zum Befehl passt → immer diese nehmen.
+  if (!(/^aufgabe bezogen|^\{"|^RUN_ROUTE:|^\[NUTZER_INFO/i.test(command.trim()))) {
+    const matchedRoute = await findMatchingRoute(command, { API, userToken });
+    if (matchedRoute) {
+      console.log(`🗺️ Schaltzentrale → Route "${matchedRoute.name}" (${matchedRoute.steps?.length} Steps)`);
+      for (let i = 0; i < (matchedRoute.steps || []).length; i++) {
+        // from_route: true → executeRouteStep nutzt trainierte Koordinaten direkt
+        await executeRouteStep({ ...matchedRoute.steps[i], from_route: true });
+        await sleep(1200);
+      }
+      return 'success';
+    }
+  }
 
   // ── Inner Monologue: Trigger-Analyse ──────────────────────────────────
   const triggers       = analyzeTriggers(command, ctx);
@@ -347,45 +400,113 @@ async function dispatch(task, ctx) {
     // Kein lokaler Match trotz niedrigem Score → eine Ebene höher
   }
 
-  // ── LEVEL 1: PRECONSCIOUS — MathCommander + AX (kein API) ────────────
-  if (level <= LEVEL.PRECONSCIOUS) {
-    // Guard: Server-reformulierte Commands überspringen
-    const _isServerCmd = /^aufgabe bezogen|^\{"|^RUN_ROUTE:|^\[NUTZER_INFO/i.test(command.trim())
-      || command.includes('(unknown:') || command.includes('[NUTZER_INFO');
+  // ── COMMANDER — immer zuerst, unabhängig vom Level ───────────────────
+  // Auch bei hohem Complexity-Score (META_CONSCIOUS etc.) soll der Commander
+  // zuerst probieren — er ist schnell (<20ms), kein API, und kann Intents wie
+  // mail_write direkt per AX lösen ohne Server-Dispatch mit fixen Koordinaten.
+  const _isServerCmd = /^aufgabe bezogen|^\{"|^RUN_ROUTE:|^\[NUTZER_INFO/i.test(command.trim())
+    || command.includes('(unknown:') || command.includes('[NUTZER_INFO');
 
-    if (!_isServerCmd) {
-      const cmdResult = await mathCommander.dispatch(command, { chef: mathChef, axLayer }).catch(() => null);
-      if (cmdResult) {
-        if (cmdResult.__server_task === 'form_fill_from_file') {
-          console.log(`📄 PRECONSCIOUS→SERVER: form_fill_from_file → ${cmdResult.source_file}`);
-          const ffTask = {
-            ...task,
-            command: JSON.stringify({
-              type: 'screen_fill_from_file',
-              source_file: cmdResult.source_file,
-              source_dir:  cmdResult.source_dir
-            })
-          };
-          const ok = await serverDispatch(ffTask, ctx);
-          if (ok) return 'success';
-        } else {
-          console.log(`🧠 PRECONSCIOUS: "${cmdResult.intent}" → ${cmdResult.steps.length} Steps`);
-          for (const step of cmdResult.steps) {
-            if (step.action === 'wait') {
-              await sleep(step.value || 500);
-            } else {
-              await executeRouteStep(step);
-              await sleep(200);
+  if (!_isServerCmd) {
+    const cmdResult = await mathCommander.dispatch(command, { chef: mathChef, axLayer }).catch(() => null);
+    if (cmdResult) {
+
+      // ── Nutzer muss Maildienst wählen ──────────────────────────────────
+      if (cmdResult.__ask_mail_service) {
+        const { dialog } = require('electron');
+        const mailPrefs  = require('./mail-prefs');
+        const choice = await dialog.showMessageBox({
+          type:      'question',
+          title:     'MIRA — Maildienst',
+          message:   'Welchen E-Mail-Dienst verwendest du?\n\nMIRA sucht die App automatisch im System — kein Training nötig.',
+          buttons:   ['Apple Mail (Mac)', 'Outlook Desktop', 'Gmail (Browser)', 'Outlook Web (Browser)', 'Abbrechen'],
+          defaultId: 0,
+          cancelId:  4,
+        });
+        const services = ['apple_mail', 'outlook_app', 'gmail', 'outlook'];
+        if (choice.response < 4) {
+          mailPrefs.set('mail_service', services[choice.response]);
+          console.log(`📧 Maildienst gespeichert: ${services[choice.response]}`);
+          // Jetzt nochmal dispatchen — Commander hat die Pref jetzt
+          const cmdResult2 = await mathCommander.dispatch(command, { chef: mathChef, axLayer }).catch(() => null);
+          if (cmdResult2?.steps) {
+            console.log(`📧 COMMANDER mail_write: ${cmdResult2.steps.length} AX-Steps`);
+            for (const step of cmdResult2.steps) {
+              if (step.__reformulate && step.value) {
+                try {
+                  const r = await fetch(`${API}/api/brain/mail-format`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ token: userToken, raw: step.value, subject: cmdResult2.subject || '' })
+                  });
+                  const d = await r.json();
+                  step.value = `Hallo,\n\n${d.text}\n\nLiebe Grüße`;
+                  delete step.__reformulate;
+                } catch { delete step.__reformulate; }
+              }
+            }
+            for (const step of cmdResult2.steps) {
+              if (step.action === 'wait') await sleep(step.value || 500);
+              else { await executeRouteStep(step); await sleep(300); }
+            }
+            return 'success';
+          }
+        }
+        // Abgebrochen oder Retry fehlgeschlagen → Server
+      }
+
+      // ── Server-Task (z.B. form_fill_from_file) ─────────────────────────
+      else if (cmdResult.__server_task === 'form_fill_from_file') {
+        console.log(`📄 COMMANDER→SERVER: form_fill_from_file → ${cmdResult.source_file}`);
+        const ffTask = {
+          ...task,
+          command: JSON.stringify({
+            type:       'screen_fill_from_file',
+            source_file: cmdResult.source_file,
+            source_dir:  cmdResult.source_dir
+          })
+        };
+        const ok = await serverDispatch(ffTask, ctx);
+        if (ok) return 'success';
+      }
+
+      // ── Lokale Steps direkt ausführen ───────────────────────────────────
+      else if (cmdResult.steps) {
+        console.log(`🧠 COMMANDER: "${cmdResult.intent}" → ${cmdResult.steps.length} Steps`);
+
+        // GPT-Reformulierung für markierte Body-Steps
+        for (const step of cmdResult.steps) {
+          if (step.__reformulate && step.value) {
+            try {
+              console.log(`✍️ GPT reformuliert Mail-Body: "${step.value.slice(0, 40)}..."`);
+              const subjectStep = cmdResult.steps.find(s => s.__isSubject);
+              const subj = subjectStep?.value || cmdResult.subject || '';
+              const r = await fetch(`${API}/api/brain/mail-format`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: userToken, raw: step.value, subject: subj })
+              });
+              const d = await r.json();
+              step.value = `Hallo,\n\n${d.text}\n\nLiebe Grüße`;
+              step.command = step.value;
+              delete step.__reformulate;
+              console.log(`✅ Mail-Body reformuliert`);
+            } catch (e) {
+              console.warn(`⚠️ GPT mail-format fehlgeschlagen: ${e.message}`);
+              // Fallback: Rohtext sauber formatieren
+              const satz = step.value.trim().replace(/\s+/g, ' ');
+              step.value = `Hallo,\n\n${satz.charAt(0).toUpperCase() + satz.slice(1)}.\n\nLiebe Grüße`;
+              delete step.__reformulate;
             }
           }
-          return 'success';
         }
-      }
-    }
 
-    // Commander kein Match → direkt zu CONSCIOUS hochstufen
-    if (level < LEVEL.CONSCIOUS) {
-      console.log(`🔼 PRECONSCIOUS→CONSCIOUS: kein Commander-Match, stufe hoch`);
+        for (const step of cmdResult.steps) {
+          if (step.action === 'wait') await sleep(step.value || 500);
+          else { await executeRouteStep(step); await sleep(200); }
+        }
+        return 'success';
+      }
     }
   }
 

@@ -1,0 +1,155 @@
+{
+  "felder": {
+    "tag": {
+      "typ": "zahl",
+      "beschreibung": "Tag des Monats",
+      "gelernt": "2026-03-04T19:18:39.706Z",
+      "bereich": [
+        1,
+        31
+      ]
+    },
+    "monat": {
+      "typ": "zahl",
+      "bereich": [
+        1,
+        12
+      ],
+      "beschreibung": "Monat",
+      "gelernt": "2026-03-04T19:18:39.734Z"
+    },
+    "jahr": {
+      "typ": "zahl",
+      "bereich": [
+        2000,
+        2100
+      ],
+      "beschreibung": "Jahreszahl",
+      "gelernt": "2026-03-04T19:18:39.735Z"
+    },
+    "datum": {
+      "typ": "datum",
+      "format": "DD.MM.YYYY",
+      "beschreibung": "Vollständiges Datum"
+    },
+    "vorname": {
+      "typ": "text",
+      "beschreibung": "Erster Vorname",
+      "bereich": null,
+      "gelernt": "2026-03-04T19:18:39.735Z"
+    },
+    "name": {
+      "typ": "text",
+      "beschreibung": "Nachname",
+      "bereich": null,
+      "gelernt": "2026-03-04T19:18:39.736Z"
+    },
+    "nachname": {
+      "typ": "text",
+      "beschreibung": "Nachname",
+      "bereich": null,
+      "gelernt": "2026-03-04T19:18:39.736Z"
+    },
+    "email": {
+      "typ": "email",
+      "beschreibung": "E-Mail-Adresse",
+      "bereich": null,
+      "gelernt": "2026-03-04T19:18:39.736Z"
+    },
+    "telefon": {
+      "typ": "telefon",
+      "beschreibung": "Telefonnummer"
+    },
+    "betrag": {
+      "typ": "zahl",
+      "beschreibung": "Geldbetrag Euro",
+      "bereich": null,
+      "gelernt": "2026-03-04T19:18:39.737Z"
+    },
+    "preis": {
+      "typ": "zahl",
+      "beschreibung": "Preis in Euro"
+    },
+    "anzahl": {
+      "typ": "zahl",
+      "beschreibung": "Stückzahl / Menge"
+    },
+    "strasse": {
+      "typ": "text",
+      "beschreibung": "Straßenname und Hausnummer"
+    },
+    "plz": {
+      "typ": "text",
+      "beschreibung": "Postleitzahl",
+      "bereich": null,
+      "gelernt": "2026-03-04T19:18:39.737Z"
+    },
+    "ort": {
+      "typ": "text",
+      "beschreibung": "Stadt / Gemeinde"
+    },
+    "unternehmen": {
+      "typ": "text",
+      "beschreibung": "Firmenname"
+    },
+    "firma": {
+      "typ": "text",
+      "beschreibung": "Firmenname"
+    },
+    "beschreibung": {
+      "typ": "text",
+      "beschreibung": "Freitext-Beschreibung"
+    },
+    "kommentar": {
+      "typ": "text",
+      "beschreibung": "Kommentar oder Notiz"
+    }
+  },
+  "apps": {
+    "opera": {
+      "typ": "browser",
+      "url_bar": true,
+      "beschreibung": "Opera Browser"
+    },
+    "chrome": {
+      "typ": "browser",
+      "url_bar": true,
+      "beschreibung": "Google Chrome Browser"
+    },
+    "safari": {
+      "typ": "browser",
+      "url_bar": true,
+      "beschreibung": "Apple Safari Browser"
+    },
+    "firefox": {
+      "typ": "browser",
+      "url_bar": true,
+      "beschreibung": "Mozilla Firefox Browser"
+    },
+    "excel": {
+      "typ": "tabelle",
+      "zellen": true,
+      "beschreibung": "Microsoft Excel"
+    },
+    "word": {
+      "typ": "dokument",
+      "seiten": true,
+      "beschreibung": "Microsoft Word"
+    },
+    "outlook": {
+      "typ": "mail",
+      "postfach": true,
+      "beschreibung": "Microsoft Outlook Mail"
+    },
+    "finder": {
+      "typ": "datei",
+      "ordner": true,
+      "beschreibung": "macOS Finder"
+    },
+    "explorer": {
+      "typ": "datei",
+      "ordner": true,
+      "beschreibung": "Windows Explorer"
+    }
+  }
+}

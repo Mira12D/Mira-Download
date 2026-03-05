@@ -119,6 +119,26 @@ class CoordCache {
   }
 
   /**
+   * Remove all cached entries for a given app (e.g. after URL navigation,
+   * when the page content has completely changed).
+   */
+  invalidateApp(bundleId) {
+    this._load();
+    const prefix = (bundleId || '').toLowerCase() + '::';
+    // Trainierte Aktions-Buttons nie löschen — sie bleiben stabil über URL-Navigationen
+    const keepLabels = ['senden', 'send', 'absenden', 'abschicken'];
+    let removed = 0;
+    for (const key of Object.keys(this._data)) {
+      if (key.startsWith(prefix)) {
+        const label = key.slice(prefix.length);
+        if (keepLabels.some(k => label.includes(k))) continue; // behalten
+        delete this._data[key]; removed++;
+      }
+    }
+    if (removed > 0) this._persist();
+  }
+
+  /**
    * Remove all entries older than TTL.
    * Call once at startup to keep the cache clean.
    */

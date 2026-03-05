@@ -20,6 +20,34 @@ const IS_MAC = process.platform === 'darwin';
 function erkennIntent(command) {
   const cmd = command.toLowerCase().trim();
 
+  // ── E-Mail-Adresse im Befehl → immer mail_write (stärkstes Signal, zuerst) ──
+  // "schreibe max@firma.de", "mail an x@y.de", "schick email an ...", etc.
+  // Auch wenn kein "mail/email" Keyword vorhanden ist — Adresse ist eindeutig.
+  const emailAddrMatch = cmd.match(/\b([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})\b/i);
+  if (emailAddrMatch) {
+    const subjectMatch = cmd.match(/(?:betreff|subject)[:\s]+["']?(.+?)["']?(?:\s+(?:und|mit|inhalt|text|schreib|nachricht)|$)/i);
+    let body = null;
+    // Explizites Body-Keyword
+    const bodyKeyMatch = cmd.match(/(?:und\s+)?(?:schreib|text|inhalt|nachricht|sag)[:\s]+["']?(.+?)["']?$/i);
+    if (bodyKeyMatch) {
+      body = bodyKeyMatch[1].trim();
+    } else {
+      // Alles nach "und" / "mit" hinter der E-Mail-Adresse = Body (natürliche Sprache)
+      const addrEnd = cmd.indexOf(emailAddrMatch[1]) + emailAddrMatch[1].length;
+      const afterAddr = cmd.slice(addrEnd).trim();
+      const naturalBody = afterAddr.match(/^[,\s]*(?:und|mit|um|für|dass?|das?)\s+(.+)$/i);
+      if (naturalBody) body = naturalBody[1].trim();
+      else if (afterAddr && !subjectMatch) body = afterAddr.replace(/^[,\s]+/, '').trim() || null;
+    }
+    return {
+      intent:  'mail_write',
+      raw:     command,
+      to:      emailAddrMatch[1],
+      subject: subjectMatch?.[1]?.trim() || null,
+      body:    body || null,
+    };
+  }
+
   // ── Web: Google-Suche ──────────────────────────────────────────────────
   const wsM = cmd.match(
     /\b(?:google(?:\s+mal)?|such(?:e)?(?:\s+(?:mal|nach))?|finde?(?:\s+mal)?|zeig(?:\s+mir)?(?:\s+mal)?|schlag\s+nach|suche?\s+im\s+(?:web|internet)|was\s+ist|was\s+kostet?|wie\s+geht|wie\s+wird|wann\s+ist|wer\s+ist|erkl[äa]r(?:e)?(?:\s+mir)?)\s+(.+)/i
@@ -75,7 +103,9 @@ function erkennIntent(command) {
   if (/\b(word|docx|word\s*datei)\b/i.test(cmd)) {
     if (/\b(schreib|tipp|verfass|füll|erstell|trag)\b/i.test(cmd))
       return { intent: 'word_write', raw: command };
-    return { intent: 'word_open', raw: command };
+    // word_open nur wenn User explizit öffnen will — nicht bei Kontext-Beschreibungen wie "möglicherweise Word"
+    if (/\b(öffn|start|launch|mach\s*auf|zeig)\b/i.test(cmd))
+      return { intent: 'word_open', raw: command };
   }
   if (/\b(brief|anschreiben|bewerbung)\b/i.test(cmd) &&
       /\b(schreib|erstell|verfass|mach)\b/i.test(cmd))
@@ -106,8 +136,17 @@ function erkennIntent(command) {
       return { intent: 'mail_to_excel', raw: command };
     if (/\b(notiz|notizen|notes?)\b/i.test(cmd))
       return { intent: 'mail_to_notizen', raw: command };
-    if (/\b(schreib|send|verfass|erstell|antwort)\b/i.test(cmd))
-      return { intent: 'mail_write', raw: command };
+    if (/\b(schreib|schick|send|verfass|erstell|antwort|absend|weiterleite?)\b/i.test(cmd)) {
+      const emailMatch   = cmd.match(/\b([a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,})\b/i);
+      const subjectMatch = cmd.match(/(?:betreff|subject)[:\s]+["']?(.+?)["']?(?:\s+(?:und|mit|inhalt|text|schreib|nachricht)|$)/i);
+      const bodyMatch    = cmd.match(/(?:und\s+)?(?:schreib|text|inhalt|nachricht|sag)[:\s]+["']?(.+?)["']?$/i);
+      return {
+        intent: 'mail_write', raw: command,
+        to:      emailMatch?.[1]  || null,
+        subject: subjectMatch?.[1]?.trim() || null,
+        body:    bodyMatch?.[1]?.trim()    || null,
+      };
+    }
     if (/\b(les|lier|öffne?|check|schau|zeig|ruf\s+ab|ab.*check|check.*ab)\b/i.test(cmd))
       return { intent: 'mail_read' };
     return { intent: 'mail_open' };
@@ -208,6 +247,16 @@ function erkennIntent(command) {
 // STEPS BAUEN (async — Pattern + AX + Fallback)
 // ═══════════════════════════════════════
 
+// Platzhalter-Step: wird in schaltzentrale.js vor Ausführung durch GPT-reformulierten Text ersetzt
+function mailBodyStep(raw) {
+  return { action: 'type', value: raw, __reformulate: true, command: raw };
+}
+
+// Senden-Step: normaler Click — coord-cache hat die trainierte Position
+function sendenStep() {
+  return { action: 'click', command: 'Senden', label: 'Senden' };
+}
+
 async function bauSteps(intent, { chef, axLayer }) {
   // ── Helpers ──────────────────────────────────────────────────────────
   const url   = (value)  => ({ action: 'open_url', value, command: value });
@@ -215,6 +264,8 @@ async function bauSteps(intent, { chef, axLayer }) {
   const typ   = (value)  => ({ action: 'type',     value, command: value });
   const wait  = (ms)     => ({ action: 'wait',     value: ms, command: `warten ${ms}ms` });
   const click = (coord)  => ({ action: 'click',    coordinate: coord, command: 'klicken' });
+  // AX-Label-Klick — kein Pixel, echte Accessibility-Bezeichnung
+  const ax    = (label)  => ({ action: 'click',    command: label, label });
 
   // Pattern-Suche + AX-Fallback
   async function findeElement(namen) {
@@ -318,10 +369,84 @@ async function bauSteps(intent, { chef, axLayer }) {
     case 'mail_to_word':
     case 'mail_to_excel':
     case 'mail_read':
-    case 'mail_write':
       // Mail-Inhalte + Vision-Auswertung + Transfers → Server-AI
-      // Server bekommt intent.sender als Metadaten über tryDispatch
       return null;
+
+    case 'mail_write': {
+      const prefs = require('./mail-prefs');
+      const mailService = prefs.get('mail_service');
+
+      // Unbekannter Maildienst → erst fragen
+      if (!mailService) return { __ask_mail_service: true };
+
+      const to   = intent.to   || '';
+      const body = intent.body || '';
+      const e    = (v) => encodeURIComponent(v);
+
+      // Betreff aus Kontext ableiten wenn nicht explizit angegeben
+      const subject = intent.subject || (() => {
+        const b = body.toLowerCase();
+        if (/termin.*bestätig|bestätig.*termin/i.test(b))  return 'Terminbestätigung';
+        if (/termin.*absag|absag.*termin/i.test(b))        return 'Terminabsage';
+        if (/termin/i.test(b))                             return 'Termin';
+        if (/rechnung/i.test(b))                           return 'Rechnung';
+        if (/angebot/i.test(b))                            return 'Angebot';
+        if (/bewerbung/i.test(b))                          return 'Bewerbung';
+        if (/zusage/i.test(b))                             return 'Zusage';
+        if (/absage/i.test(b))                             return 'Absage';
+        if (/frage|anfrage/i.test(b))                      return 'Anfrage';
+        if (/info|information/i.test(b))                   return 'Information';
+        if (/erinnerung/i.test(b))                         return 'Erinnerung';
+        if (/bestätig/i.test(b))                           return 'Bestätigung';
+        // Fallback: erste 5 Wörter des Body
+        return body.split(/\s+/).slice(0, 5).join(' ') || '';
+      })();
+
+      if (mailService === 'apple_mail') {
+        // Native Mac Mail — App über Spotlight öffnen, dann alles per AX
+        s.push(...(IS_MAC
+          ? [key('cmd+space'), wait(400), typ('Mail'), wait(600), key('enter'), wait(2000)]
+          : [key('super'),     wait(400), typ('Mail'), wait(600), key('enter'), wait(2000)]
+        ));
+        s.push(ax('Verfassen'));
+        s.push(wait(1000));
+        if (to)      { s.push(ax('An:'));      s.push(typ(to));      s.push(key('tab')); s.push(wait(300)); }
+        if (subject) { s.push(ax('Betreff:')); s.push(typ(subject)); s.push(wait(300)); }
+        if (body)    { s.push(ax('Nachrichtenbereich')); s.push(mailBodyStep(body)); s.push(wait(300)); }
+        s.push(sendenStep());
+
+      } else if (mailService === 'outlook_app') {
+        // Outlook Desktop App — per Spotlight/Start öffnen, dann AX
+        s.push(...(IS_MAC
+          ? [key('cmd+space'), wait(400), typ('Microsoft Outlook'), wait(600), key('enter'), wait(2500)]
+          : [key('super'),     wait(400), typ('Outlook'),           wait(600), key('enter'), wait(2500)]
+        ));
+        s.push(ax('Neue E-Mail'));
+        s.push(wait(1000));
+        if (to)      { s.push(ax('An'));      s.push(typ(to));      s.push(key('tab')); s.push(wait(300)); }
+        if (subject) { s.push(ax('Betreff')); s.push(typ(subject)); s.push(wait(300)); }
+        if (body)    { s.push(ax('Nachrichtenbereich')); s.push(mailBodyStep(body)); s.push(wait(300)); }
+        s.push(sendenStep());
+
+      } else if (mailService === 'gmail') {
+        s.push(url(`https://mail.google.com/mail/?view=cm&fs=1${to ? `&to=${e(to)}` : ''}`));
+        s.push(wait(3500));
+        if (subject) { s.push(typ(subject)); s.push(wait(300)); }
+        s.push(key('tab')); s.push(wait(300));
+        if (body)    { s.push(mailBodyStep(body)); s.push(wait(400)); }
+        s.push(sendenStep());
+
+      } else {
+        // Outlook Web
+        s.push(url(`https://outlook.live.com/mail/0/deeplink/compose${to ? `?to=${e(to)}` : ''}`));
+        s.push(wait(3500));
+        if (subject) { s.push(typ(subject)); s.push(wait(300)); }
+        s.push(key('tab')); s.push(wait(300));
+        if (body)    { s.push(mailBodyStep(body)); s.push(wait(400)); }
+        s.push(sendenStep());
+      }
+      break;
+    }
 
     // ── Kalender ──────────────────────────────────────────────────────────
     case 'calendar_open': {
@@ -403,8 +528,9 @@ async function dispatch(command, { chef, axLayer } = {}) {
     return null;
   }
 
-  // Server-Task (kein lokales Step-Array, sondern strukturierter Weiterleiter)
-  if (result.__server_task) return result;
+  // Spezial-Rückgaben direkt durchleiten (kein Step-Array)
+  if (result.__server_task)    return result;
+  if (result.__ask_mail_service) return result;
 
   console.log(`⚡ Commander: ${result.length} Steps lokal (kein API)`);
   return { intent: intent.intent, steps: result };
