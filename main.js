@@ -1884,19 +1884,18 @@ async function executeTaskFromQueue(task) {
     // ════════════════════════════
     } else if (parsed?.type === 'file_task') {
       const ftLog = async (message, type = 'step', extra = {}) => {
-        try {
-          // 8s Timeout — ftLog ist unkritisch, darf den Task nicht blockieren
-          await fetchWithTimeout(`${API}/api/agent/file-task-log`, {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ token: userToken, task_id: task.id, message, type, ...extra })
-          }, 8000);
-        } catch(e) { console.error('⚠️ ftLog failed:', e.message); }
+        if (message) console.log(`📋 [file_task] ${type}: ${message}`);
+        // Fire-and-forget — nie blockieren (Server kann offline sein)
+        fetchWithTimeout(`${API}/api/agent/file-task-log`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, task_id: task.id, message, type, ...extra })
+        }, 5000).catch(() => {});
       };
 
       const { search_patterns, source_dirs, target_filename, target_format = 'xlsx', action, instruction, append_if_exists, custom_headers, artifact_id, artifact_name, rows_to_add } = parsed;
 
-      // ── Profil laden (brauchen wir immer, auch bei create_excel) ────────
-      if (!userProfileSettings.company_name) await loadUserProfileSettings().catch(() => {});
+      // ── Profil laden (fire-and-forget — Server kann offline sein) ────────
+      if (!userProfileSettings.company_name) loadUserProfileSettings().catch(() => {});
       const ftProfile = userProfileSettings;
 
       // ══════════════════════════════════════════════════════════════
@@ -1923,8 +1922,10 @@ async function executeTaskFromQueue(task) {
           // 1. Artifact laden — direkt via Supabase (device-token hat kein id-Feld,
           //    deshalb kein API-Roundtrip → kein user_id-Problem)
           let artRow = null;
+          console.log(`🗂️ artifact_edit: id=${resolvedArtifactId} name="${resolvedArtifactName}" rows=${JSON.stringify(rows_to_add)}`);
           const artRows = await directSupabase('GET', `/artifacts?id=eq.${resolvedArtifactId}&limit=1&select=*`);
           artRow = artRows?.[0] || null;
+          console.log(`🗂️ Artifact geladen: ${artRow ? `type=${artRow.type} data=${artRow.data_base64?.length || 0} bytes` : 'NICHT GEFUNDEN'}`);
 
           // Fallback: Vercel-Endpoint (falls directSupabase keys nicht geladen)
           if (!artRow) {
@@ -2022,11 +2023,12 @@ async function executeTaskFromQueue(task) {
           // DB updaten
           const oldMeta = artRow?.metadata || {};
           const newMeta = artType === 'xlsx' ? { ...oldMeta, rows: rowCount } : { ...oldMeta };
-          await directSupabase('PATCH', `/artifacts?id=eq.${resolvedArtifactId}`, {
+          const patchResult = await directSupabase('PATCH', `/artifacts?id=eq.${resolvedArtifactId}`, {
             data_base64: newB64,
             metadata: newMeta,
             updated_at: new Date().toISOString()
           });
+          console.log(`🗂️ Artifact PATCH: ${patchResult ? '✅ OK' : '❌ fehlgeschlagen'} (${newB64?.length || 0} bytes)`);
 
           const artSummary = {
             is_artifact_update: true, artifact_id: resolvedArtifactId, artifact_name: resolvedArtifactName,
