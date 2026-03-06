@@ -1902,21 +1902,34 @@ async function executeTaskFromQueue(task) {
       // ══════════════════════════════════════════════════════════════
       // ARTIFACT EDIT — Zeilen in bestehendes Artifact eintragen
       // ══════════════════════════════════════════════════════════════
-      if (action === 'artifact_edit' && artifact_id) {
-        await ftLog(`📂 Lade Artifact "${artifact_name}"...`, 'step');
+      const resolvedArtifactId   = artifact_id   || lastActiveArtifact?.id   || null;
+      const resolvedArtifactName = artifact_name || lastActiveArtifact?.name || 'Artifact';
+
+      if (action === 'artifact_edit') {
+        // Kein Artifact verfügbar → sofort abbrechen (kein Endlos-Fallthrough)
+        if (!resolvedArtifactId) {
+          await ftLog('⚠️ Kein Artifact aktiv. Bitte öffne zuerst ein Artifact im Dokumente-Bereich.', 'error');
+          await ftLog(null, 'done', { done: true, summary: { error: true, error_msg: 'Kein Artifact aktiv' } });
+          await fetchWithTimeout(`${API}/api/agent/complete`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: 'Kein Artifact aktiv' } })
+          }, 10000).catch(() => {});
+          return;
+        }
+        await ftLog(`📂 Lade Artifact "${resolvedArtifactName}"...`, 'step');
         try {
           const ExcelJS = require('exceljs');
 
           // 1. Artifact laden — direkt via Supabase (device-token hat kein id-Feld,
           //    deshalb kein API-Roundtrip → kein user_id-Problem)
           let artRow = null;
-          const artRows = await directSupabase('GET', `/artifacts?id=eq.${artifact_id}&limit=1&select=*`);
+          const artRows = await directSupabase('GET', `/artifacts?id=eq.${resolvedArtifactId}&limit=1&select=*`);
           artRow = artRows?.[0] || null;
 
           // Fallback: Vercel-Endpoint (falls directSupabase keys nicht geladen)
           if (!artRow) {
             try {
-              const artRes = await fetchWithTimeout(`${API}/api/artifacts/${artifact_id}`, {
+              const artRes = await fetchWithTimeout(`${API}/api/artifacts/${resolvedArtifactId}`, {
                 headers: { 'Authorization': `Bearer ${userToken}` }
               }, 6000);
               const artData = await artRes.json();
@@ -2009,17 +2022,17 @@ async function executeTaskFromQueue(task) {
           // DB updaten
           const oldMeta = artRow?.metadata || {};
           const newMeta = artType === 'xlsx' ? { ...oldMeta, rows: rowCount } : { ...oldMeta };
-          await directSupabase('PATCH', `/artifacts?id=eq.${artifact_id}`, {
+          await directSupabase('PATCH', `/artifacts?id=eq.${resolvedArtifactId}`, {
             data_base64: newB64,
             metadata: newMeta,
             updated_at: new Date().toISOString()
           });
 
           const artSummary = {
-            is_artifact_update: true, artifact_id, artifact_name,
+            is_artifact_update: true, artifact_id: resolvedArtifactId, artifact_name: resolvedArtifactName,
             rows_written: rowsArr.length, files_count: 1,
             file_base64: newB64, mime,
-            target_filename: artifact_name || `Artifact.${artType}`
+            target_filename: resolvedArtifactName || `Artifact.${artType}`
           };
           await ftLog(null, 'done', { done: true, summary: artSummary });
           await fetchWithTimeout(`${API}/api/agent/complete`, {
