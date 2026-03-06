@@ -146,6 +146,7 @@ async function bootstrap() {
       supabaseToken: decryptKey(data.supabase_token),
       gptKey:        decryptKey(data.gpt_key),
       claudeKey:     decryptKey(data.claude_key),
+      userId:        data.user_id || null,
       expiresAt:     Date.now() + (data.expires_in || 3600) * 1000,
     };
     console.log('🔑 Direct keys bootstrapped (RAM only)');
@@ -236,6 +237,37 @@ async function directSupabase(method, path, body = null) {
     return await res.json();
   } catch(e) {
     clearTimeout(timeout);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════
+// ARTIFACT SPEICHERN — nach file_task
+// ═══════════════════════════════════════
+
+async function saveAsArtifact({ name, type, fileBase64, rowCount = 0 }) {
+  const userId = _dk?.userId;
+  if (!userId || !fileBase64) return null;
+  try {
+    const mimeMap = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pdf: 'application/pdf' };
+    const rows = await directSupabase('POST', `/artifacts`, {
+      user_id: userId,
+      name: name || `MIRA_Output.${type}`,
+      type: type || 'xlsx',
+      data_base64: fileBase64,
+      metadata: { rows: rowCount, pages: 0, preview_data: null },
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+    const artifact = Array.isArray(rows) ? rows[0] : null;
+    if (artifact?.id) {
+      console.log(`🗂️ Artifact gespeichert: "${name}" id=${artifact.id}`);
+      if (mainWindow) mainWindow.webContents.send('artifact-saved', { id: artifact.id, name, type, rows: rowCount });
+      return artifact;
+    }
+    return null;
+  } catch(e) {
+    console.warn('⚠️ saveAsArtifact fehlgeschlagen:', e.message);
     return null;
   }
 }
@@ -472,8 +504,8 @@ function startLocalServer() {
       }
 
       if (req.method === 'DELETE') {
-        await directSupabase('DELETE', `/artifacts?id=eq.${aId}&user_id=eq.${userId}`);
-        return json({ success: true });
+        // Artifacts dürfen nie gelöscht werden
+        return json({ success: false, error: 'Artifacts können nicht gelöscht werden.' }, 405);
       }
     }
 
@@ -2059,12 +2091,21 @@ async function executeTaskFromQueue(task) {
           : `❌ Datei nicht gefunden und neue Datei konnte nicht erstellt werden.`;
         await ftLog(doneMsg, newFileResult ? 'step' : 'error');
 
+        // Artifact in Supabase speichern
+        let newArtifactId = null;
+        if (newFileResult?.fileBase64) {
+          const artType = (target_format || 'xlsx').toLowerCase();
+          const saved = await saveAsArtifact({ name: newName, type: artType, fileBase64: newFileResult.fileBase64, rowCount: 0 });
+          newArtifactId = saved?.id || null;
+        }
+
         const newSummary = {
           files_count: 0, rows_written: 0, is_new_file: true,
           output_path:     newFileResult?.outputPath || null,
           target_filename: newName,
           file_base64:     newFileResult?.fileBase64 || null,
           mime:            newFileResult?.mime       || null,
+          artifact_id:     newArtifactId,
           error: !newFileResult
         };
         await ftLog(null, 'done', { done: true, summary: newSummary });
@@ -2222,6 +2263,15 @@ async function executeTaskFromQueue(task) {
         : `⚠️ Verarbeitung abgeschlossen, aber Ausgabe fehlgeschlagen.`;
       await ftLog(doneMsg, 'step');
 
+      // Artifact in Supabase speichern (nie leer lassen)
+      let artifactId = null;
+      if (outputResult?.fileBase64) {
+        const artType = (target_format || 'xlsx').toLowerCase();
+        const artName = target_filename || `MIRA_Output.${artType}`;
+        const saved = await saveAsArtifact({ name: artName, type: artType, fileBase64: outputResult.fileBase64, rowCount: outputResult.newCount || 0 });
+        artifactId = saved?.id || null;
+      }
+
       const summary = {
         files_count: foundFiles.length,
         rows_written: outputResult?.newCount || 0,
@@ -2229,6 +2279,7 @@ async function executeTaskFromQueue(task) {
         target_filename: target_filename || null,
         file_base64: outputResult?.fileBase64 || null,
         mime: outputResult?.mime || null,
+        artifact_id: artifactId,
         error: !outputResult
       };
       await ftLog(null, 'done', { done: true, summary });

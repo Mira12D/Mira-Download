@@ -1995,6 +1995,20 @@ async function startTraining(command) {
     msgs.scrollTop = msgs.scrollHeight;
   });
 
+  // ── Artifact wurde gespeichert → Chat-Karte + MIRA-Chat öffnen ──────────
+  ipcRenderer.on('artifact-saved', (event, { id, name, type, rows }) => {
+    if (!miraChatOpen) openMiraChat();
+    const msgs = document.getElementById('mc-messages');
+    if (!msgs) return;
+    const typeIcon = { xlsx: '📊', docx: '📝', pdf: '📄' }[type] || '📎';
+    const card = document.createElement('div');
+    card.className = 'mc-msg mira mc-artifact';
+    card.style.cssText = 'border-color:rgba(52,199,89,0.35);background:rgba(52,199,89,0.07);cursor:pointer;';
+    card.innerHTML = `<div class="artifact-title">${typeIcon} ${name}</div><div class="artifact-body" style="color:#8e8e93;font-size:11px">${rows > 0 ? rows + ' Einträge' : 'Fertig'} · Im Dokumente-Bereich verfügbar</div>`;
+    msgs.appendChild(card);
+    msgs.scrollTop = msgs.scrollHeight;
+  });
+
   // ── Fehler & Systemmeldungen im MIRA-Chat anzeigen ───────────────────────
   ipcRenderer.on('mira-chat-message', (event, { type, text }) => {
     if (!miraChatOpen) openMiraChat();
