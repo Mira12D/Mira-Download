@@ -2009,7 +2009,26 @@ async function executeTaskFromQueue(task) {
                 ws.insertRow(1, headers);
               }
             }
-            for (const rowObj of rowsArr) {
+            // ── Dispatcher: User-Input → richtige Spalten mappen ──────────────
+            let mappedRowsArr = rowsArr;
+            if (headers.filter(Boolean).length > 0) {
+              try {
+                const userText = instruction || JSON.stringify(rowsArr);
+                const mappingResult = await directOpenAI([{
+                  role: 'user',
+                  content: `Tabellen-Spalten: ${headers.filter(Boolean).join(', ')}\nUser möchte eintragen: "${userText}"\nRohdaten: ${JSON.stringify(rowsArr)}\n\nErstelle ein JSON-Array mit EXAKT den Spaltennamen der Tabelle. Fülle leere Felder mit "". Antworte NUR mit dem JSON-Array.`
+                }], { max_tokens: 400, temperature: 0 });
+                if (mappingResult) {
+                  const clean = mappingResult.trim().replace(/^```json?\n?/, '').replace(/\n?```$/, '');
+                  const parsed = JSON.parse(clean);
+                  if (Array.isArray(parsed) && parsed.length > 0) {
+                    mappedRowsArr = parsed;
+                    console.log(`🗺️ Dispatcher gemappt:`, JSON.stringify(mappedRowsArr));
+                  }
+                }
+              } catch(e) { console.warn('⚠️ Dispatcher fehlgeschlagen, nutze Original:', e.message); }
+            }
+            for (const rowObj of mappedRowsArr) {
               ws.addRow(headers.map(h => rowObj[h] !== undefined ? rowObj[h] : ''));
             }
             rowCount = ws.rowCount - 1;
