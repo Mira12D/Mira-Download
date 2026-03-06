@@ -2030,6 +2030,17 @@ async function executeTaskFromQueue(task) {
           });
           console.log(`🗂️ Artifact PATCH: ${patchResult ? '✅ OK' : '❌ fehlgeschlagen'} (${newB64?.length || 0} bytes)`);
 
+          // Lokale Datei auf Disk updaten (damit die xlsx auf Desktop aktuell ist)
+          try {
+            const fs = require('fs');
+            const localFiles = await ftFindFiles([resolvedArtifactName]);
+            const localPath = localFiles?.[0]?.path || null;
+            if (localPath && fs.existsSync(localPath)) {
+              fs.writeFileSync(localPath, Buffer.from(newB64, 'base64'));
+              console.log(`💾 Lokale Datei aktualisiert: ${localPath}`);
+            }
+          } catch(e) { console.warn('⚠️ Lokale Datei update fehlgeschlagen:', e.message); }
+
           const artSummary = {
             is_artifact_update: true, artifact_id: resolvedArtifactId, artifact_name: resolvedArtifactName,
             rows_written: rowsArr.length, files_count: 1,
