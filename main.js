@@ -110,6 +110,7 @@ let pendingContextPerception = null; // gespeichert nach "Hey MIRA" für Follow-
 // In-memory Progress-Store für local_ Tasks (keine Supabase-Einträge)
 // task_id → { items: [{type, content, ts}], done: false, dialog_response: null }
 const localTaskProgress = new Map();
+const sseClients = new Map(); // task_id → res (SSE-Verbindungen vom Browser)
 
 // ═══════════════════════════════════════
 // DEVICE ID
@@ -334,6 +335,39 @@ function startLocalServer() {
       return json({ ok: true, agent: true, tier: userTier, version: '1.0' });
     }
 
+    // ── GET /api/agent/task-stream/:task_id — SSE Push (kein Auth nötig) ──
+    const taskStreamMatch = pathname.match(/^\/api\/agent\/task-stream\/([^/]+)$/);
+    if (taskStreamMatch && req.method === 'GET') {
+      const task_id = taskStreamMatch[1];
+      res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Private-Network': 'true',
+      });
+      res.write(':stream-start\n\n');
+      // Bereits gespeicherte Items sofort senden
+      const prog = localTaskProgress.get(task_id);
+      if (prog) {
+        for (const item of prog.items) {
+          res.write(`data: ${JSON.stringify(item)}\n\n`);
+        }
+        if (prog.done) {
+          res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+          res.end();
+          return;
+        }
+      }
+      // SSE-Client registrieren für künftige Nachrichten
+      sseClients.set(task_id, res);
+      req.on('close', () => {
+        if (sseClients.get(task_id) === res) sseClients.delete(task_id);
+      });
+      return;
+    }
+
     // ── Auth: nur Browser-User-JWT (type:'user') erlaubt ─────────────────
     // Der lokale Spiegel-Server wird ausschließlich vom Browser-Frontend
     // aufgerufen. Der Electron-Prozess selbst spricht direkt mit Vercel.
@@ -357,15 +391,14 @@ function startLocalServer() {
       const since   = parseInt(url.searchParams.get('since') || '0', 10);
       if (!task_id) return json({ items: [], done: false });
 
-      if (task_id.startsWith('local_')) {
-        // Local task: direkt aus in-memory Store (kein Netzwerk)
-        const prog = localTaskProgress.get(task_id);
-        if (!prog) return json({ success: true, items: [], done: false, next_since: since });
+      // In-memory Store zuerst (alle Task-Typen: local_ UND echte UUIDs)
+      const prog = localTaskProgress.get(task_id);
+      if (prog) {
         const newItems = prog.items.slice(since);
         return json({ success: true, items: newItems, done: prog.done, next_since: since + newItems.length });
       }
 
-      // Real task (Vercel poll): direkt aus Supabase
+      // Fallback: Supabase (Task noch nicht in Electron angekommen oder alte Anfrage)
       try {
         const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task_id}&select=result,status&limit=1`);
         const result = typeof rows?.[0]?.result === 'string' ? JSON.parse(rows[0].result) : (rows?.[0]?.result || {});
@@ -418,52 +451,7 @@ function startLocalServer() {
       }
     }
 
-    // ── POST /api/users/chat — direkt über Claude, Supabase-Save ─────────
-    if (pathname === '/api/users/chat' && req.method === 'POST') {
-      const { message, session_id } = body;
-      if (!message) return json({ error: 'No message' }, 400);
-
-      // History aus Supabase holen
-      const convRows = await directSupabase('GET', `/conversations?session_id=eq.${session_id}&user_id=eq.${userId}&select=messages&limit=1`);
-      const history  = convRows?.[0]?.messages || [];
-
-      const messages = [
-        ...history.map(m => ({ role: m.role, content: m.content })),
-        { role: 'user', content: message }
-      ];
-
-      // Claude direkt rufen
-      let reply = await directClaude(messages, { model: 'claude-sonnet-4-6', max_tokens: 2000 });
-
-      if (!reply) {
-        // Fallback: Vercel
-        try {
-          const r = await fetch(`${API}/api/users/chat`, {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${tok}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify(body)
-          });
-          return json(await r.json());
-        } catch(e) { return json({ error: 'Chat unavailable' }, 503); }
-      }
-
-      // Conversation in Supabase speichern (upsert)
-      const updatedMsgs = [
-        ...history,
-        { role: 'user',      content: message, created_at: new Date().toISOString() },
-        { role: 'assistant', content: reply,   created_at: new Date().toISOString() }
-      ];
-      const preview = message.slice(0, 80);
-      if (convRows?.[0]) {
-        await directSupabase('PATCH', `/conversations?session_id=eq.${session_id}&user_id=eq.${userId}`,
-          { messages: updatedMsgs, preview, updated_at: new Date().toISOString() });
-      } else {
-        await directSupabase('POST', `/conversations`,
-          { session_id, user_id: userId, messages: updatedMsgs, preview, updated_at: new Date().toISOString() });
-      }
-
-      return json({ success: true, response: reply, session_id, direct: true });
-    }
+    // /api/users/chat → direkt zu Vercel proxyen (SSE-Stream für code_task Erkennung)
 
     // ── POST /api/agent/queue — sofort ausführen, kein Poll-Delay ────────
     if (pathname === '/api/agent/queue' && req.method === 'POST') {
@@ -581,42 +569,56 @@ function startLocalServer() {
       const { task_id, response } = body;
       if (!task_id || !response) return json({ success: false, error: 'task_id + response required' }, 400);
 
-      if (task_id.startsWith('local_')) {
-        // Local task: direkt in-memory setzen (instant, kein Netzwerk)
-        const prog = localTaskProgress.get(task_id);
-        if (prog) prog.dialog_response = response;
-        console.log(`💬 Dialog-Antwort [local] für Task ${task_id}: ${response}`);
+      // In-memory setzen (alle Task-Typen)
+      const progD = localTaskProgress.get(task_id);
+      if (progD) {
+        progD.dialog_response = response;
+        console.log(`💬 Dialog-Antwort für Task ${task_id.substring(0,8)}: ${response}`);
         return json({ success: true });
       }
-
-      // Real task: Supabase
+      // Fallback: Supabase (falls Task nicht in Electron-Memory)
       const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task_id}&select=result&limit=1`);
       const existingResult = typeof rows?.[0]?.result === 'string' ? JSON.parse(rows[0].result) : (rows?.[0]?.result || {});
       await directSupabase('PATCH', `/agent_tasks?id=eq.${task_id}`, { result: { ...existingResult, dialog_response: response } });
-      console.log(`💬 Dialog-Antwort für Task ${task_id.substring(0,8)}: ${response}`);
+      console.log(`💬 Dialog-Antwort [Supabase] für Task ${task_id.substring(0,8)}: ${response}`);
       return json({ success: true });
     }
 
-    // ── Alles andere → Proxy zu Vercel ────────────────────────────────────
+    // ── Alles andere → Proxy zu Vercel (SSE-fähig) ───────────────────────
     try {
       const isNoBody = ['GET', 'DELETE'].includes(req.method);
       const proxyRes = await fetch(`${API}${pathname}${url.search}`, {
         method: req.method,
         headers: {
           'Authorization': `Bearer ${tok}`,
-          // multipart: Content-Type mit boundary 1:1 weitergeben; sonst JSON
           ...(rawBodyBuffer
             ? { 'Content-Type': contentType }
             : { 'Content-Type': 'application/json' }),
         },
         body: isNoBody ? undefined : (rawBodyBuffer || JSON.stringify(body)),
       });
-      const proxyText = await proxyRes.text();
+
+      const proxyContentType = proxyRes.headers.get('content-type') || 'application/json';
       res.writeHead(proxyRes.status, {
-        'Content-Type': 'application/json',
+        'Content-Type': proxyContentType,
         'Access-Control-Allow-Origin': '*',
+        'Cache-Control': 'no-cache',
       });
-      res.end(proxyText);
+
+      // SSE / Streaming: Chunk für Chunk weiterleiten (nicht buffern!)
+      if (proxyRes.body) {
+        const reader = proxyRes.body.getReader();
+        const pump = async () => {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) { res.end(); break; }
+            res.write(value);
+          }
+        };
+        pump().catch(() => res.end());
+      } else {
+        res.end(await proxyRes.text());
+      }
     } catch(e) {
       json({ error: 'Proxy failed', detail: e.message }, 502);
     }
@@ -2426,39 +2428,19 @@ async function executeTaskFromQueue(task) {
       const { execSync } = require('child_process');
       const os = require('os');
 
-      // Sequential-Queue ctLog — verhindert Race Conditions bei schnellen Aufrufen
-      // Local tasks: direkt in-memory (kein Netzwerk, kein Delay)
-      // Real tasks: direkt Supabase (kein Vercel-Round-Trip)
-      const _ctQueue = [];
-      let _ctRunning = false;
+      // ctLog — schreibt SOFORT in in-memory Store (für alle Task-Typen)
+      // Kein Netzwerk, kein Supabase-Read nötig → 0ms Latenz für Frontend-Polling
       const ctLog = (message, type = 'step') => {
         if (!message) return;
         console.log(`💻 [code_task] ${type}: ${message}`);
-
-        if (task.id.startsWith('local_')) {
-          // Local task: sofort in in-memory Store schreiben
-          const prog = localTaskProgress.get(task.id);
-          if (prog) prog.items.push({ type, content: message, ts: Date.now() });
-          return;
+        const item = { type, content: message, ts: Date.now() };
+        const prog = localTaskProgress.get(task.id);
+        if (prog) prog.items.push(item);
+        // SSE-Push direkt in offene Browser-Verbindung
+        const sseRes = sseClients.get(task.id);
+        if (sseRes && !sseRes.writableEnded) {
+          sseRes.write(`data: ${JSON.stringify(item)}\n\n`);
         }
-
-        // Real task: Supabase Queue (kein Vercel-Hop)
-        _ctQueue.push({ message, type });
-        if (_ctRunning) return;
-        _ctRunning = true;
-        (async () => {
-          while (_ctQueue.length > 0) {
-            const item = _ctQueue.shift();
-            try {
-              const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task.id}&select=result,status&limit=1`);
-              const existingResult = typeof rows?.[0]?.result === 'string' ? JSON.parse(rows[0].result) : (rows?.[0]?.result || {});
-              const progress = [...(existingResult.progress || []), { type: item.type, content: item.message, ts: Date.now() }];
-              const statusUpdate = rows?.[0]?.status === 'pending' ? { status: 'in_progress' } : {};
-              await directSupabase('PATCH', `/agent_tasks?id=eq.${task.id}`, { result: { ...existingResult, progress }, ...statusUpdate });
-            } catch(e) { console.warn('⚠️ ctLog Supabase:', e.message); }
-          }
-          _ctRunning = false;
-        })();
       };
 
       // GPT-4o-mini call mit Retry (3x, exponentiell) + JSON-Mode
@@ -2599,33 +2581,21 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
 - Responsive: meta viewport, max-width Container, flexbox/grid
 - NIEMALS nackte HTML ohne CSS — immer mit Stil`;
 
-      // Progress-Store initialisieren (local tasks: in-memory, real tasks: Supabase)
-      if (task.id.startsWith('local_')) {
-        localTaskProgress.set(task.id, { items: [], done: false, dialog_response: null });
-      }
+      // Progress-Store für ALLE Tasks initialisieren (in-memory, kein Supabase nötig)
+      localTaskProgress.set(task.id, { items: [], done: false, dialog_response: null });
 
       try {
         const { action, target_file, target_dir, instruction, language, original_command } = parsed;
         await ctLog(`🔍 Starte: "${original_command || instruction}"...`);
 
         // Dialog-Antwort auf User-Bestätigung warten (max 45s)
+        // Prüft in-memory Store — funktioniert für alle Task-Typen
         const waitForDialog = async (timeoutMs = 45000) => {
           const start = Date.now();
           while (Date.now() - start < timeoutMs) {
             await new Promise(r => setTimeout(r, 700));
-            if (task.id.startsWith('local_')) {
-              // Local task: in-memory prüfen
-              const prog = localTaskProgress.get(task.id);
-              if (prog?.dialog_response) return prog.dialog_response;
-              continue;
-            }
-            // Real task: Supabase
-            try {
-              const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task.id}&select=result&limit=1`);
-              const result = rows?.[0]?.result;
-              const dr = typeof result === 'string' ? JSON.parse(result).dialog_response : result?.dialog_response;
-              if (dr) return dr;
-            } catch(e) {}
+            const prog = localTaskProgress.get(task.id);
+            if (prog?.dialog_response) return prog.dialog_response;
           }
           return 'yes'; // Timeout → Standard: Ja
         };
@@ -2634,16 +2604,19 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
         let targetHint = '';
         if (target_file) {
           const found = await ftFindFiles([target_file], target_dir ? [target_dir] : null, { codeMode: true });
-          const fp = found?.[0]?.path;
-          const isFuzzy = found?.[0]?.fuzzy === true;
+          // Extension-Filter: Fuzzy-Match nur wenn Extension übereinstimmt
+          const targetExt = pathMod.extname(target_file).toLowerCase();
+          const extFiltered = found.filter(f => !targetExt || pathMod.extname(f.name).toLowerCase() === targetExt);
+          const best = extFiltered[0];
+          const fp = best?.path;
+          const isFuzzy = best?.fuzzy === true;
           if (fp) {
             if (isFuzzy) {
-              // Fuzzy-Match → User fragen ob er diese Datei meint
-              ctLog(`❓ Datei gefunden: "${found[0].name}" — meinst du diese Datei?`, 'confirm');
+              ctLog(`❓ Datei gefunden: "${best.name}" — meinst du diese Datei?`, 'confirm');
               const response = await waitForDialog(45000);
               if (response === 'yes') {
                 targetHint = `\nZieldatei auf dem Desktop: ${fp}`;
-                ctLog(`📄 Bearbeite: ${found[0].name}`);
+                ctLog(`📄 Bearbeite: ${best.name}`);
               } else {
                 const guessPath = pathMod.join(os.homedir(), 'Desktop', target_file);
                 targetHint = `\nNoch nicht vorhanden, erstellen unter: ${guessPath}`;
@@ -2651,7 +2624,7 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
               }
             } else {
               targetHint = `\nZieldatei auf dem Desktop: ${fp}`;
-              ctLog(`📄 Zieldatei: ${found[0].name}`);
+              ctLog(`📄 Zieldatei: ${best.name}`);
             }
           } else {
             const guessPath = pathMod.join(os.homedir(), 'Desktop', target_file);
@@ -2768,11 +2741,9 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
             result: { success: true, action, files: writtenFiles, summary: completionResult, exec_outputs: execOutputs, mime: 'text/plain' }
           })
         }, 10000).catch(() => {});
-        // Local task: done signalisieren
-        if (task.id.startsWith('local_')) {
-          const _p = localTaskProgress.get(task.id);
-          if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); }
-        }
+        // Done signalisieren (alle Task-Typen) + SSE done Event
+        { const _p = localTaskProgress.get(task.id); if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); } }
+        { const _s = sseClients.get(task.id); if (_s && !_s.writableEnded) { _s.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`); _s.end(); sseClients.delete(task.id); } }
 
       } catch(e) {
         console.error('❌ code_task:', e.message);
@@ -2781,11 +2752,9 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: e.message } })
         }, 10000).catch(() => {});
-        // Local task: done signalisieren (auch bei Fehler)
-        if (task.id.startsWith('local_')) {
-          const _p = localTaskProgress.get(task.id);
-          if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); }
-        }
+        // Done signalisieren (auch bei Fehler, alle Task-Typen) + SSE done Event
+        { const _p = localTaskProgress.get(task.id); if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); } }
+        { const _s = sseClients.get(task.id); if (_s && !_s.writableEnded) { _s.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`); _s.end(); sseClients.delete(task.id); } }
       }
 
     // ════════════════════════════
@@ -3767,7 +3736,11 @@ function fuzzyScore(pattern, filename) {
   const np = norm(pattern);
   const nf = norm(filename.replace(/\.[^.]+$/, '')); // Erweiterung ignorieren
   if (nf === np) return 1.0;
-  if (nf.includes(np) || np.includes(nf)) return 0.95;
+  // Substring-Match nur wenn das kürzere mindestens 50% des längeren ausmacht
+  // Verhindert: "am" matcht "hebelsammarkthtml" (2 von 16 Zeichen = 12.5%)
+  const minLen = Math.min(np.length, nf.length);
+  const maxLen = Math.max(np.length, nf.length);
+  if ((nf.includes(np) || np.includes(nf)) && minLen >= maxLen * 0.5) return 0.95;
   // Zeichen-Überlappung
   const longer = np.length >= nf.length ? np : nf;
   const shorter = np.length < nf.length ? np : nf;
@@ -3826,7 +3799,7 @@ async function ftFindFiles(patterns, sourceDirs, { codeMode = false } = {}) {
       const ext = path.extname(entry).replace('.','').toLowerCase();
       if (!codeMode && SKIP_EXTS.has(ext)) continue; // keine Dev/Konfig-Dateien (außer im codeMode)
       const exactMatch = !hasPattern || patterns.some(p => nameLower.includes(p.toLowerCase()));
-      const fuzzyMatch = !exactMatch && hasPattern && patterns.some(p => fuzzyScore(p, entry) >= 0.65);
+      const fuzzyMatch = !exactMatch && hasPattern && patterns.some(p => fuzzyScore(p, entry) >= 0.85);
       if (exactMatch || fuzzyMatch) found.push({ name: entry, path: full, ext, mtime: stat.mtime, size: stat.size, fuzzy: fuzzyMatch });
     }
   }
