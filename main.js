@@ -2573,13 +2573,15 @@ WICHTIGE REGELN:
 5. Immer mit attempt_completion + diff beenden
 6. "thinking" Key erlaubt
 
-HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
-- Modernes Design: dunkles Theme ODER helles clean Design, nie nackt/unstyled
-- Inline CSS (kein externes Stylesheet nötig) — ordentliche Typografie, Abstände, Farben
-- Tailwind CDN falls passend: <script src="https://cdn.tailwindcss.com"></script>
-- Bilder: Unsplash URLs (https://images.unsplash.com/photo-[ID]?w=800) — immer mit Fallback alt=""
-- Responsive: meta viewport, max-width Container, flexbox/grid
-- NIEMALS nackte HTML ohne CSS — immer mit Stil`;
+CODE-QUALITÄT — ABSOLUT PFLICHT:
+- HTML: IMMER getrennte Dateien (index.html + styles.css + script.js) — NIEMALS alles in eine Datei
+- CSS: NIEMALS Arial, NIEMALS Tailwind CDN, NIEMALS inline styles im HTML
+- CSS: Immer CSS Custom Properties (--color-primary etc.), Apple-Font (-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI')
+- CSS: Modernes Design — saubere Typografie, Whitespace, subtile Schatten, Hover-Transitions
+- JS: NIEMALS var, NIEMALS onclick="" im HTML, immer const/let, addEventListener
+- Python: Type Hints, f-Strings, pathlib, with-Statements, kein eval/exec
+- Bilder: Unsplash (https://images.unsplash.com/photo-[ID]?w=800) mit alt=""
+- Responsive: meta viewport, CSS Grid/Flexbox, kein float-Layout`;
 
       // Progress-Store für ALLE Tasks initialisieren (in-memory, kein Supabase nötig)
       localTaskProgress.set(task.id, { items: [], done: false, dialog_response: null });
@@ -2593,7 +2595,7 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
         const waitForDialog = async (timeoutMs = 45000) => {
           const start = Date.now();
           while (Date.now() - start < timeoutMs) {
-            await new Promise(r => setTimeout(r, 700));
+            await new Promise(r => setTimeout(r, 200));
             const prog = localTaskProgress.get(task.id);
             if (prog?.dialog_response) return prog.dialog_response;
           }
@@ -2632,10 +2634,19 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
           }
         }
 
+        // Telekolleg-Bibliothek: passende Coding-Patterns laden
+        const bibCtx = bibLoader.findRelevant(
+          `${instruction} ${language || ''} ${target_file || ''}`,
+          { maxSections: 3, maxChars: 2000 }
+        );
+        const bibSection = bibCtx.found
+          ? `\n\n${bibCtx.context}`
+          : '';
+
         // Startmessage
         const messages = [{
           role: 'user',
-          content: `Aufgabe: ${instruction}${targetHint}\nAktion: ${action || 'edit_code'}${language ? `\nSprache: ${language}` : ''}`
+          content: `Aufgabe: ${instruction}${targetHint}\nAktion: ${action || 'edit_code'}${language ? `\nSprache: ${language}` : ''}${bibSection}`
         }];
 
         let iteration = 0;

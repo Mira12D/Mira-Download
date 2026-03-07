@@ -18,6 +18,12 @@ const BIB_DIR = path.join(__dirname, '..', 'reme-memory', 'knowledge', 'bib');
 
 // ── Keyword → Datei-Mapping (welche Datei ist für welchen Intent?) ─────────
 const FILE_KEYWORDS = {
+  // ── Coding & Web Development ─────────────────────────────────────────────
+  'Telekolleg-HTML-Modern.md':              ['html', 'seite', 'webseite', 'website', 'webpage', 'page', 'erstell', 'struktur', 'semantic', 'nav', 'header', 'footer', 'section', 'artikel', 'formular', 'form', 'link', 'button', 'bild', 'image', 'meta', 'seo', 'doctype', 'template', 'landing'],
+  'Telekolleg-CSS-Design-System.md':        ['css', 'style', 'design', 'farbe', 'color', 'font', 'schrift', 'layout', 'grid', 'flex', 'flexbox', 'animation', 'hover', 'responsive', 'mobile', 'dark mode', 'card', 'button', 'navigation', 'modern', 'apple', 'clean', 'schön', 'aussehen', 'gradient', 'shadow', 'border', 'padding', 'margin', 'bootstrap'],
+  'Telekolleg-JavaScript-Modern.md':        ['javascript', 'js', 'script', 'funktion', 'function', 'event', 'click', 'dom', 'fetch', 'api', 'async', 'await', 'promise', 'animation', 'counter', 'scroll', 'form validation', 'interaktiv', 'dynamisch', 'slider', 'modal', 'toggle', 'darkmode', 'localstorage', 'json'],
+  'Telekolleg-Python-Modern.md':            ['python', 'py', 'script', 'automation', 'automatisierung', 'excel', 'csv', 'json', 'datei', 'file', 'ordner', 'folder', 'api', 'fetch', 'klasse', 'class', 'funktion', 'daten', 'datenverarbeitung', 'pandas', 'openpyxl', 'pathlib', 'logging', 'cli', 'argument'],
+  // ── Office & Desktop ─────────────────────────────────────────────────────
   'Telekolleg-Einführung-Excel.md':         ['excel', 'tabelle', 'zelle', 'formel', 'spalte', 'zeile', 'summe', 'pivot', 'diagramm', 'rechnen', 'kalkulation', 'xlsx'],
   'Telekolleg-Daten-ins-Excel.md':          ['excel', 'daten', 'importieren', 'kopieren', 'pdf', 'google', 'sheet', 'csv', 'einfügen', 'übertragen', 'tabelle'],
   'Telekolleg-Outlook.md':                  ['outlook', 'mail', 'email', 'e-mail', 'posteingang', 'kalender', 'termin', 'kontakt', 'aufgabe', 'microsoft mail'],
