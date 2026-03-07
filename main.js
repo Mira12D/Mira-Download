@@ -2394,7 +2394,27 @@ async function executeTaskFromQueue(task) {
               if (!p.path) return 'Fehler: Kein Pfad';
               if (!fs.existsSync(p.path)) return `Fehler: Datei nicht gefunden: ${p.path}`;
               const content = fs.readFileSync(p.path, 'utf8');
-              return content.length > 8000 ? content.substring(0, 8000) + '\n... [gekürzt]' : content;
+              // Zeilennummern hinzufügen (wie Claude Code) für präzise Edits
+              const lines = content.split('\n');
+              const numbered = lines.map((l, i) => `${String(i+1).padStart(4,' ')} | ${l}`).join('\n');
+              return numbered.length > 12000 ? numbered.substring(0, 12000) + '\n... [gekürzt]' : numbered;
+            }
+            case 'edit_file': {
+              if (!p.path) return 'Fehler: Kein Pfad';
+              if (!p.old_string && p.old_string !== '') return 'Fehler: old_string fehlt';
+              if (p.new_string === undefined) return 'Fehler: new_string fehlt';
+              if (!fs.existsSync(p.path)) return `Fehler: Datei nicht gefunden: ${p.path}`;
+              const orig = fs.readFileSync(p.path, 'utf8');
+              // old_string muss eindeutig vorkommen
+              const occurrences = orig.split(p.old_string).length - 1;
+              if (occurrences === 0) return `Fehler: old_string nicht gefunden in ${pathMod.basename(p.path)}. Bitte erst read_file und exakten Text kopieren.`;
+              if (occurrences > 1) return `Fehler: old_string ${occurrences}x gefunden — nicht eindeutig. Mehr Kontext in old_string angeben.`;
+              const updated = orig.replace(p.old_string, p.new_string);
+              fs.writeFileSync(p.path, updated, 'utf8');
+              // Diff-Summary
+              const oldLines = p.old_string.split('\n').length;
+              const newLines = p.new_string.split('\n').length;
+              return `✅ Edit erfolgreich: ${pathMod.basename(p.path)} — ${oldLines} Zeile(n) → ${newLines} Zeile(n)`;
             }
             case 'write_file': {
               if (!p.path) return 'Fehler: Kein Pfad';
@@ -2440,19 +2460,23 @@ async function executeTaskFromQueue(task) {
       const CT_SYSTEM = `Du bist MIRA Code — KI-Coding-Assistent. Antworte IMMER als JSON-Objekt.
 
 Verfügbare Tools:
-- read_file: { "tool": "read_file", "path": "/absoluter/pfad/datei.js" }
-- write_file: { "tool": "write_file", "path": "/absoluter/pfad/datei.js", "content": "vollständiger code" }
-- list_files: { "tool": "list_files", "path": "/verzeichnis" }
+- read_file:   { "tool": "read_file", "path": "/absoluter/pfad/datei.js" }
+- edit_file:   { "tool": "edit_file", "path": "/pfad/datei.js", "old_string": "exakter alter code", "new_string": "neuer code" }
+- write_file:  { "tool": "write_file", "path": "/pfad/datei.js", "content": "vollständiger code" }
+- list_files:  { "tool": "list_files", "path": "/verzeichnis" }
 - execute_command: { "tool": "execute_command", "command": "node script.js", "cwd": "/optional" }
 - search_files: { "tool": "search_files", "pattern": "suchbegriff", "path": "/verzeichnis" }
-- attempt_completion: { "tool": "attempt_completion", "result": "was gemacht wurde", "diff_summary": "X Zeilen geändert" }
+- attempt_completion: { "tool": "attempt_completion", "result": "was gemacht wurde", "diff_summary": "X Zeilen geändert in Y Dateien" }
 
-REGELN:
-1. Immer erst read_file bevor du schreibst
-2. write_file = vollständige Datei, nie partial
-3. Bei Fehlern: Fehler analysieren, korrigieren, erneut versuchen
-4. Immer mit attempt_completion beenden
-5. Thinking erlaubt: füge "thinking" Key hinzu für interne Überlegungen`;
+WICHTIGE REGELN:
+1. Immer erst read_file bevor du änderst — du musst den exakten Text kennen
+2. Bevorzuge edit_file für Änderungen an bestehenden Dateien (sicherer, schneller)
+   - old_string MUSS exakt im File vorkommen (copy-paste aus read_file Ergebnis)
+   - old_string muss eindeutig sein (genug Kontext drumherum)
+3. write_file nur für neue Dateien oder komplette Rewrites
+4. Bei Fehlern: analysieren, korrigieren, erneut versuchen
+5. Immer mit attempt_completion beenden
+6. "thinking" Key erlaubt für interne Überlegungen`;
 
       try {
         const { action, target_file, target_dir, instruction, language, original_command } = parsed;
@@ -2517,11 +2541,13 @@ REGELN:
           ctLog(`🔧 ${toolName}${json.path ? ': ' + pathMod.basename(json.path) : ''}`);
           const result = await executeTool(toolName, json);
 
-          // Geschriebene Dateien merken
-          if (toolName === 'write_file' && json.path) {
-            writtenFiles.push(json.path);
-            const lineCount = (json.content || '').split('\n').length;
-            ctLog(`  ↳ ${lineCount} Zeilen geschrieben`);
+          // Geänderte/geschriebene Dateien merken
+          if ((toolName === 'write_file' || toolName === 'edit_file') && json.path) {
+            if (!writtenFiles.includes(json.path)) writtenFiles.push(json.path);
+            if (toolName === 'write_file') {
+              const lineCount = (json.content || '').split('\n').length;
+              ctLog(`  ↳ ${lineCount} Zeilen geschrieben`);
+            }
           } else if (toolName === 'execute_command') {
             execOutputs.push(result);
             ctLog(`  ↳ ${result.substring(0, 120)}`);
