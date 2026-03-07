@@ -246,25 +246,30 @@ async function directSupabase(method, path, body = null) {
 // ═══════════════════════════════════════
 
 async function saveAsArtifact({ name, type, fileBase64, rowCount = 0 }) {
-  const userId = _dk?.userId;
-  if (!userId || !fileBase64) return null;
+  // userToken wird genutzt (nicht _dk.userId — das existiert nicht in _dk)
+  if (!userToken || !fileBase64) return null;
   try {
-    const mimeMap = { xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', pdf: 'application/pdf' };
-    const rows = await directSupabase('POST', `/artifacts`, {
-      user_id: userId,
-      name: name || `MIRA_Output.${type}`,
-      type: type || 'xlsx',
-      data_base64: fileBase64,
-      metadata: { rows: rowCount, pages: 0, preview_data: null },
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
-    const artifact = Array.isArray(rows) ? rows[0] : null;
-    if (artifact?.id) {
-      console.log(`🗂️ Artifact gespeichert: "${name}" id=${artifact.id}`);
-      if (mainWindow) mainWindow.webContents.send('artifact-saved', { id: artifact.id, name, type, rows: rowCount });
-      return artifact;
+    const res = await fetchWithTimeout(`${API}/api/artifacts`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${userToken}`,
+      },
+      body: JSON.stringify({
+        name: name || `MIRA_Output.${type}`,
+        type: type || 'txt',
+        data_base64: fileBase64,
+        rows: rowCount,
+        pages: 0,
+      }),
+    }, 20000);
+    const data = await res.json();
+    if (data.success && data.artifact?.id) {
+      console.log(`🗂️ Artifact gespeichert: "${name}" id=${data.artifact.id}`);
+      if (mainWindow) mainWindow.webContents.send('artifact-saved', { id: data.artifact.id, name, type, rows: rowCount });
+      return data.artifact;
     }
+    console.warn('⚠️ saveAsArtifact: Server Error:', JSON.stringify(data).substring(0, 200));
     return null;
   } catch(e) {
     console.warn('⚠️ saveAsArtifact fehlgeschlagen:', e.message);
@@ -452,6 +457,17 @@ function startLocalServer() {
     // ── GET /api/artifacts ───────────────────────────────────────────────
     // Schema: id, name, type, metadata(jsonb), data_base64, created_at, updated_at
     if (pathname === '/api/artifacts' && req.method === 'GET') {
+      // Verwaiste Artifacts (leere user_id) diesem User zuweisen — "claim on read"
+      try {
+        const orphaned = await directSupabase('GET', `/artifacts?user_id=eq.&select=id`);
+        if (Array.isArray(orphaned) && orphaned.length > 0) {
+          for (const a of orphaned) {
+            await directSupabase('PATCH', `/artifacts?id=eq.${a.id}`, { user_id: userId, updated_at: new Date().toISOString() });
+          }
+          console.log(`🔧 ${orphaned.length} verwaiste Artifact(s) dem User ${userId} zugewiesen`);
+        }
+      } catch(e) { /* Claim-Fehler ignorieren */ }
+
       const rows = await directSupabase('GET', `/artifacts?user_id=eq.${userId}&select=id,name,type,metadata,created_at,updated_at&order=updated_at.desc&limit=50`);
       if (Array.isArray(rows)) {
         const artifacts = rows.map(a => ({ ...a, rows: a.metadata?.rows || 0, pages: a.metadata?.pages || 0, preview_data: a.metadata?.preview_data || null }));
@@ -2358,13 +2374,27 @@ async function executeTaskFromQueue(task) {
       const { execSync } = require('child_process');
       const os = require('os');
 
-      // Fire-and-forget log to server + console
+      // Sequential-Queue ctLog — verhindert Race Conditions bei schnellen Aufrufen
+      const _ctQueue = [];
+      let _ctRunning = false;
       const ctLog = (message, type = 'step') => {
         if (message) console.log(`💻 [code_task] ${type}: ${message}`);
-        fetchWithTimeout(`${API}/api/agent/file-task-log`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ token: userToken, task_id: task.id, message, type })
-        }, 5000).catch(() => {});
+        if (!message) return; // Null-Messages ignorieren (kein done-Signal mehr via ctLog)
+        _ctQueue.push({ message, type });
+        if (_ctRunning) return;
+        _ctRunning = true;
+        (async () => {
+          while (_ctQueue.length > 0) {
+            const item = _ctQueue.shift();
+            try {
+              await fetchWithTimeout(`${API}/api/agent/file-task-log`, {
+                method: 'POST', headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: userToken, task_id: task.id, message: item.message, type: item.type })
+              }, 8000);
+            } catch(e) { console.warn('⚠️ ctLog fehlgeschlagen:', e.message); }
+          }
+          _ctRunning = false;
+        })();
       };
 
       // GPT-4o-mini call mit Retry (3x, exponentiell) + JSON-Mode
@@ -2620,7 +2650,6 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
           }
         }
 
-        ctLog(null, 'done');
         await fetchWithTimeout(`${API}/api/agent/complete`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
