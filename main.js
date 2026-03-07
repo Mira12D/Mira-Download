@@ -1581,7 +1581,8 @@ async function executeTaskFromQueue(task) {
     // ════════════════════════════════════════════════════════════════
     let perception = null;
     const isInternalTask = parsed?.type === 'file_task' || parsed?.type === 'scan_folder'
-      || parsed?.type === 'start_training' || parsed?.type === 'extract_data';
+      || parsed?.type === 'start_training' || parsed?.type === 'extract_data'
+      || parsed?.type === 'code_task';
 
     if (!isInternalTask) {
       // Checkpoint vor jeder Aktion
@@ -2333,6 +2334,295 @@ async function executeTaskFromQueue(task) {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: userToken, task_id: task.id, status: outputResult ? 'success' : 'error', result: summary })
       }, 10000).catch(e => console.warn('⚠️ complete timeout:', e.message));
+
+    // ════════════════════════════
+    // CODE_TASK — MIRA Code (rekursiver Tool-Loop, Cline-Muster)
+    // ════════════════════════════
+    } else if (parsed?.type === 'code_task') {
+      const fs = require('fs');
+      const pathMod = require('path');
+      const { execSync } = require('child_process');
+      const os = require('os');
+
+      // Fire-and-forget log to server + console
+      const ctLog = (message, type = 'step') => {
+        if (message) console.log(`💻 [code_task] ${type}: ${message}`);
+        fetchWithTimeout(`${API}/api/agent/file-task-log`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, task_id: task.id, message, type })
+        }, 5000).catch(() => {});
+      };
+
+      // Claude call mit Retry (3x, exponentiell) — längerer Timeout für Code
+      const callClaude = async (messages, systemPrompt) => {
+        if (!_dk?.claudeKey) throw new Error('Kein Claude Key verfügbar');
+        if (_dk.expiresAt && Date.now() > _dk.expiresAt) await bootstrap();
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+              method: 'POST',
+              headers: {
+                'x-api-key': _dk.claudeKey,
+                'anthropic-version': '2023-06-01',
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                model: 'claude-sonnet-4-6',
+                max_tokens: 4096,
+                system: systemPrompt,
+                messages,
+              }),
+            }, 90000);
+            const data = await res.json();
+            if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
+            return data.content?.[0]?.text || null;
+          } catch(e) {
+            if (attempt < 2) {
+              await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
+            } else throw e;
+          }
+        }
+      };
+
+      // XML-Tool-Calls aus AI-Antwort parsen
+      const parseToolCalls = (text) => {
+        const tools = [];
+        const known = ['read_file','write_file','list_files','execute_command','search_files','attempt_completion'];
+        const re = /<(read_file|write_file|list_files|execute_command|search_files|attempt_completion)>([\s\S]*?)<\/\1>/g;
+        let m;
+        while ((m = re.exec(text)) !== null) {
+          const [, name, inner] = m;
+          const params = {};
+          const pr = /<(\w+)>([\s\S]*?)<\/\1>/g;
+          let pm;
+          while ((pm = pr.exec(inner)) !== null) params[pm[1]] = pm[2].trim();
+          tools.push({ name, params });
+        }
+        return tools;
+      };
+
+      // Tool ausführen → Ergebnis-String
+      const executeTool = async (toolName, params) => {
+        try {
+          switch (toolName) {
+            case 'read_file': {
+              const p = params.path;
+              if (!p) return 'Fehler: Kein Pfad angegeben';
+              if (!fs.existsSync(p)) return `Fehler: Datei nicht gefunden: ${p}`;
+              const content = fs.readFileSync(p, 'utf8');
+              return content.length > 8000 ? content.substring(0, 8000) + '\n... [gekürzt auf 8000 Zeichen]' : content;
+            }
+            case 'write_file': {
+              const p = params.path;
+              const content = params.content || '';
+              if (!p) return 'Fehler: Kein Pfad angegeben';
+              fs.mkdirSync(pathMod.dirname(p), { recursive: true });
+              fs.writeFileSync(p, content, 'utf8');
+              return `✅ Datei gespeichert: ${p} (${content.split('\n').length} Zeilen)`;
+            }
+            case 'list_files': {
+              const dir = params.path || os.homedir();
+              if (!fs.existsSync(dir)) return `Fehler: Verzeichnis nicht gefunden: ${dir}`;
+              const entries = fs.readdirSync(dir, { withFileTypes: true });
+              return entries.slice(0, 60).map(e => `${e.isDirectory() ? '📁' : '📄'} ${e.name}`).join('\n');
+            }
+            case 'execute_command': {
+              const cmd = params.command;
+              if (!cmd) return 'Fehler: Kein Befehl';
+              const cwd = params.cwd || os.homedir();
+              try {
+                const out = execSync(cmd, { timeout: 30000, encoding: 'utf8', cwd });
+                return (out || '(kein Output)').substring(0, 2000);
+              } catch(e) {
+                return `Exit-Code ${e.status || '?'}: ${(e.stdout || e.stderr || e.message).substring(0, 1000)}`;
+              }
+            }
+            case 'search_files': {
+              const pattern = params.pattern;
+              const dir = params.path || os.homedir();
+              if (!pattern) return 'Fehler: Kein Suchmuster';
+              try {
+                const out = execSync(
+                  `grep -r ${JSON.stringify(pattern)} ${JSON.stringify(dir)} --include="*.js" --include="*.ts" --include="*.py" --include="*.json" -l 2>/dev/null | head -20`,
+                  { timeout: 10000, encoding: 'utf8' }
+                );
+                return out.trim() || 'Keine Ergebnisse';
+              } catch(e) { return 'Keine Ergebnisse'; }
+            }
+            default: return `Unbekanntes Tool: ${toolName}`;
+          }
+        } catch(e) {
+          return `Tool-Fehler (${toolName}): ${e.message.substring(0, 300)}`;
+        }
+      };
+
+      const CT_SYSTEM = `Du bist MIRA Code — ein präziser KI-Coding-Assistent der auf dem Desktop des Users läuft.
+
+Du hast folgende Tools (XML-Format):
+
+<read_file>
+<path>/absoluter/pfad/zur/datei.js</path>
+</read_file>
+
+<write_file>
+<path>/absoluter/pfad/zur/datei.js</path>
+<content>
+// vollständiger code hier
+</content>
+</write_file>
+
+<list_files>
+<path>/verzeichnis/pfad</path>
+</list_files>
+
+<execute_command>
+<command>node script.js</command>
+<cwd>/optionales/verzeichnis</cwd>
+</execute_command>
+
+<search_files>
+<pattern>suchbegriff</pattern>
+<path>/verzeichnis</path>
+</search_files>
+
+<attempt_completion>
+<result>Kurze Zusammenfassung was gemacht wurde</result>
+</attempt_completion>
+
+REGELN:
+- Lies Dateien IMMER zuerst bevor du sie änderst (read_file)
+- Schreibe immer vollständige Dateien mit write_file (kein partieller Code)
+- Bei Fehlern: analysiere den Fehler, korrigiere und versuche erneut
+- Beende IMMER mit attempt_completion
+- Antworte auf Deutsch`;
+
+      try {
+        const { action, target_file, target_dir, instruction, language, original_command } = parsed;
+        await ctLog(`🔍 Starte: "${original_command || instruction}"...`);
+
+        // Zieldatei-Hinweis für AI
+        let targetHint = '';
+        if (target_file) {
+          const found = await ftFindFiles([target_file], target_dir ? [target_dir] : null);
+          const fp = found?.[0]?.path;
+          if (fp) {
+            targetHint = `\nZieldatei auf dem Desktop: ${fp}`;
+            await ctLog(`📄 Zieldatei: ${fp}`);
+          } else {
+            const guessPath = pathMod.join(os.homedir(), 'Desktop', target_file);
+            targetHint = `\nNoch nicht vorhanden, erstellen unter: ${guessPath}`;
+          }
+        }
+
+        // Startmessage
+        const messages = [{
+          role: 'user',
+          content: `Aufgabe: ${instruction}${targetHint}\nAktion: ${action || 'edit_code'}${language ? `\nSprache: ${language}` : ''}`
+        }];
+
+        let iteration = 0;
+        const MAX_ITER = 10;
+        let completionResult = null;
+        let writtenFiles = [];
+        let execOutputs = [];
+
+        // ── Rekursiver Tool-Loop ────────────────────────────────────────────
+        while (iteration < MAX_ITER) {
+          iteration++;
+          ctLog(`🤔 Schritt ${iteration}/${MAX_ITER}...`);
+
+          const aiResponse = await callClaude(messages, CT_SYSTEM);
+          if (!aiResponse) throw new Error('Keine Antwort von Claude');
+
+          // Erste Zeile als Preview loggen
+          const firstLine = aiResponse.split('\n').find(l => l.trim()) || '';
+          ctLog(`💬 ${firstLine.substring(0, 180)}`);
+
+          const toolCalls = parseToolCalls(aiResponse);
+
+          // Keine Tools → entweder done oder nudge
+          if (toolCalls.length === 0) {
+            if (iteration >= 3) { completionResult = aiResponse; break; }
+            messages.push({ role: 'assistant', content: aiResponse });
+            messages.push({ role: 'user', content: 'Nutze attempt_completion wenn du fertig bist, oder verwende Tools um fortzufahren.' });
+            continue;
+          }
+
+          // attempt_completion → Ende
+          const done = toolCalls.find(t => t.name === 'attempt_completion');
+          if (done) {
+            completionResult = done.params?.result || 'Fertig.';
+            ctLog(`✅ ${completionResult}`);
+            break;
+          }
+
+          // Tools ausführen, Ergebnisse sammeln
+          messages.push({ role: 'assistant', content: aiResponse });
+          const resultBlocks = [];
+
+          for (const tool of toolCalls) {
+            ctLog(`🔧 ${tool.name}${tool.params?.path ? ': ' + pathMod.basename(tool.params.path) : ''}`);
+            const result = await executeTool(tool.name, tool.params);
+
+            // Geschriebene Dateien merken
+            if (tool.name === 'write_file' && tool.params?.path) {
+              writtenFiles.push(tool.params.path);
+              const lineCount = (tool.params?.content || '').split('\n').length;
+              ctLog(`  ↳ ${lineCount} Zeilen geschrieben`);
+            } else if (tool.name === 'execute_command') {
+              execOutputs.push(result);
+              ctLog(`  ↳ ${result.substring(0, 120)}`);
+            } else {
+              ctLog(`  ↳ ${result.substring(0, 120)}`);
+            }
+
+            resultBlocks.push(`<tool_result tool="${tool.name}">\n${result}\n</tool_result>`);
+          }
+
+          // Tool-Ergebnisse als nächste User-Nachricht zurückgeben
+          messages.push({ role: 'user', content: resultBlocks.join('\n\n') });
+        }
+
+        // ── Artifact speichern (letzte geschriebene Datei) ──────────────────
+        if (writtenFiles.length > 0) {
+          const primary = writtenFiles[writtenFiles.length - 1];
+          if (fs.existsSync(primary)) {
+            const content = fs.readFileSync(primary, 'utf8');
+            const ext = pathMod.extname(primary).replace('.', '') || language || 'js';
+            const b64 = Buffer.from(content, 'utf8').toString('base64');
+            await saveAsArtifact({ name: pathMod.basename(primary), type: ext, fileBase64: b64, rowCount: content.split('\n').length });
+            ctLog(`💾 Artifact: ${pathMod.basename(primary)}`);
+          }
+        }
+
+        // ── Git push wenn gewünscht ─────────────────────────────────────────
+        if (action === 'git_push' && writtenFiles.length > 0) {
+          try {
+            const dir = pathMod.dirname(writtenFiles[0]);
+            execSync(`cd "${dir}" && git add -A && git commit -m "MIRA: ${(instruction || '').substring(0, 60)}" && git push`, { timeout: 30000, encoding: 'utf8' });
+            ctLog('🚀 Git push erfolgreich');
+          } catch(e) {
+            ctLog(`⚠️ Git: ${e.message.substring(0, 200)}`, 'error');
+          }
+        }
+
+        ctLog(null, 'done');
+        await fetchWithTimeout(`${API}/api/agent/complete`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            token: userToken, task_id: task.id, status: 'success',
+            result: { success: true, action, files: writtenFiles, summary: completionResult, exec_outputs: execOutputs, mime: 'text/plain' }
+          })
+        }, 10000).catch(() => {});
+
+      } catch(e) {
+        console.error('❌ code_task:', e.message);
+        ctLog(`❌ Fehler: ${e.message}`, 'error');
+        await fetchWithTimeout(`${API}/api/agent/complete`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: e.message } })
+        }, 10000).catch(() => {});
+      }
 
     // ════════════════════════════
     // RUN_ROUTE
