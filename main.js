@@ -1570,6 +1570,20 @@ async function executeTaskFromQueue(task) {
     let parsed = null;
     try { parsed = JSON.parse(task.command); } catch(e) {}
 
+    // ── file_task mit Code-Format → automatisch zu code_task umleiten ────
+    const _CODE_FMTS = ['html','htm','js','ts','py','css','jsx','tsx','sh','vue','svelte'];
+    if (parsed?.type === 'file_task' && _CODE_FMTS.includes((parsed.target_format||'').toLowerCase())) {
+      parsed = {
+        type: 'code_task',
+        action: 'write_code',
+        target_file: parsed.target_filename || `output.${parsed.target_format}`,
+        instruction: parsed.instruction || `Erstelle eine ${(parsed.target_format||'').toUpperCase()} Datei`,
+        language: parsed.target_format,
+        original_command: parsed.instruction,
+      };
+      console.log(`🔀 file_task(${parsed.language}) → code_task umgeleitet`);
+    }
+
     console.log(`🔍 Command: ${task.command.substring(0, 100)}`);
     console.log(`🔍 Parsed type: ${parsed?.type}`);
 
