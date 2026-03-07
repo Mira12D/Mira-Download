@@ -2381,7 +2381,7 @@ async function executeTaskFromQueue(task) {
               },
               body: JSON.stringify({
                 model: 'gpt-4o-mini',
-                max_tokens: 4096,
+                max_tokens: 12000,
                 temperature: 0.1,
                 response_format: { type: 'json_object' },
                 messages: [{ role: 'system', content: systemPrompt }, ...messages],
@@ -2480,17 +2480,25 @@ Verfügbare Tools:
 - list_files:  { "tool": "list_files", "path": "/verzeichnis" }
 - execute_command: { "tool": "execute_command", "command": "node script.js", "cwd": "/optional" }
 - search_files: { "tool": "search_files", "pattern": "suchbegriff", "path": "/verzeichnis" }
-- attempt_completion: { "tool": "attempt_completion", "result": "was gemacht wurde", "diff_summary": "X Zeilen geändert in Y Dateien" }
+- attempt_completion: { "tool": "attempt_completion", "result": "kurze Zusammenfassung", "diff": [{"file":"datei.html","removed":["alte zeile 1","alte zeile 2"],"added":["neue zeile 1","neue zeile 2"]}] }
 
 WICHTIGE REGELN:
 1. Immer erst read_file bevor du änderst — du musst den exakten Text kennen
-2. Bevorzuge edit_file für Änderungen an bestehenden Dateien (sicherer, schneller)
-   - old_string MUSS exakt im File vorkommen (copy-paste aus read_file Ergebnis)
-   - old_string muss eindeutig sein (genug Kontext drumherum)
+2. Bevorzuge edit_file für Änderungen (sicherer, zeigt nur was sich ändert)
+   - old_string MUSS exakt im File vorkommen (copy-paste aus read_file)
+   - old_string muss eindeutig sein (genug Kontext)
 3. write_file nur für neue Dateien oder komplette Rewrites
 4. Bei Fehlern: analysieren, korrigieren, erneut versuchen
-5. Immer mit attempt_completion beenden
-6. "thinking" Key erlaubt für interne Überlegungen`;
+5. Immer mit attempt_completion + diff beenden
+6. "thinking" Key erlaubt
+
+HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
+- Modernes Design: dunkles Theme ODER helles clean Design, nie nackt/unstyled
+- Inline CSS (kein externes Stylesheet nötig) — ordentliche Typografie, Abstände, Farben
+- Tailwind CDN falls passend: <script src="https://cdn.tailwindcss.com"></script>
+- Bilder: Unsplash URLs (https://images.unsplash.com/photo-[ID]?w=800) — immer mit Fallback alt=""
+- Responsive: meta viewport, max-width Container, flexbox/grid
+- NIEMALS nackte HTML ohne CSS — immer mit Stil`;
 
       try {
         const { action, target_file, target_dir, instruction, language, original_command } = parsed;
@@ -2546,7 +2554,22 @@ WICHTIGE REGELN:
           // attempt_completion → Ende
           if (toolName === 'attempt_completion') {
             completionResult = json.result || 'Fertig.';
-            if (json.diff_summary) ctLog(`✏️ ${json.diff_summary}`);
+            // Diff anzeigen (rot/grün wie Claude Code)
+            if (Array.isArray(json.diff) && json.diff.length > 0) {
+              for (const d of json.diff) {
+                const fname = pathMod.basename(d.file || '');
+                const removed = (d.removed || []).slice(0, 8);
+                const added = (d.added || []).slice(0, 8);
+                if (removed.length || added.length) {
+                  const diffText = [
+                    `📄 ${fname}`,
+                    ...removed.map(l => `- ${l}`),
+                    ...added.map(l => `+ ${l}`),
+                  ].join('\n');
+                  ctLog(diffText, 'diff');
+                }
+              }
+            }
             ctLog(`✅ ${completionResult}`);
             break;
           }
