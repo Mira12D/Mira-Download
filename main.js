@@ -107,6 +107,10 @@ const RUNNING_TASK_TTL = 90 * 1000; // 90 Sekunden — danach gilt Task als stal
 let lastActiveArtifact       = null;
 let pendingContextPerception = null; // gespeichert nach "Hey MIRA" für Follow-up Antwort
 
+// In-memory Progress-Store für local_ Tasks (keine Supabase-Einträge)
+// task_id → { items: [{type, content, ts}], done: false, dialog_response: null }
+const localTaskProgress = new Map();
+
 // ═══════════════════════════════════════
 // DEVICE ID
 // ═══════════════════════════════════════
@@ -347,6 +351,33 @@ function startLocalServer() {
       return json({ connected: true, device: { tier: userTier } });
     }
 
+    // ── GET /api/agent/file-task-progress — Frontend pollt Live-Fortschritt ──
+    if (pathname === '/api/agent/file-task-progress' && req.method === 'GET') {
+      const task_id = url.searchParams.get('task_id');
+      const since   = parseInt(url.searchParams.get('since') || '0', 10);
+      if (!task_id) return json({ items: [], done: false });
+
+      if (task_id.startsWith('local_')) {
+        // Local task: direkt aus in-memory Store (kein Netzwerk)
+        const prog = localTaskProgress.get(task_id);
+        if (!prog) return json({ success: true, items: [], done: false, next_since: since });
+        const newItems = prog.items.slice(since);
+        return json({ success: true, items: newItems, done: prog.done, next_since: since + newItems.length });
+      }
+
+      // Real task (Vercel poll): direkt aus Supabase
+      try {
+        const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task_id}&select=result,status&limit=1`);
+        const result = typeof rows?.[0]?.result === 'string' ? JSON.parse(rows[0].result) : (rows?.[0]?.result || {});
+        const allItems = result.progress || [];
+        const newItems = allItems.slice(since);
+        const done = ['success', 'error'].includes(rows?.[0]?.status);
+        return json({ success: true, items: newItems, done, next_since: since + newItems.length });
+      } catch(e) {
+        return json({ success: true, items: [], done: false, next_since: since });
+      }
+    }
+
     // ── GET /api/users/profile ───────────────────────────────────────────
     if (pathname === '/api/users/profile' && req.method === 'GET') {
       const rows = await directSupabase('GET', `/users?id=eq.${userId}&limit=1`);
@@ -543,6 +574,27 @@ function startLocalServer() {
         });
         return json(await r.json());
       } catch(e) { return json({ success: false, error: e.message }, 500); }
+    }
+
+    // ── POST /api/agent/dialog-response — User antwortet auf Bestätigungs-Dialog ──
+    if (pathname === '/api/agent/dialog-response' && req.method === 'POST') {
+      const { task_id, response } = body;
+      if (!task_id || !response) return json({ success: false, error: 'task_id + response required' }, 400);
+
+      if (task_id.startsWith('local_')) {
+        // Local task: direkt in-memory setzen (instant, kein Netzwerk)
+        const prog = localTaskProgress.get(task_id);
+        if (prog) prog.dialog_response = response;
+        console.log(`💬 Dialog-Antwort [local] für Task ${task_id}: ${response}`);
+        return json({ success: true });
+      }
+
+      // Real task: Supabase
+      const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task_id}&select=result&limit=1`);
+      const existingResult = typeof rows?.[0]?.result === 'string' ? JSON.parse(rows[0].result) : (rows?.[0]?.result || {});
+      await directSupabase('PATCH', `/agent_tasks?id=eq.${task_id}`, { result: { ...existingResult, dialog_response: response } });
+      console.log(`💬 Dialog-Antwort für Task ${task_id.substring(0,8)}: ${response}`);
+      return json({ success: true });
     }
 
     // ── Alles andere → Proxy zu Vercel ────────────────────────────────────
@@ -2375,11 +2427,22 @@ async function executeTaskFromQueue(task) {
       const os = require('os');
 
       // Sequential-Queue ctLog — verhindert Race Conditions bei schnellen Aufrufen
+      // Local tasks: direkt in-memory (kein Netzwerk, kein Delay)
+      // Real tasks: direkt Supabase (kein Vercel-Round-Trip)
       const _ctQueue = [];
       let _ctRunning = false;
       const ctLog = (message, type = 'step') => {
-        if (message) console.log(`💻 [code_task] ${type}: ${message}`);
-        if (!message) return; // Null-Messages ignorieren (kein done-Signal mehr via ctLog)
+        if (!message) return;
+        console.log(`💻 [code_task] ${type}: ${message}`);
+
+        if (task.id.startsWith('local_')) {
+          // Local task: sofort in in-memory Store schreiben
+          const prog = localTaskProgress.get(task.id);
+          if (prog) prog.items.push({ type, content: message, ts: Date.now() });
+          return;
+        }
+
+        // Real task: Supabase Queue (kein Vercel-Hop)
         _ctQueue.push({ message, type });
         if (_ctRunning) return;
         _ctRunning = true;
@@ -2387,11 +2450,12 @@ async function executeTaskFromQueue(task) {
           while (_ctQueue.length > 0) {
             const item = _ctQueue.shift();
             try {
-              await fetchWithTimeout(`${API}/api/agent/file-task-log`, {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ token: userToken, task_id: task.id, message: item.message, type: item.type })
-              }, 8000);
-            } catch(e) { console.warn('⚠️ ctLog fehlgeschlagen:', e.message); }
+              const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task.id}&select=result,status&limit=1`);
+              const existingResult = typeof rows?.[0]?.result === 'string' ? JSON.parse(rows[0].result) : (rows?.[0]?.result || {});
+              const progress = [...(existingResult.progress || []), { type: item.type, content: item.message, ts: Date.now() }];
+              const statusUpdate = rows?.[0]?.status === 'pending' ? { status: 'in_progress' } : {};
+              await directSupabase('PATCH', `/agent_tasks?id=eq.${task.id}`, { result: { ...existingResult, progress }, ...statusUpdate });
+            } catch(e) { console.warn('⚠️ ctLog Supabase:', e.message); }
           }
           _ctRunning = false;
         })();
@@ -2455,10 +2519,15 @@ async function executeTaskFromQueue(task) {
               if (occurrences > 1) return `Fehler: old_string ${occurrences}x gefunden — nicht eindeutig. Mehr Kontext in old_string angeben.`;
               const updated = orig.replace(p.old_string, p.new_string);
               fs.writeFileSync(p.path, updated, 'utf8');
-              // Diff-Summary
+              // Live-Diff sofort an Frontend schicken (rot/grün wie Claude Code)
+              const fname = pathMod.basename(p.path);
+              const removedLines = p.old_string.split('\n').filter(l => l.trim()).slice(0, 8);
+              const addedLines   = p.new_string.split('\n').filter(l => l.trim()).slice(0, 8);
+              const diffText = [`📄 ${fname}`, ...removedLines.map(l => `- ${l}`), ...addedLines.map(l => `+ ${l}`)].join('\n');
+              ctLog(diffText, 'diff');
               const oldLines = p.old_string.split('\n').length;
               const newLines = p.new_string.split('\n').length;
-              return `✅ Edit erfolgreich: ${pathMod.basename(p.path)} — ${oldLines} Zeile(n) → ${newLines} Zeile(n)`;
+              return `✅ Edit erfolgreich: ${fname} — ${oldLines} Zeile(n) → ${newLines} Zeile(n)`;
             }
             case 'write_file': {
               if (!p.path) return 'Fehler: Kein Pfad';
@@ -2530,18 +2599,60 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
 - Responsive: meta viewport, max-width Container, flexbox/grid
 - NIEMALS nackte HTML ohne CSS — immer mit Stil`;
 
+      // Progress-Store initialisieren (local tasks: in-memory, real tasks: Supabase)
+      if (task.id.startsWith('local_')) {
+        localTaskProgress.set(task.id, { items: [], done: false, dialog_response: null });
+      }
+
       try {
         const { action, target_file, target_dir, instruction, language, original_command } = parsed;
         await ctLog(`🔍 Starte: "${original_command || instruction}"...`);
 
-        // Zieldatei-Hinweis für AI
+        // Dialog-Antwort auf User-Bestätigung warten (max 45s)
+        const waitForDialog = async (timeoutMs = 45000) => {
+          const start = Date.now();
+          while (Date.now() - start < timeoutMs) {
+            await new Promise(r => setTimeout(r, 700));
+            if (task.id.startsWith('local_')) {
+              // Local task: in-memory prüfen
+              const prog = localTaskProgress.get(task.id);
+              if (prog?.dialog_response) return prog.dialog_response;
+              continue;
+            }
+            // Real task: Supabase
+            try {
+              const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task.id}&select=result&limit=1`);
+              const result = rows?.[0]?.result;
+              const dr = typeof result === 'string' ? JSON.parse(result).dialog_response : result?.dialog_response;
+              if (dr) return dr;
+            } catch(e) {}
+          }
+          return 'yes'; // Timeout → Standard: Ja
+        };
+
+        // Zieldatei-Hinweis für AI (mit Fuzzy-Match + Bestätigung)
         let targetHint = '';
         if (target_file) {
-          const found = await ftFindFiles([target_file], target_dir ? [target_dir] : null);
+          const found = await ftFindFiles([target_file], target_dir ? [target_dir] : null, { codeMode: true });
           const fp = found?.[0]?.path;
+          const isFuzzy = found?.[0]?.fuzzy === true;
           if (fp) {
-            targetHint = `\nZieldatei auf dem Desktop: ${fp}`;
-            await ctLog(`📄 Zieldatei: ${fp}`);
+            if (isFuzzy) {
+              // Fuzzy-Match → User fragen ob er diese Datei meint
+              ctLog(`❓ Datei gefunden: "${found[0].name}" — meinst du diese Datei?`, 'confirm');
+              const response = await waitForDialog(45000);
+              if (response === 'yes') {
+                targetHint = `\nZieldatei auf dem Desktop: ${fp}`;
+                ctLog(`📄 Bearbeite: ${found[0].name}`);
+              } else {
+                const guessPath = pathMod.join(os.homedir(), 'Desktop', target_file);
+                targetHint = `\nNoch nicht vorhanden, erstellen unter: ${guessPath}`;
+                ctLog(`➕ Neue Datei wird erstellt: ${target_file}`);
+              }
+            } else {
+              targetHint = `\nZieldatei auf dem Desktop: ${fp}`;
+              ctLog(`📄 Zieldatei: ${found[0].name}`);
+            }
           } else {
             const guessPath = pathMod.join(os.homedir(), 'Desktop', target_file);
             targetHint = `\nNoch nicht vorhanden, erstellen unter: ${guessPath}`;
@@ -2657,6 +2768,11 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
             result: { success: true, action, files: writtenFiles, summary: completionResult, exec_outputs: execOutputs, mime: 'text/plain' }
           })
         }, 10000).catch(() => {});
+        // Local task: done signalisieren
+        if (task.id.startsWith('local_')) {
+          const _p = localTaskProgress.get(task.id);
+          if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); }
+        }
 
       } catch(e) {
         console.error('❌ code_task:', e.message);
@@ -2665,6 +2781,11 @@ HTML-QUALITÄT (wenn HTML erstellt/bearbeitet wird):
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: e.message } })
         }, 10000).catch(() => {});
+        // Local task: done signalisieren (auch bei Fehler)
+        if (task.id.startsWith('local_')) {
+          const _p = localTaskProgress.get(task.id);
+          if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); }
+        }
       }
 
     // ════════════════════════════
@@ -3640,7 +3761,27 @@ async function ftReadFile(filePath) {
   } catch(e) { console.error(`❌ ftReadFile ${filePath}:`, e.message); return null; }
 }
 
-async function ftFindFiles(patterns, sourceDirs) {
+// Fuzzy-Ähnlichkeit zwischen Suchmuster und Dateiname (0..1)
+function fuzzyScore(pattern, filename) {
+  const norm = s => s.toLowerCase().replace(/[\s_\-\.]+/g, '');
+  const np = norm(pattern);
+  const nf = norm(filename.replace(/\.[^.]+$/, '')); // Erweiterung ignorieren
+  if (nf === np) return 1.0;
+  if (nf.includes(np) || np.includes(nf)) return 0.95;
+  // Zeichen-Überlappung
+  const longer = np.length >= nf.length ? np : nf;
+  const shorter = np.length < nf.length ? np : nf;
+  if (longer.length === 0) return 0;
+  let m = 0;
+  const used = new Array(longer.length).fill(false);
+  for (const c of shorter) {
+    const i = [...longer].findIndex((lc, j) => !used[j] && lc === c);
+    if (i >= 0) { used[i] = true; m++; }
+  }
+  return m / longer.length;
+}
+
+async function ftFindFiles(patterns, sourceDirs, { codeMode = false } = {}) {
   const fs   = require('fs');
   const path = require('path');
   const os   = require('os');
@@ -3683,9 +3824,10 @@ async function ftFindFiles(patterns, sourceDirs) {
       if (stat.isDirectory()) { walk(full, depth + 1); continue; }
       const nameLower = entry.toLowerCase();
       const ext = path.extname(entry).replace('.','').toLowerCase();
-      if (SKIP_EXTS.has(ext)) continue; // keine Dev/Konfig-Dateien
-      const matches = !hasPattern || patterns.some(p => nameLower.includes(p.toLowerCase()));
-      if (matches) found.push({ name: entry, path: full, ext, mtime: stat.mtime, size: stat.size });
+      if (!codeMode && SKIP_EXTS.has(ext)) continue; // keine Dev/Konfig-Dateien (außer im codeMode)
+      const exactMatch = !hasPattern || patterns.some(p => nameLower.includes(p.toLowerCase()));
+      const fuzzyMatch = !exactMatch && hasPattern && patterns.some(p => fuzzyScore(p, entry) >= 0.65);
+      if (exactMatch || fuzzyMatch) found.push({ name: entry, path: full, ext, mtime: stat.mtime, size: stat.size, fuzzy: fuzzyMatch });
     }
   }
 
