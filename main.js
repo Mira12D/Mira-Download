@@ -2353,29 +2353,31 @@ async function executeTaskFromQueue(task) {
         }, 5000).catch(() => {});
       };
 
-      // Claude call mit Retry (3x, exponentiell) — längerer Timeout für Code
-      const callClaude = async (messages, systemPrompt) => {
-        if (!_dk?.claudeKey) throw new Error('Kein Claude Key verfügbar');
+      // GPT-4o-mini call mit Retry (3x, exponentiell) + JSON-Mode
+      const callCodeAI = async (messages, systemPrompt) => {
+        if (!_dk?.gptKey) throw new Error('Kein GPT Key verfügbar');
         if (_dk.expiresAt && Date.now() > _dk.expiresAt) await bootstrap();
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const res = await fetchWithTimeout('https://api.anthropic.com/v1/messages', {
+            const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
               method: 'POST',
               headers: {
-                'x-api-key': _dk.claudeKey,
-                'anthropic-version': '2023-06-01',
+                'Authorization': `Bearer ${_dk.gptKey}`,
                 'Content-Type': 'application/json',
               },
               body: JSON.stringify({
-                model: 'claude-sonnet-4-6',
+                model: 'gpt-4o-mini',
                 max_tokens: 4096,
-                system: systemPrompt,
-                messages,
+                temperature: 0.1,
+                response_format: { type: 'json_object' },
+                messages: [{ role: 'system', content: systemPrompt }, ...messages],
               }),
-            }, 90000);
+            }, 60000);
             const data = await res.json();
             if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-            return data.content?.[0]?.text || null;
+            const raw = data.choices?.[0]?.message?.content || null;
+            if (!raw) return null;
+            return JSON.parse(raw);
           } catch(e) {
             if (attempt < 2) {
               await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
@@ -2384,66 +2386,45 @@ async function executeTaskFromQueue(task) {
         }
       };
 
-      // XML-Tool-Calls aus AI-Antwort parsen
-      const parseToolCalls = (text) => {
-        const tools = [];
-        const known = ['read_file','write_file','list_files','execute_command','search_files','attempt_completion'];
-        const re = /<(read_file|write_file|list_files|execute_command|search_files|attempt_completion)>([\s\S]*?)<\/\1>/g;
-        let m;
-        while ((m = re.exec(text)) !== null) {
-          const [, name, inner] = m;
-          const params = {};
-          const pr = /<(\w+)>([\s\S]*?)<\/\1>/g;
-          let pm;
-          while ((pm = pr.exec(inner)) !== null) params[pm[1]] = pm[2].trim();
-          tools.push({ name, params });
-        }
-        return tools;
-      };
-
-      // Tool ausführen → Ergebnis-String
-      const executeTool = async (toolName, params) => {
+      // Tool ausführen → Ergebnis-String (params = direkt das JSON-Objekt von GPT)
+      const executeTool = async (toolName, p) => {
         try {
           switch (toolName) {
             case 'read_file': {
-              const p = params.path;
-              if (!p) return 'Fehler: Kein Pfad angegeben';
-              if (!fs.existsSync(p)) return `Fehler: Datei nicht gefunden: ${p}`;
-              const content = fs.readFileSync(p, 'utf8');
-              return content.length > 8000 ? content.substring(0, 8000) + '\n... [gekürzt auf 8000 Zeichen]' : content;
+              if (!p.path) return 'Fehler: Kein Pfad';
+              if (!fs.existsSync(p.path)) return `Fehler: Datei nicht gefunden: ${p.path}`;
+              const content = fs.readFileSync(p.path, 'utf8');
+              return content.length > 8000 ? content.substring(0, 8000) + '\n... [gekürzt]' : content;
             }
             case 'write_file': {
-              const p = params.path;
-              const content = params.content || '';
-              if (!p) return 'Fehler: Kein Pfad angegeben';
-              fs.mkdirSync(pathMod.dirname(p), { recursive: true });
-              fs.writeFileSync(p, content, 'utf8');
-              return `✅ Datei gespeichert: ${p} (${content.split('\n').length} Zeilen)`;
+              if (!p.path) return 'Fehler: Kein Pfad';
+              const content = p.content || '';
+              fs.mkdirSync(pathMod.dirname(p.path), { recursive: true });
+              fs.writeFileSync(p.path, content, 'utf8');
+              return `✅ Gespeichert: ${p.path} (${content.split('\n').length} Zeilen)`;
             }
             case 'list_files': {
-              const dir = params.path || os.homedir();
-              if (!fs.existsSync(dir)) return `Fehler: Verzeichnis nicht gefunden: ${dir}`;
+              const dir = p.path || os.homedir();
+              if (!fs.existsSync(dir)) return `Fehler: Nicht gefunden: ${dir}`;
               const entries = fs.readdirSync(dir, { withFileTypes: true });
               return entries.slice(0, 60).map(e => `${e.isDirectory() ? '📁' : '📄'} ${e.name}`).join('\n');
             }
             case 'execute_command': {
-              const cmd = params.command;
-              if (!cmd) return 'Fehler: Kein Befehl';
-              const cwd = params.cwd || os.homedir();
+              if (!p.command) return 'Fehler: Kein Befehl';
+              const cwd = p.cwd || os.homedir();
               try {
-                const out = execSync(cmd, { timeout: 30000, encoding: 'utf8', cwd });
+                const out = execSync(p.command, { timeout: 30000, encoding: 'utf8', cwd });
                 return (out || '(kein Output)').substring(0, 2000);
               } catch(e) {
-                return `Exit-Code ${e.status || '?'}: ${(e.stdout || e.stderr || e.message).substring(0, 1000)}`;
+                return `Exit ${e.status || '?'}: ${(e.stdout || e.stderr || e.message).substring(0, 1000)}`;
               }
             }
             case 'search_files': {
-              const pattern = params.pattern;
-              const dir = params.path || os.homedir();
-              if (!pattern) return 'Fehler: Kein Suchmuster';
+              if (!p.pattern) return 'Fehler: Kein Pattern';
+              const dir = p.path || os.homedir();
               try {
                 const out = execSync(
-                  `grep -r ${JSON.stringify(pattern)} ${JSON.stringify(dir)} --include="*.js" --include="*.ts" --include="*.py" --include="*.json" -l 2>/dev/null | head -20`,
+                  `grep -r ${JSON.stringify(p.pattern)} ${JSON.stringify(dir)} --include="*.js" --include="*.ts" --include="*.py" --include="*.json" -l 2>/dev/null | head -20`,
                   { timeout: 10000, encoding: 'utf8' }
                 );
                 return out.trim() || 'Keine Ergebnisse';
@@ -2456,45 +2437,22 @@ async function executeTaskFromQueue(task) {
         }
       };
 
-      const CT_SYSTEM = `Du bist MIRA Code — ein präziser KI-Coding-Assistent der auf dem Desktop des Users läuft.
+      const CT_SYSTEM = `Du bist MIRA Code — KI-Coding-Assistent. Antworte IMMER als JSON-Objekt.
 
-Du hast folgende Tools (XML-Format):
-
-<read_file>
-<path>/absoluter/pfad/zur/datei.js</path>
-</read_file>
-
-<write_file>
-<path>/absoluter/pfad/zur/datei.js</path>
-<content>
-// vollständiger code hier
-</content>
-</write_file>
-
-<list_files>
-<path>/verzeichnis/pfad</path>
-</list_files>
-
-<execute_command>
-<command>node script.js</command>
-<cwd>/optionales/verzeichnis</cwd>
-</execute_command>
-
-<search_files>
-<pattern>suchbegriff</pattern>
-<path>/verzeichnis</path>
-</search_files>
-
-<attempt_completion>
-<result>Kurze Zusammenfassung was gemacht wurde</result>
-</attempt_completion>
+Verfügbare Tools:
+- read_file: { "tool": "read_file", "path": "/absoluter/pfad/datei.js" }
+- write_file: { "tool": "write_file", "path": "/absoluter/pfad/datei.js", "content": "vollständiger code" }
+- list_files: { "tool": "list_files", "path": "/verzeichnis" }
+- execute_command: { "tool": "execute_command", "command": "node script.js", "cwd": "/optional" }
+- search_files: { "tool": "search_files", "pattern": "suchbegriff", "path": "/verzeichnis" }
+- attempt_completion: { "tool": "attempt_completion", "result": "was gemacht wurde", "diff_summary": "X Zeilen geändert" }
 
 REGELN:
-- Lies Dateien IMMER zuerst bevor du sie änderst (read_file)
-- Schreibe immer vollständige Dateien mit write_file (kein partieller Code)
-- Bei Fehlern: analysiere den Fehler, korrigiere und versuche erneut
-- Beende IMMER mit attempt_completion
-- Antworte auf Deutsch`;
+1. Immer erst read_file bevor du schreibst
+2. write_file = vollständige Datei, nie partial
+3. Bei Fehlern: Fehler analysieren, korrigieren, erneut versuchen
+4. Immer mit attempt_completion beenden
+5. Thinking erlaubt: füge "thinking" Key hinzu für interne Überlegungen`;
 
       try {
         const { action, target_file, target_dir, instruction, language, original_command } = parsed;
@@ -2531,56 +2489,49 @@ REGELN:
           iteration++;
           ctLog(`🤔 Schritt ${iteration}/${MAX_ITER}...`);
 
-          const aiResponse = await callClaude(messages, CT_SYSTEM);
-          if (!aiResponse) throw new Error('Keine Antwort von Claude');
+          const json = await callCodeAI(messages, CT_SYSTEM);
+          if (!json) throw new Error('Keine Antwort von GPT');
 
-          // Erste Zeile als Preview loggen
-          const firstLine = aiResponse.split('\n').find(l => l.trim()) || '';
-          ctLog(`💬 ${firstLine.substring(0, 180)}`);
+          // Thinking loggen falls vorhanden
+          if (json.thinking) ctLog(`💭 ${String(json.thinking).substring(0, 150)}`);
 
-          const toolCalls = parseToolCalls(aiResponse);
+          const toolName = json.tool;
 
-          // Keine Tools → entweder done oder nudge
-          if (toolCalls.length === 0) {
-            if (iteration >= 3) { completionResult = aiResponse; break; }
-            messages.push({ role: 'assistant', content: aiResponse });
-            messages.push({ role: 'user', content: 'Nutze attempt_completion wenn du fertig bist, oder verwende Tools um fortzufahren.' });
+          // Kein Tool → nudge
+          if (!toolName) {
+            if (iteration >= 3) { completionResult = JSON.stringify(json); break; }
+            messages.push({ role: 'assistant', content: JSON.stringify(json) });
+            messages.push({ role: 'user', content: 'Nutze attempt_completion wenn fertig, sonst weitermachen mit Tools.' });
             continue;
           }
 
           // attempt_completion → Ende
-          const done = toolCalls.find(t => t.name === 'attempt_completion');
-          if (done) {
-            completionResult = done.params?.result || 'Fertig.';
+          if (toolName === 'attempt_completion') {
+            completionResult = json.result || 'Fertig.';
+            if (json.diff_summary) ctLog(`✏️ ${json.diff_summary}`);
             ctLog(`✅ ${completionResult}`);
             break;
           }
 
-          // Tools ausführen, Ergebnisse sammeln
-          messages.push({ role: 'assistant', content: aiResponse });
-          const resultBlocks = [];
+          // Tool ausführen
+          ctLog(`🔧 ${toolName}${json.path ? ': ' + pathMod.basename(json.path) : ''}`);
+          const result = await executeTool(toolName, json);
 
-          for (const tool of toolCalls) {
-            ctLog(`🔧 ${tool.name}${tool.params?.path ? ': ' + pathMod.basename(tool.params.path) : ''}`);
-            const result = await executeTool(tool.name, tool.params);
-
-            // Geschriebene Dateien merken
-            if (tool.name === 'write_file' && tool.params?.path) {
-              writtenFiles.push(tool.params.path);
-              const lineCount = (tool.params?.content || '').split('\n').length;
-              ctLog(`  ↳ ${lineCount} Zeilen geschrieben`);
-            } else if (tool.name === 'execute_command') {
-              execOutputs.push(result);
-              ctLog(`  ↳ ${result.substring(0, 120)}`);
-            } else {
-              ctLog(`  ↳ ${result.substring(0, 120)}`);
-            }
-
-            resultBlocks.push(`<tool_result tool="${tool.name}">\n${result}\n</tool_result>`);
+          // Geschriebene Dateien merken
+          if (toolName === 'write_file' && json.path) {
+            writtenFiles.push(json.path);
+            const lineCount = (json.content || '').split('\n').length;
+            ctLog(`  ↳ ${lineCount} Zeilen geschrieben`);
+          } else if (toolName === 'execute_command') {
+            execOutputs.push(result);
+            ctLog(`  ↳ ${result.substring(0, 120)}`);
+          } else {
+            ctLog(`  ↳ ${result.substring(0, 120)}`);
           }
 
-          // Tool-Ergebnisse als nächste User-Nachricht zurückgeben
-          messages.push({ role: 'user', content: resultBlocks.join('\n\n') });
+          // Ergebnis zurück an AI
+          messages.push({ role: 'assistant', content: JSON.stringify(json) });
+          messages.push({ role: 'user', content: `Tool-Ergebnis (${toolName}):\n${result}` });
         }
 
         // ── Artifact speichern (letzte geschriebene Datei) ──────────────────
