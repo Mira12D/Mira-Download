@@ -359,6 +359,19 @@ function startLocalServer() {
           res.end();
           return;
         }
+      } else {
+        // Kein lokaler Progress → Supabase prüfen (z.B. Task bereits server-seitig auf error gesetzt)
+        try {
+          const rows = await directSupabase('GET', `/agent_tasks?id=eq.${task_id}&select=status,result&limit=1`);
+          const row = Array.isArray(rows) ? rows[0] : null;
+          if (row && (row.status === 'error' || row.status === 'cancelled')) {
+            const errMsg = row.result?.error || 'MIRA Code nicht aktiv. Bitte Plan aktivieren.';
+            res.write(`data: ${JSON.stringify({ type: 'error', content: '❌ ' + errMsg })}\n\n`);
+            res.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`);
+            res.end();
+            return;
+          }
+        } catch(_) {}
       }
       // SSE-Client registrieren für künftige Nachrichten
       sseClients.set(task_id, res);
@@ -457,6 +470,26 @@ function startLocalServer() {
     if (pathname === '/api/agent/queue' && req.method === 'POST') {
       const { command, source } = body;
       if (!command) return json({ error: 'No command' }, 400);
+
+      // code_task: miracode_active prüfen bevor Task läuft
+      let parsedCmd = null;
+      try { parsedCmd = typeof command === 'string' ? JSON.parse(command) : command; } catch(_) {}
+      if (parsedCmd?.type === 'code_task') {
+        let miracodeActive = false;
+        try {
+          if (userId) {
+            const rows = await directSupabase('GET', `/users?id=eq.${userId}&select=miracode_active&limit=1`);
+            miracodeActive = Array.isArray(rows) && rows[0]?.miracode_active === true;
+          }
+        } catch(_) { miracodeActive = false; }
+        if (!miracodeActive) {
+          if (mainWindow) mainWindow.webContents.send('mira-response', {
+            text: '💳 MIRA Code ist noch nicht aktiviert. Bitte aktiviere deinen Plan auf getmira.space.',
+            source: 'code_task'
+          });
+          return json({ success: false, no_payment: true });
+        }
+      }
 
       const task = {
         id:      'local_' + Date.now(),
@@ -2443,33 +2476,22 @@ async function executeTaskFromQueue(task) {
         }
       };
 
-      // GPT-4o-mini call mit Retry (3x, exponentiell) + JSON-Mode
-      const callCodeAI = async (messages, systemPrompt) => {
-        if (!_dk?.gptKey) throw new Error('Kein GPT Key verfügbar');
-        if (_dk.expiresAt && Date.now() > _dk.expiresAt) await bootstrap();
+      // Tier-basierter AI Call: GPT-mini → Haiku → Sonnet
+      // tier wird von außen gesetzt basierend auf noToolCount
+      const callCodeAI = async (messages, systemPrompt, tier = 1) => {
         for (let attempt = 0; attempt < 3; attempt++) {
           try {
-            const res = await fetchWithTimeout('https://api.openai.com/v1/chat/completions', {
+            const res = await fetchWithTimeout(`${API}/api/agent/code-ai`, {
               method: 'POST',
-              headers: {
-                'Authorization': `Bearer ${_dk.gptKey}`,
-                'Content-Type': 'application/json',
-              },
-              body: JSON.stringify({
-                model: 'gpt-4o-mini',
-                max_tokens: 12000,
-                temperature: 0.1,
-                response_format: { type: 'json_object' },
-                messages: [{ role: 'system', content: systemPrompt }, ...messages],
-              }),
-            }, 60000);
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: userToken, messages, system: systemPrompt, tier })
+            }, 90000);
             const data = await res.json();
-            if (data.error) throw new Error(data.error.message || JSON.stringify(data.error));
-            const raw = data.choices?.[0]?.message?.content || null;
-            if (!raw) return null;
-            return JSON.parse(raw);
+            if (data.no_payment) throw Object.assign(new Error(data.message || 'Kein MIRA Code Plan'), { no_payment: true });
+            if (data.error) throw new Error(data.error);
+            return data.result || null;
           } catch(e) {
-            if (attempt < 2) {
+            if (attempt < 2 && !e.no_payment) {
               await new Promise(r => setTimeout(r, (attempt + 1) * 2000));
             } else throw e;
           }
@@ -2482,6 +2504,7 @@ async function executeTaskFromQueue(task) {
           switch (toolName) {
             case 'read_file': {
               if (!p.path) return 'Fehler: Kein Pfad';
+              if (!pathMod.isAbsolute(p.path)) p.path = pathMod.join(os.homedir(), 'Desktop', p.path);
               if (!fs.existsSync(p.path)) return `Fehler: Datei nicht gefunden: ${p.path}`;
               const content = fs.readFileSync(p.path, 'utf8');
               // Zeilennummern hinzufügen (wie Claude Code) für präzise Edits
@@ -2491,6 +2514,7 @@ async function executeTaskFromQueue(task) {
             }
             case 'edit_file': {
               if (!p.path) return 'Fehler: Kein Pfad';
+              if (!pathMod.isAbsolute(p.path)) p.path = pathMod.join(os.homedir(), 'Desktop', p.path);
               if (!p.old_string && p.old_string !== '') return 'Fehler: old_string fehlt';
               if (p.new_string === undefined) return 'Fehler: new_string fehlt';
               if (!fs.existsSync(p.path)) return `Fehler: Datei nicht gefunden: ${p.path}`;
@@ -2513,13 +2537,21 @@ async function executeTaskFromQueue(task) {
             }
             case 'write_file': {
               if (!p.path) return 'Fehler: Kein Pfad';
+              // Relativer Pfad oder nur Dateiname → immer auf Desktop
+              const resolvedWritePath = pathMod.isAbsolute(p.path)
+                ? p.path
+                : pathMod.join(os.homedir(), 'Desktop', p.path);
               const content = p.content || '';
-              fs.mkdirSync(pathMod.dirname(p.path), { recursive: true });
-              fs.writeFileSync(p.path, content, 'utf8');
+              fs.mkdirSync(pathMod.dirname(resolvedWritePath), { recursive: true });
+              fs.writeFileSync(resolvedWritePath, content, 'utf8');
+              p.path = resolvedWritePath; // für writtenFiles tracking
               return `✅ Gespeichert: ${p.path} (${content.split('\n').length} Zeilen)`;
             }
             case 'list_files': {
-              const dir = p.path || os.homedir();
+              const rawDir = p.path || '';
+              const dir = rawDir
+                ? (pathMod.isAbsolute(rawDir) ? rawDir : pathMod.join(os.homedir(), 'Desktop', rawDir))
+                : pathMod.join(os.homedir(), 'Desktop');
               if (!fs.existsSync(dir)) return `Fehler: Nicht gefunden: ${dir}`;
               const entries = fs.readdirSync(dir, { withFileTypes: true });
               return entries.slice(0, 60).map(e => `${e.isDirectory() ? '📁' : '📄'} ${e.name}`).join('\n');
@@ -2545,6 +2577,72 @@ async function executeTaskFromQueue(task) {
                 return out.trim() || 'Keine Ergebnisse';
               } catch(e) { return 'Keine Ergebnisse'; }
             }
+            case 'search_image': {
+              // Keyword-Matching auf kuratierte Unsplash-Foto-Tabelle
+              // source.unsplash.com ist deprecated → kein Netzwerkaufruf nötig
+              const query = (p.query || p.keyword || '').trim().toLowerCase();
+              if (!query) return 'Fehler: Kein Suchbegriff (query)';
+
+              // ── Kuratierte Themen-Tabelle (keyword → Unsplash Photo ID) ───────
+              const IMAGE_MAP = [
+                // Energy / Drinks
+                { keys: ['red bull','redbull','energy drink','energy','energydrink','dose','getränk','drink','soda','cola','pepsi','coca','limonade','limo','saft','juice','bier','beer','wein','wine','cocktail','bar','pub'], id: '1553361371-9b0f33fd8e3c' },
+                // Kaffee
+                { keys: ['kaffee','coffee','espresso','cappuccino','latte','café','coffeeshop','café','barista'], id: '1509042239860-f550ce710b93' },
+                // Essen / Food
+                { keys: ['essen','food','restaurant','küche','kochen','rezept','gericht','mahlzeit','burger','pizza','sushi','brot','fleisch','gemüse','obst','meal','cooking','recipe','chef'], id: '1504674900247-0877df9cc836' },
+                // Sport / Fitness allgemein
+                { keys: ['sport','fitness','gym','workout','training','laufen','joggen','marathon','schwimmen','fahrrad','cycling','crossfit','athlet'], id: '1571019613454-1cb2f99b2d8b' },
+                // Fußball
+                { keys: ['fußball','football','soccer','bundesliga','fc','borussia','dortmund','münchen','barcelona'], id: '1551958219-acb629ebb571' },
+                // Auto / Mobilität
+                { keys: ['auto','car','fahrzeug','bmw','mercedes','audi','porsche','tesla','motorrad','bike','mobility','transport','fahren'], id: '1492144534655-ae79c964c9d7' },
+                // Business / Tech
+                { keys: ['business','unternehmen','firma','startup','büro','office','meeting','konferenz','laptop','computer','tech','software','app','digital','data','code','programmieren'], id: '1497366216548-37526070297c' },
+                // Gesundheit / Medizin
+                { keys: ['gesundheit','health','medizin','arzt','krankenhaus','pharma','pille','therapie','wellness','meditation','yoga'], id: '1576091160399-112ba8d25d1d' },
+                // Natur / Umwelt
+                { keys: ['natur','nature','umwelt','environment','berg','mountain','see','lake','meer','ocean','strand','beach','wasser','water','grün','green','pflanzen','blumen'], id: '1506905925346-21bda4d32df4' },
+                // Wald
+                { keys: ['wald','forest','bäume','trees','jungle','dschungel'], id: '1441974231531-c6227db76b6e' },
+                // Stadt / Architektur
+                { keys: ['city','skyline','architektur','architecture','gebäude','building','downtown','urban','metropolitan','hochhaus'], id: '1477959858617-67f85cf4f1df' },
+                // Berlin
+                { keys: ['berlin','brandenburger','alexanderplatz','mitte','kreuzberg','prenzlauer'], id: '1560969184-10fe8719e047' },
+                // Musik
+                { keys: ['musik','music','konzert','concert','festival','gitarre','guitar','dj','band','song','studio','recording'], id: '1511379938547-c1f69419868d' },
+                // Reisen
+                { keys: ['reise','travel','urlaub','vacation','flugzeug','airplane','hotel','backpacker','adventure','world','welt'], id: '1488646953014-85cb44e25828' },
+                // Mode / Fashion
+                { keys: ['mode','fashion','kleidung','outfit','style','trend','designer','luxury','luxus'], id: '1558618666-fcd25c85cd64' },
+                // Technologie / Innovation
+                { keys: ['künstliche intelligenz','ai','roboter','robot','innovation','zukunft','future','smart','iot','blockchain','crypto'], id: '1518770660439-4636190af475' },
+                // Bildung / Schule
+                { keys: ['bildung','schule','school','uni','universität','lernen','studium','bücher','books','education'], id: '1456513080510-7bf3a84b82f8' },
+                // Rauchen / Lifestyle
+                { keys: ['rauchen','smoke','cigarette','zigarette','lifestyle','nightlife','nacht','night','party','club'], id: '1516534775068-ba3e7458af70' },
+              ];
+
+              // Score-basiertes Matching
+              let bestId = '1571019613454-1cb2f99b2d8b'; // Fallback
+              let bestScore = 0;
+              for (const entry of IMAGE_MAP) {
+                const score = entry.keys.reduce((s, k) => s + (query.includes(k) ? k.length : 0), 0);
+                if (score > bestScore) { bestScore = score; bestId = entry.id; }
+              }
+
+              const matched = bestScore > 0;
+              ctLog(`🖼️ Bild: ${bestId}${matched ? '' : ' (Fallback)'}`);
+              return `Bild für "${query}": https://images.unsplash.com/photo-${bestId}?w=1200&q=80\n<img src="https://images.unsplash.com/photo-${bestId}?w=1200&q=80" alt="${query}">`;
+            }
+            case 'send_message': {
+              // Sendet eine Antwort direkt in den MIRA-Chat — kein Datei-Schreiben nötig
+              const text = (p.text || p.content || p.message || '').trim();
+              if (!text) return 'Fehler: Kein Text angegeben';
+              ctLog(`💬 ${text}`, 'chat');
+              if (mainWindow) mainWindow.webContents.send('mira-response', { text, source: 'code_task' });
+              return 'Nachricht an User gesendet.';
+            }
             default: return `Unbekanntes Tool: ${toolName}`;
           }
         } catch(e) {
@@ -2552,36 +2650,100 @@ async function executeTaskFromQueue(task) {
         }
       };
 
-      const CT_SYSTEM = `Du bist MIRA Code — KI-Coding-Assistent. Antworte IMMER als JSON-Objekt.
+      // ── Tier-spezifische System-Prompts (inspiriert von Cline's Varianten-System) ──────
+      const CT_TOOLS = `Tools (JSON-Objekt, ein Tool pro Schritt):
+- read_file:       { "tool":"read_file", "path":"/absoluter/pfad/datei.js" }
+- edit_file:       { "tool":"edit_file", "path":"/pfad/datei.js", "old_string":"exakter alter code", "new_string":"neuer code" }
+- write_file:      { "tool":"write_file", "path":"/pfad/datei.js", "content":"vollständiger code" }
+- list_files:      { "tool":"list_files", "path":"/verzeichnis" }
+- search_files:    { "tool":"search_files", "pattern":"regex oder suchbegriff", "path":"/verzeichnis" }
+- execute_command: { "tool":"execute_command", "command":"node script.js", "cwd":"/optional" }
+- search_image:    { "tool":"search_image", "query":"english topic keywords" }
+- send_message:    { "tool":"send_message", "text":"Antwort an User..." }
+- attempt_completion: { "tool":"attempt_completion", "result":"kurze Zusammenfassung", "diff":[{"file":"datei.js","removed":["alte zeile"],"added":["neue zeile"]}] }`;
 
-Verfügbare Tools:
-- read_file:   { "tool": "read_file", "path": "/absoluter/pfad/datei.js" }
-- edit_file:   { "tool": "edit_file", "path": "/pfad/datei.js", "old_string": "exakter alter code", "new_string": "neuer code" }
-- write_file:  { "tool": "write_file", "path": "/pfad/datei.js", "content": "vollständiger code" }
-- list_files:  { "tool": "list_files", "path": "/verzeichnis" }
-- execute_command: { "tool": "execute_command", "command": "node script.js", "cwd": "/optional" }
-- search_files: { "tool": "search_files", "pattern": "suchbegriff", "path": "/verzeichnis" }
-- attempt_completion: { "tool": "attempt_completion", "result": "kurze Zusammenfassung", "diff": [{"file":"datei.html","removed":["alte zeile 1","alte zeile 2"],"added":["neue zeile 1","neue zeile 2"]}] }
+      const CT_MIRAMD = `MIRA.md = Projektgedächtnis (token-optimiert):
+# MIRA.md · [Projekt] · [YYYY-MM-DD]
+## Stack
+[Sprachen/Frameworks]
+## Dateien
+[datei.js] — [was sie macht]
+## API
+[METHOD /pfad] → [was passiert]
+## Patterns
+- [Pattern]: [kurz]
+## Notizen
+[TODOs]
+Wenn MIRA.md geladen → direkt nutzen, KEIN list_files. Bei jeder Dateiänderung → MIRA.md updaten.`;
 
-WICHTIGE REGELN:
-1. Immer erst read_file bevor du änderst — du musst den exakten Text kennen
-2. Bevorzuge edit_file für Änderungen (sicherer, zeigt nur was sich ändert)
-   - old_string MUSS exakt im File vorkommen (copy-paste aus read_file)
-   - old_string muss eindeutig sein (genug Kontext)
-3. write_file nur für neue Dateien oder komplette Rewrites
-4. Bei Fehlern: analysieren, korrigieren, erneut versuchen
-5. Immer mit attempt_completion + diff beenden
-6. "thinking" Key erlaubt
+      const CT_HTML_TEMPLATE = `HTML-Template (EXAKT verwenden, alle CAPS-Platzhalter ersetzen):
+<!DOCTYPE html><html lang="de"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0"><title>TITEL</title><style>:root{--p:#0071e3;--bg:#fff;--soft:#f5f5f7;--t:#1d1d1f;--t2:#6e6e73;--r:16px;--font:-apple-system,BlinkMacSystemFont,'SF Pro Display','Segoe UI',system-ui,sans-serif}*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}body{font-family:var(--font);background:var(--bg);color:var(--t);-webkit-font-smoothing:antialiased}a{color:inherit;text-decoration:none}ul{list-style:none}img{max-width:100%;display:block}nav{position:sticky;top:0;z-index:99;height:56px;background:rgba(255,255,255,0.9);backdrop-filter:blur(18px);border-bottom:1px solid rgba(0,0,0,0.08);display:flex;align-items:center}.ni{max-width:1100px;margin:0 auto;padding:0 24px;width:100%;display:flex;align-items:center;justify-content:space-between}.logo{font-size:1.05rem;font-weight:700;letter-spacing:-.02em}.nl{display:flex;gap:28px}.nl a{font-size:.875rem;color:var(--t2);transition:color .2s}.nl a:hover{color:var(--t)}.hero{padding:88px 24px 72px;text-align:center;background:linear-gradient(160deg,#f0f7ff 0%,#fff 60%)}.tag{display:inline-block;font-size:.78rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--p);background:rgba(0,113,227,.08);padding:5px 14px;border-radius:999px;margin-bottom:20px}h1{font-size:clamp(2.2rem,5vw,3.8rem);font-weight:700;letter-spacing:-.03em;line-height:1.08;max-width:780px;margin:0 auto 18px}.sub{font-size:clamp(1rem,1.8vw,1.2rem);color:var(--t2);max-width:540px;margin:0 auto 32px;line-height:1.55}.acts{display:flex;gap:12px;justify-content:center;flex-wrap:wrap}.btn{display:inline-flex;align-items:center;padding:13px 26px;border-radius:999px;font-size:.92rem;font-weight:500;transition:all .2s;cursor:pointer;border:none}.bp{background:var(--p);color:#fff}.bp:hover{background:#005bb5;transform:scale(1.03)}.bg{background:transparent;color:var(--p);border:1.5px solid rgba(0,113,227,.3)}.bg:hover{background:rgba(0,113,227,.06)}.hi{max-width:900px;margin:48px auto 0;border-radius:20px;overflow:hidden;box-shadow:0 12px 48px rgba(0,0,0,.14)}.hi img{width:100%;height:400px;object-fit:cover}.sec{padding:80px 24px}.sec-alt{background:var(--soft)}.wrap{max-width:1100px;margin:0 auto}.lbl{font-size:.78rem;font-weight:600;letter-spacing:.07em;text-transform:uppercase;color:var(--p);text-align:center;margin-bottom:10px}h2{font-size:clamp(1.8rem,3.5vw,2.6rem);font-weight:700;letter-spacing:-.02em;line-height:1.12;text-align:center;margin-bottom:10px}.dsub{font-size:1.05rem;color:var(--t2);text-align:center;max-width:480px;margin:0 auto 48px;line-height:1.55}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px}.card{background:var(--bg);border:1px solid rgba(0,0,0,.08);border-radius:var(--r);padding:30px;transition:transform .2s,box-shadow .2s}.card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.12)}.ci{width:52px;height:52px;background:var(--soft);border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:14px;color:var(--p)}.card h3{font-size:1.05rem;font-weight:600;margin-bottom:8px}.card p{font-size:.9rem;color:var(--t2);line-height:1.6}.stats{display:flex;border:1px solid rgba(0,0,0,.08);border-radius:var(--r);overflow:hidden}.stat{flex:1;padding:36px 20px;text-align:center;border-right:1px solid rgba(0,0,0,.08)}.stat:last-child{border-right:none}.sn{font-size:2.6rem;font-weight:700;letter-spacing:-.03em;color:var(--p)}.sl{font-size:.875rem;color:var(--t2);margin-top:4px}footer{background:#1d1d1f;color:rgba(255,255,255,.5);padding:36px 24px;text-align:center;font-size:.875rem}footer strong{color:#fff}@media(max-width:768px){.grid{grid-template-columns:1fr}.stats{flex-direction:column}.nl{display:none}.hero{padding:68px 20px 56px}}</style></head><body><nav><div class="ni"><span class="logo">LOGO</span><ul class="nl"><li><a href="#info">Info</a></li><li><a href="#mehr">Mehr</a></li></ul><a href="#mehr" class="btn bp" style="padding:9px 18px;font-size:.85rem">Los →</a></div></nav><section class="hero"><div class="tag">THEMA TAG</div><h1>HEADLINE HIER</h1><p class="sub">KURZE BESCHREIBUNG.</p><div class="acts"><a href="#info" class="btn bp">Mehr erfahren</a><a href="#mehr" class="btn bg">Details</a></div><div class="hi"><img src="https://images.unsplash.com/photo-PHOTO_ID?w=1200&q=80" alt="THEMA Bild"></div></section><section class="sec-alt"><div class="wrap"><div class="stats"><div class="stat"><div class="sn">ZAHL1</div><div class="sl">LABEL1</div></div><div class="stat"><div class="sn">ZAHL2</div><div class="sl">LABEL2</div></div><div class="stat"><div class="sn">ZAHL3</div><div class="sl">LABEL3</div></div></div></div></section><section class="sec" id="info"><div class="wrap"><div class="lbl">SEKTION</div><h2>SEKTION TITEL</h2><p class="dsub">Kurze Erklärung.</p><div class="grid"><div class="card"><div class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></div><h3>PUNKT 1</h3><p>Erklärung Punkt 1.</p></div><div class="card"><div class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 4 10 15 15 0 0 1-4 10 15 15 0 0 1-4-10 15 15 0 0 1 4-10z"/></svg></div><h3>PUNKT 2</h3><p>Erklärung Punkt 2.</p></div><div class="card"><div class="ci"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M20 6L9 17l-5-5"/></svg></div><h3>PUNKT 3</h3><p>Erklärung Punkt 3.</p></div></div></div></section><footer><strong>BRAND</strong> — © 2025 Alle Rechte vorbehalten.</footer><script>const obs=new IntersectionObserver(es=>es.forEach(e=>{if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='translateY(0)'}}),{threshold:.1});document.querySelectorAll('.card').forEach(el=>{el.style.cssText+='opacity:0;transform:translateY(20px);transition:opacity .5s ease,transform .5s ease';obs.observe(el)});</script></body></html>
+Bilder: IMMER search_image zuerst (query=Englisch). Photo-ID nur aus Ergebnis. NIEMALS ID erfinden. PHOTO_ID Fallbacks: Sport='1571019613454-1cb2f99b2d8b' Food='1504674900247-0877df9cc836' Business='1497366216548-37526070297c' Natur='1506905925346-21bda4d32df4' Stadt='1477959858617-67f85cf4f1df' Musik='1511379938547-c1f69419868d'.`;
 
-CODE-QUALITÄT — ABSOLUT PFLICHT:
-- HTML: IMMER getrennte Dateien (index.html + styles.css + script.js) — NIEMALS alles in eine Datei
-- CSS: NIEMALS Arial, NIEMALS Tailwind CDN, NIEMALS inline styles im HTML
-- CSS: Immer CSS Custom Properties (--color-primary etc.), Apple-Font (-apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI')
-- CSS: Modernes Design — saubere Typografie, Whitespace, subtile Schatten, Hover-Transitions
-- JS: NIEMALS var, NIEMALS onclick="" im HTML, immer const/let, addEventListener
-- Python: Type Hints, f-Strings, pathlib, with-Statements, kein eval/exec
-- Bilder: Unsplash (https://images.unsplash.com/photo-[ID]?w=800) mit alt=""
-- Responsive: meta viewport, CSS Grid/Flexbox, kein float-Layout`;
+      // TIER 1 — GPT-4o-mini: Strenge Schritt-für-Schritt-Regeln
+      const CT_SYSTEM_T1 = `Du bist MIRA Code. Antworte AUSSCHLIESSLICH als JSON. KEIN Text davor oder danach.
+SPRACHE: "du", direkt, kein "Super/Gerne/Okay".
+
+${CT_TOOLS}
+
+PFLICHT-REIHENFOLGE:
+SCHRITT 1: list_files (falls noch nicht gemacht und kein MIRA.md)
+SCHRITT 2: read_file Einstiegspunkt (main.js/index.js/app.js/server.js/package.json)
+SCHRITT 3: read_file 1-2 weitere relevante Dateien
+SCHRITT 4: Aufgabe ausführen (write_file/edit_file/send_message)
+SCHRITT 5: attempt_completion
+
+EDIT-REGEL: old_string MUSS exakt 1:1 aus read_file kopiert sein — nie selbst formulieren.
+CROSS-FILE: Wenn Funktion/API geändert → alle Dateien die sie nutzen auch prüfen.
+KEIN send_message ohne vorher read_file.
+
+${CT_MIRAMD}
+
+${CT_HTML_TEMPLATE}`;
+
+      // TIER 2 — Claude Haiku: Koordiniertes Multi-File Denken
+      const CT_SYSTEM_T2 = `Du bist MIRA Code — autonomer Coding-Agent. Antworte als JSON-Objekt.
+SPRACHE: "du", direkt. Kein Smalltalk.
+
+${CT_TOOLS}
+
+ARBEITSWEISE:
+1. Verstehe zuerst die vollständige Projektstruktur — lies mehrere Dateien bevor du handelst.
+2. Nutze search_files um Funktionen, Imports, Patterns über das ganze Projekt zu finden.
+3. Denke cross-file: Änderung in Datei A → welche Dateien B, C, D sind betroffen?
+4. edit_file bevorzugen vor write_file (chirurgische Änderungen statt komplette Rewrites).
+5. Nach jeder Änderung: kurz prüfen ob sie konsistent mit dem Rest ist.
+6. send_message: nur für Erklärungen/Antworten, nie für Code.
+
+edit_file Regel: old_string = exakt aus read_file, genug Kontext für Eindeutigkeit.
+execute_command: nach Code-Änderungen testen wenn möglich (node/python/npm run).
+
+${CT_MIRAMD}
+
+${CT_HTML_TEMPLATE}`;
+
+      // TIER 3 — Claude Sonnet: Volle Autonomie
+      const CT_SYSTEM_T3 = `Du bist MIRA Code — hochautomatisierter Coding-Agent mit vollem Projektzugriff.
+Antworte als JSON. Keine Konversation — nur Handlungen.
+
+${CT_TOOLS}
+
+Du planst selbst, entscheidest welche Dateien relevant sind, und führst komplexe Multi-File-Änderungen durch.
+Nutze "thinking" für Planung bei komplexen Tasks.
+Nutze search_files aktiv — finde alle Stellen wo etwas verwendet wird bevor du es änderst.
+Bei Bugs: reproduziere zuerst (execute_command), dann fix, dann verifikation.
+Cross-file Konsistenz ist Pflicht: prüfe Imports, API-Verträge, Datenstrukturen.
+edit_file: old_string 1:1 aus dem tatsächlichen Dateiinhalt.
+Beende IMMER mit attempt_completion + vollständigem diff aller geänderten Dateien.
+
+${CT_MIRAMD}
+
+${CT_HTML_TEMPLATE}`;
+
+      const CT_SYSTEM_BY_TIER = { 1: CT_SYSTEM_T1, 2: CT_SYSTEM_T2, 3: CT_SYSTEM_T3 };
+      const getCTSystem = (tier) => CT_SYSTEM_BY_TIER[tier] || CT_SYSTEM_T1;
+
+
 
       // Progress-Store für ALLE Tasks initialisieren (in-memory, kein Supabase nötig)
       localTaskProgress.set(task.id, { items: [], done: false, dialog_response: null });
@@ -2589,6 +2751,19 @@ CODE-QUALITÄT — ABSOLUT PFLICHT:
       try {
         const { action, target_file, target_dir, instruction, language, original_command } = parsed;
         await ctLog(`🔍 Starte: "${original_command || instruction}"...`);
+
+        // ── Letzten Task-Kontext laden (inter-task Gedächtnis) ─────────────
+        const TASK_CTX_FILE = pathMod.join(os.homedir(), '.mira-task-context.json');
+        let recentTaskCtx = '';
+        try {
+          const ctxData = JSON.parse(fs.readFileSync(TASK_CTX_FILE, 'utf8'));
+          if (Array.isArray(ctxData) && ctxData.length > 0) {
+            recentTaskCtx = '\n\nLETZTE AUFGABEN (Kontext für diese Session):\n' +
+              ctxData.slice(0, 4).map((c, i) =>
+                `${i + 1}. [${new Date(c.ts).toLocaleTimeString('de')}] "${c.task}" → ${c.result}`
+              ).join('\n');
+          }
+        } catch { /* kein Kontext vorhanden — erster Start */ }
 
         // Dialog-Antwort auf User-Bestätigung warten (max 45s)
         // Prüft in-memory Store — funktioniert für alle Task-Typen
@@ -2602,8 +2777,57 @@ CODE-QUALITÄT — ABSOLUT PFLICHT:
           return 'yes'; // Timeout → Standard: Ja
         };
 
-        // Zieldatei-Hinweis für AI (mit Fuzzy-Match + Bestätigung)
+        // Zielordner auflösen (für read_and_explain und Ordner-Befehle)
+        let taskDone = false;
         let targetHint = '';
+        if (target_dir && !target_file) {
+          const desktop = pathMod.join(os.homedir(), 'Desktop');
+          // Exakter Match zuerst
+          const exactPath = pathMod.join(desktop, target_dir);
+          if (fs.existsSync(exactPath)) {
+            targetHint = `\nZielordner: ${exactPath}`;
+            ctLog(`📂 Ordner gefunden: ${target_dir}`);
+          } else {
+            // Fuzzy: Ordner auf Desktop suchen der ähnlich klingt
+            try {
+              const dirs = fs.readdirSync(desktop, { withFileTypes: true })
+                .filter(e => e.isDirectory())
+                .map(e => e.name);
+              const tdLower = target_dir.toLowerCase().replace(/[\s\-_.]/g, '');
+              const tokenize = s => s.toLowerCase().replace(/[\s\-_.]/g, ' ').split(/\s+/).filter(Boolean);
+              const qTokens = tokenize(target_dir);
+              const fuzzyMatch = dirs.find(d => {
+                const dl = d.toLowerCase().replace(/[\s\-_.]/g, '');
+                if (dl === tdLower || dl.includes(tdLower) || tdLower.includes(dl)) return true;
+                // Partial-Token-Match: mind. 2 Tokens übereinstimmen (z.B. "zombie"+"1989" reicht für "Zombie Survivor 1989")
+                const dTokens = tokenize(d);
+                // Nur Tokens ≥ 4 Zeichen für Partial-Match (verhindert "app" in "whatsapp")
+                const tokenMatch = (t, dt) => t === dt || (t.length >= 4 && dt.startsWith(t)) || (dt.length >= 4 && t.startsWith(dt));
+                const overlap = qTokens.filter(t => dTokens.some(dt => tokenMatch(t, dt))).length;
+                if (overlap >= Math.min(2, qTokens.length)) return true;
+                return false;
+              });
+              if (fuzzyMatch) {
+                targetHint = `\nZielordner: ${pathMod.join(desktop, fuzzyMatch)}`;
+                ctLog(`📂 Ordner gefunden (fuzzy): ${fuzzyMatch}`);
+              } else {
+                taskDone = true;
+                const topDirs = dirs.filter(d => !d.startsWith('.')).join(', ');
+                const msg = `Ordner "${target_dir}" nicht gefunden auf dem Desktop. Meinst du einen von diesen?\n${topDirs}\n\nSag mir den genauen Namen, dann schaue ich rein.`;
+                ctLog(`⚠️ Ordner nicht gefunden: ${target_dir}`);
+                ctLog(`💬 ${msg}`, 'chat');
+                if (mainWindow) mainWindow.webContents.send('mira-response', { text: msg, source: 'code_task' });
+                await fetchWithTimeout(`${API}/api/agent/complete`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ token: userToken, task_id: task.id, status: 'success', result: { success: false, summary: msg } })
+                }, 10000).catch(() => {});
+                { const _p = localTaskProgress.get(task.id); if (_p) { _p.done = true; } }
+                { const _s = sseClients.get(task.id); if (_s && !_s.writableEnded) { _s.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`); _s.end(); sseClients.delete(task.id); } }
+              }
+            } catch { targetHint = `\nSuche in: ${desktop}`; }
+          }
+        }
+
         if (target_file) {
           const found = await ftFindFiles([target_file], target_dir ? [target_dir] : null, { codeMode: true });
           // Extension-Filter: Fuzzy-Match nur wenn Extension übereinstimmt
@@ -2634,50 +2858,189 @@ CODE-QUALITÄT — ABSOLUT PFLICHT:
           }
         }
 
+        if (!taskDone) {
         // Telekolleg-Bibliothek: passende Coding-Patterns laden
         const bibCtx = bibLoader.findRelevant(
           `${instruction} ${language || ''} ${target_file || ''}`,
-          { maxSections: 3, maxChars: 2000 }
+          { maxSections: 4, maxChars: 3500 }
         );
         const bibSection = bibCtx.found
           ? `\n\n${bibCtx.context}`
           : '';
 
+        // ── Auto-Bildsuche für HTML-Tasks ──────────────────────────────────
+        const isHtmlTask = (target_file || '').toLowerCase().endsWith('.html') || (language || '').toLowerCase() === 'html';
+        let autoImageHint = '';
+        if (isHtmlTask) {
+          const cmd = (original_command || instruction).toLowerCase();
+
+          // Prüfen ob User lokale Bilder/Ordner erwähnt
+          const localFolderMatch = cmd.match(/(?:in|aus|from|ordner|folder|verzeichnis)\s+([\w\-\/\.]+)/i)
+            || cmd.match(/(assets|bilder|images|img|fotos|media|ressourcen|resources)/i);
+          const mentionsLocal = /assets|bilder|images|img|fotos|media|lokal|eigene|rein|lege|liegt|ordner|folder/i.test(cmd);
+
+          if (mentionsLocal) {
+            // Lokaler Modus: Ordner scannen und Bilder auflisten
+            const folderName = localFolderMatch?.[1] || 'assets';
+            const baseDir = target_dir
+              ? pathMod.join(target_dir, folderName)
+              : pathMod.join(os.homedir(), 'Desktop', folderName);
+            ctLog(`📂 Scanne lokale Bilder in: ${folderName}/`);
+            try {
+              const imgExts = ['.jpg','.jpeg','.png','.webp','.gif','.svg','.avif'];
+              let localImgs = [];
+              if (fs.existsSync(baseDir)) {
+                localImgs = fs.readdirSync(baseDir)
+                  .filter(f => imgExts.includes(pathMod.extname(f).toLowerCase()))
+                  .slice(0, 20);
+              }
+              if (localImgs.length > 0) {
+                const imgList = localImgs.map(f => `${folderName}/${f}`).join(', ');
+                autoImageHint = `\nLOKALE BILDER GEFUNDEN in "${folderName}/" (relative Pfade verwenden):\n${imgList}\nBeispiel: <img src="${folderName}/${localImgs[0]}" alt="...">\nKEIN Unsplash verwenden — nur diese lokalen Bilder.`;
+                ctLog(`🖼️ ${localImgs.length} lokale Bilder gefunden`);
+              } else {
+                autoImageHint = `\nOrdner "${folderName}/" existiert noch nicht oder ist leer. Platzhalter verwenden: <img src="${folderName}/bild.jpg" alt="..."> — User legt Bilder selbst rein.`;
+                ctLog(`📁 Ordner leer/nicht vorhanden — Platzhalter gesetzt`);
+              }
+            } catch(e) {
+              autoImageHint = `\nUser legt Bilder in "${folderName}/" — relativen Pfad verwenden: <img src="${folderName}/bild.jpg" alt="...">`;
+            }
+          } else {
+            // Unsplash Modus: Keyword-Matching
+            ctLog(`🔍 Suche passendes Bild...`);
+            try {
+              const imgQuery = (original_command || instruction).replace(/[^a-z0-9äöüß\s]/gi, ' ').trim();
+              const imgResult = await executeTool('search_image', { query: imgQuery });
+              const idMatch = imgResult.match(/photo-([a-f0-9]+-[a-f0-9]+(?:-[a-f0-9]+)*)/);
+              if (idMatch) {
+                autoImageHint = `\nBILD (bereits gesucht, PFLICHT verwenden): https://images.unsplash.com/photo-${idMatch[1]}?w=1200&q=80`;
+                ctLog(`🖼️ Bild: ${idMatch[1]}`);
+              }
+            } catch(e) {
+              ctLog(`⚠️ Bildsuche fehlgeschlagen: ${e.message}`);
+            }
+          }
+        }
+
+        // Zielverzeichnis auflösen (für MIRA.md)
+        const resolvedDir =
+          targetHint.match(/Zielordner: (.+)/)?.[1]?.trim() ||
+          (targetHint.match(/Zieldatei[^:]*: (.+)/)?.[1]?.trim()
+            ? pathMod.dirname(targetHint.match(/Zieldatei[^:]*: (.+)/)?.[1].trim())
+            : null);
+
+        // MIRA.md — Projektgedächtnis laden
+        let miraMapHint = '';
+        let miraMapPath = resolvedDir ? pathMod.join(resolvedDir, 'MIRA.md') : '';
+        if (miraMapPath && fs.existsSync(miraMapPath)) {
+          try {
+            const miraContent = fs.readFileSync(miraMapPath, 'utf8');
+            miraMapHint = `\n\nPROJEKT-GEDÄCHTNIS (MIRA.md — direkt nutzen, KEIN list_files nötig):\n${miraContent}`;
+            ctLog(`📖 MIRA.md geladen`);
+          } catch {}
+        }
+
+        // read_and_explain / explain_code: expliziter Hinweis — lesen + send_message + MIRA.md schreiben
+        const isReadAction = action === 'read_and_explain' || action === 'explain_code';
+        const readExplainHint = isReadAction
+          ? miraMapHint
+            ? `\nMODUS: MIRA.md geladen (Struktur bekannt) — nutze sie um die RICHTIGE Datei direkt zu lesen. PFLICHT: 1) read_file für relevante Datei(en) — KEIN send_message OHNE read_file! 2) send_message mit konkreter Antwort basierend auf dem Dateiinhalt 3) write_file MIRA.md updaten 4) attempt_completion.`
+            : `\nMODUS: LESEN + MIRA.md ERSTELLEN. PFLICHT: 1) list_files 2) read_file relevante Dateien — KEIN send_message OHNE read_file! 3) send_message mit konkreter Antwort 4) write_file MIRA.md 5) attempt_completion.`
+          : '';
+
         // Startmessage
         const messages = [{
           role: 'user',
-          content: `Aufgabe: ${instruction}${targetHint}\nAktion: ${action || 'edit_code'}${language ? `\nSprache: ${language}` : ''}${bibSection}`
+          content: `Aufgabe: ${instruction}${targetHint}${miraMapHint}${autoImageHint}\nAktion: ${action || 'edit_code'}${language ? `\nSprache: ${language}` : ''}${readExplainHint}${bibSection}${recentTaskCtx}`
         }];
 
         let iteration = 0;
-        const MAX_ITER = 10;
+        const MAX_ITER = 15;
         let completionResult = null;
         let writtenFiles = [];
         let execOutputs = [];
+        let sentMessages = []; // Gesendete send_message Inhalte tracken
+        let miraMdWritten = false; // MIRA.md für dieses Projekt geschrieben?
+        let listFilesDone = false; // list_files bereits aufgerufen?
+        let lastListResult = ''; // Letztes list_files Ergebnis
+        let readFileDone = false; // mind. 1x read_file aufgerufen?
+        let noToolCount = 0; // aufeinanderfolgende Iterationen ohne Tool
+        let currentTier = 1; // 1=GPT-mini, 2=Haiku, 3=Sonnet
+        let sonnetUsed = false; // Sonnet max 1x pro Task
 
         // ── Rekursiver Tool-Loop ────────────────────────────────────────────
         while (iteration < MAX_ITER) {
           iteration++;
           ctLog(`🤔 Schritt ${iteration}/${MAX_ITER}...`);
 
-          const json = await callCodeAI(messages, CT_SYSTEM);
-          if (!json) throw new Error('Keine Antwort von GPT');
+          // Tier-Eskalation basierend auf noToolCount
+          if (noToolCount >= 3 && currentTier === 1) {
+            currentTier = 2;
+            ctLog(`⚡ Tier 2 — Haiku übernimmt`);
+          } else if (iteration >= 8 && currentTier === 2 && !sonnetUsed) {
+            currentTier = 3;
+            sonnetUsed = true;
+            ctLog(`🧠 Tier 3 — Sonnet (letzter Ausweg)`);
+          }
+
+          let json = await callCodeAI(messages, getCTSystem(currentTier), currentTier).catch(e => {
+            if (e.no_payment) throw e;
+            ctLog(`⚠️ Tier ${currentTier} Fehler: ${e.message} — Fallback auf GPT-mini`);
+            currentTier = 1;
+            return callCodeAI(messages, getCTSystem(1), 1);
+          });
+          if (!json) throw new Error('Keine Antwort vom AI');
 
           // Thinking loggen falls vorhanden
           if (json.thinking) ctLog(`💭 ${String(json.thinking).substring(0, 150)}`);
 
           const toolName = json.tool;
 
-          // Kein Tool → nudge
+          // noToolCount tracken
+          if (toolName) { noToolCount = 0; } else { noToolCount++; }
+
+          // Kein Tool → spezifischer Nudge je nach Aktion
           if (!toolName) {
-            if (iteration >= 3) { completionResult = JSON.stringify(json); break; }
+            if (iteration >= 8) { completionResult = JSON.stringify(json); break; }
             messages.push({ role: 'assistant', content: JSON.stringify(json) });
-            messages.push({ role: 'user', content: 'Nutze attempt_completion wenn fertig, sonst weitermachen mit Tools.' });
+
+            // Spezifischer Nudge: sag GPT genau welches Tool als nächstes
+            let nudge = 'Antworte mit einem Tool-Aufruf als JSON. Beispiel: {"tool":"attempt_completion","result":"fertig"}';
+            if (sentMessages.length > 0 && !miraMdWritten && resolvedDir && isReadAction) {
+              nudge = `Erklärt. Schreibe JETZT MIRA.md: {"tool":"write_file","path":"${pathMod.join(resolvedDir, 'MIRA.md')}","content":"..."}`;
+            } else if (sentMessages.length > 0) {
+              nudge = 'Bereits geantwortet. Jetzt: {"tool":"attempt_completion","result":"Fertig."}';
+            } else if (isReadAction) {
+              if (listFilesDone && lastListResult) {
+                // Dateien bekannt → konkrete Datei zum Lesen vorschlagen
+                const fileNames = lastListResult.split('\n')
+                  .filter(l => l.includes('📄') && !l.includes('.DS_Store'))
+                  .map(l => l.replace(/.*📄\s*/, '').trim())
+                  .filter(Boolean);
+                const prio = fileNames.find(f => /\.(html|js|ts|py|json|css|md)$/i.test(f)) || fileNames[0];
+                const filePath = prio && resolvedDir ? pathMod.join(resolvedDir, prio) : null;
+                nudge = filePath
+                  ? `Dateien gefunden: ${fileNames.join(', ')}. JETZT read_file für "${prio}": {"tool":"read_file","path":"${filePath}"}`
+                  : `JETZT read_file für eine Datei, dann send_message, dann MIRA.md schreiben.`;
+              } else {
+                nudge = `JETZT SOFORT list_files: {"tool":"list_files","path":"${resolvedDir || pathMod.join(os.homedir(), 'Desktop')}"}`;
+              }
+            } else if (action === 'write_code' || action === 'edit_file') {
+              nudge = 'Rufe JETZT write_file oder edit_file auf.';
+            }
+            messages.push({ role: 'user', content: nudge });
             continue;
           }
 
           // attempt_completion → Ende
           if (toolName === 'attempt_completion') {
+            // MIRA.md updaten wenn Dateien verändert wurden und noch kein Update
+            const miraWorthyFiles = writtenFiles.filter(f => pathMod.basename(f) !== 'MIRA.md');
+            if (resolvedDir && miraWorthyFiles.length > 0 && !miraMdWritten) {
+              messages.push({ role: 'assistant', content: JSON.stringify(json) });
+              messages.push({ role: 'user', content: `Warte — update zuerst MIRA.md mit den Änderungen: {"tool":"write_file","path":"${pathMod.join(resolvedDir, 'MIRA.md')}","content":"..."}` });
+              continue;
+            }
             completionResult = json.result || 'Fertig.';
             // Diff anzeigen (rot/grün wie Claude Code)
             if (Array.isArray(json.diff) && json.diff.length > 0) {
@@ -2696,6 +3059,18 @@ CODE-QUALITÄT — ABSOLUT PFLICHT:
               }
             }
             ctLog(`✅ ${completionResult}`);
+            // Task-Kontext für nächste Aufgabe speichern
+            try {
+              let ctxData = [];
+              try { ctxData = JSON.parse(fs.readFileSync(TASK_CTX_FILE, 'utf8')); } catch {}
+              ctxData.unshift({
+                task: (original_command || instruction).substring(0, 120),
+                result: completionResult.substring(0, 150),
+                files: writtenFiles.map(f => pathMod.basename(f)),
+                ts: Date.now()
+              });
+              fs.writeFileSync(TASK_CTX_FILE, JSON.stringify(ctxData.slice(0, 6)));
+            } catch {}
             break;
           }
 
@@ -2706,25 +3081,118 @@ CODE-QUALITÄT — ABSOLUT PFLICHT:
           // Geänderte/geschriebene Dateien merken
           if ((toolName === 'write_file' || toolName === 'edit_file') && json.path) {
             if (!writtenFiles.includes(json.path)) writtenFiles.push(json.path);
-            if (toolName === 'write_file') {
+            if (pathMod.basename(json.path) === 'MIRA.md') {
+              miraMdWritten = true;
+              ctLog(`📖 MIRA.md aktualisiert`);
+              if (isReadAction) {
+                completionResult = completionResult || sentMessages.join('\n\n---\n\n') || 'MIRA.md erstellt.';
+                messages.push({ role: 'assistant', content: JSON.stringify(json) });
+                messages.push({ role: 'user', content: 'Tool-Ergebnis: MIRA.md geschrieben.' });
+                break;
+              }
+            } else if (toolName === 'write_file') {
               const lineCount = (json.content || '').split('\n').length;
               ctLog(`  ↳ ${lineCount} Zeilen geschrieben`);
             }
           } else if (toolName === 'execute_command') {
             execOutputs.push(result);
             ctLog(`  ↳ ${result.substring(0, 120)}`);
+          } else if (toolName === 'send_message') {
+            const msgText = (json.text || json.content || json.message || '').trim();
+            // Ordner bekannt aber noch keine Datei gelesen → immer blockieren (egal welche action)
+            if (resolvedDir && !readFileDone) {
+              const fileNames = lastListResult.split('\n')
+                .filter(l => l.includes('📄') && !l.includes('.DS_Store'))
+                .map(l => l.replace(/.*📄\s*/, '').trim()).filter(Boolean);
+              const prio = fileNames.find(f => /\.(html|js|ts|py|json|css|md)$/i.test(f)) || fileNames[0];
+              const filePath = prio && resolvedDir ? pathMod.join(resolvedDir, prio) : null;
+              const block = filePath
+                ? `STOP: Du hast noch keine Datei gelesen! JETZT read_file: {"tool":"read_file","path":"${filePath}"}`
+                : `STOP: Erst read_file aufrufen, dann send_message!`;
+              ctLog(`🚫 send_message blockiert — erst read_file`);
+              messages.push({ role: 'assistant', content: JSON.stringify(json) });
+              messages.push({ role: 'user', content: block });
+              continue;
+            }
+            if (msgText) sentMessages.push(msgText);
+            ctLog(`  ↳ Nachricht an User gesendet.`);
+            if (isReadAction && sentMessages.length >= 1) {
+              completionResult = sentMessages.join('\n\n---\n\n');
+              messages.push({ role: 'assistant', content: JSON.stringify(json) });
+              if (resolvedDir && !miraMdWritten) {
+                // MIRA.md noch nicht da → AI soll sie schreiben, dann fertig
+                messages.push({ role: 'user', content: `Erklärt. JETZT: write_file für MIRA.md — {"tool":"write_file","path":"${pathMod.join(resolvedDir, 'MIRA.md')}","content":"# MIRA.md · ${pathMod.basename(resolvedDir)} · ${new Date().toISOString().slice(0,10)}\\n## Stack\\n[aus den gelesenen Dateien ableiten]\\n## Dateien\\n[1 Zeile pro Datei: datei.js — was sie macht]\\n## API\\n[Endpunkte wenn vorhanden]\\n## Patterns\\n[wichtige Muster]\\n## Notizen\\n[offene Punkte]"}` });
+              } else {
+                messages.push({ role: 'user', content: 'Tool-Ergebnis (send_message): Nachricht gesendet.' });
+                break;
+              }
+            }
           } else {
             ctLog(`  ↳ ${result.substring(0, 120)}`);
           }
+
+          // list_files/read_file merken (für smarten Nudge)
+          if (toolName === 'list_files') {
+            listFilesDone = true;
+            lastListResult = result;
+
+            // Nach list_files: top 3 Dateien automatisch lesen — nicht auf GPT warten
+            if (!readFileDone && resolvedDir) {
+              const fileNames = result.split('\n')
+                .filter(l => l.includes('📄') && !l.includes('.DS_Store'))
+                .map(l => l.replace(/.*📄\s*/, '').trim()).filter(Boolean);
+
+              // Prioritäts-Reihenfolge: Einstiegspunkt → Config → weitere
+              const entryPoints = ['main.js','index.js','app.js','server.js','main.ts','index.ts','app.ts','main.py','app.py','index.html'];
+              const configs     = ['package.json','requirements.txt','Cargo.toml','go.mod','composer.json','pyproject.toml'];
+              const pickOrder = [
+                fileNames.find(f => entryPoints.includes(f.toLowerCase())),
+                fileNames.find(f => configs.includes(f.toLowerCase())),
+                fileNames.find(f => /\.(js|ts|py|java|go|rs|php|css|html|md)$/i.test(f) && !entryPoints.includes(f.toLowerCase()) && !configs.includes(f.toLowerCase()))
+              ].filter(Boolean).filter((f,i,a) => a.indexOf(f) === i).slice(0, 3);
+
+              const toRead = pickOrder.length > 0 ? pickOrder : [fileNames[0]].filter(Boolean);
+
+              if (toRead.length > 0) {
+                messages.push({ role: 'assistant', content: JSON.stringify(json) });
+                messages.push({ role: 'user', content: `Tool-Ergebnis (list_files):\n${result}` });
+
+                for (const fname of toRead) {
+                  const autoPath = pathMod.join(resolvedDir, fname);
+                  ctLog(`🔧 read_file (auto): ${fname}`);
+                  const autoResult = await executeTool('read_file', { path: autoPath });
+                  readFileDone = true;
+                  messages.push({ role: 'assistant', content: JSON.stringify({ tool: 'read_file', path: autoPath }) });
+                  messages.push({ role: 'user', content: `Tool-Ergebnis (read_file):\n${autoResult.substring(0, 4000)}` });
+                }
+                continue;
+              }
+            }
+          }
+          if (toolName === 'read_file') { readFileDone = true; }
 
           // Ergebnis zurück an AI
           messages.push({ role: 'assistant', content: JSON.stringify(json) });
           messages.push({ role: 'user', content: `Tool-Ergebnis (${toolName}):\n${result}` });
         }
 
-        // ── Artifact speichern (letzte geschriebene Datei) ──────────────────
-        if (writtenFiles.length > 0) {
-          const primary = writtenFiles[writtenFiles.length - 1];
+        // ── Fallback: wenn loop fertig aber keine Nachricht gesendet → aus MIRA.md / list_files antworten ──
+        if (sentMessages.length === 0 && isReadAction) {
+          const fallback = miraMapHint
+            ? `Ich habe die Struktur von "${pathMod.basename(resolvedDir || '')}" aus der MIRA.md:\n${miraMapHint.replace(/^.*MIRA\.md[^:]*:\n/, '').substring(0, 800)}`
+            : lastListResult
+            ? `Ich habe den Ordner "${pathMod.basename(resolvedDir || '')}" gefunden. Inhalt:\n${lastListResult.substring(0, 600)}\n\nKonnte keine tiefere Analyse erstellen — bitte frag mich nochmal spezifisch.`
+            : `Ich konnte keine Antwort erstellen. Bitte frag nochmal mit mehr Details.`;
+          sentMessages.push(fallback);
+          completionResult = fallback;
+          ctLog(`💬 Fallback-Antwort gesendet`, 'chat');
+          if (mainWindow) mainWindow.webContents.send('mira-response', { text: fallback, source: 'code_task' });
+        }
+
+        // ── Artifact speichern (letzte geschriebene Datei, keine MIRA.md) ──────────────────
+        const artifactFiles = writtenFiles.filter(f => pathMod.basename(f) !== 'MIRA.md');
+        if (artifactFiles.length > 0) {
+          const primary = artifactFiles[artifactFiles.length - 1];
           if (fs.existsSync(primary)) {
             const content = fs.readFileSync(primary, 'utf8');
             const ext = pathMod.extname(primary).replace('.', '') || language || 'js';
@@ -2755,10 +3223,17 @@ CODE-QUALITÄT — ABSOLUT PFLICHT:
         // Done signalisieren (alle Task-Typen) + SSE done Event
         { const _p = localTaskProgress.get(task.id); if (_p) { _p.done = true; setTimeout(() => localTaskProgress.delete(task.id), 300000); } }
         { const _s = sseClients.get(task.id); if (_s && !_s.writableEnded) { _s.write(`data: ${JSON.stringify({ type: 'done' })}\n\n`); _s.end(); sseClients.delete(task.id); } }
+        } // end if (!taskDone)
 
       } catch(e) {
         console.error('❌ code_task:', e.message);
         ctLog(`❌ Fehler: ${e.message}`, 'error');
+        if (e.no_payment && mainWindow) {
+          mainWindow.webContents.send('mira-response', {
+            text: '💳 MIRA Code ist noch nicht aktiviert. Bitte aktiviere deinen Plan auf getmira.space.',
+            source: 'code_task'
+          });
+        }
         await fetchWithTimeout(`${API}/api/agent/complete`, {
           method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ token: userToken, task_id: task.id, status: 'error', result: { error: e.message } })
