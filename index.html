@@ -86,6 +86,30 @@
     }
     .header-badge.show { display: block; }
 
+    /* Language Toggle */
+    .lang-toggle {
+      margin-left: 8px;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 20px;
+      padding: 4px 8px;
+      display: flex;
+      gap: 4px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    .lang-option {
+      padding: 4px 8px;
+      border-radius: 16px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s;
+    }
+    .lang-option.active {
+      background: var(--green);
+      color: #000;
+    }
+
     /* ── CONTENT ── */
     .content { flex: 1; padding: 32px 28px 28px; display: flex; flex-direction: column; }
 
@@ -737,19 +761,24 @@
     <div class="logo-mark">M</div>
     <div class="logo-info">
       <div class="logo-name">MIRA Agent</div>
-      <div class="logo-sub">Virtueller Mitarbeiter</div>
+      <div class="logo-sub" id="activate-subtitle">Virtueller Mitarbeiter</div>
+    </div>
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de" style="background:#34c759;color:#000">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
     </div>
   </div>
   <div class="content">
     <div class="act-hero">
-      <div class="act-eyebrow">Willkommen</div>
-      <div class="act-title">Aktiviere<br>deinen Agent.</div>
-      <div class="act-sub">Gib deinen 6-stelligen App-PIN ein. Du findest ihn in deinem MIRA-Account auf getmira.space.</div>
+      <div class="act-eyebrow" id="activate-welcome">Willkommen</div>
+      <div class="act-title" id="activate-title">Aktiviere<br>deinen Agent.</div>
+      <div class="act-sub" id="activate-sub">Gib deinen 6-stelligen App-PIN ein. Du findest ihn in deinem MIRA-Account auf getmira.space.</div>
       <div class="input-wrap">
         <input class="input-field clickable" id="inp-code" placeholder="6-stelliger PIN (z.B. 482917)" autocomplete="off" maxlength="20" />
       </div>
-      <button class="btn btn-primary clickable" onclick="doActivate()">Anmelden</button>
-      <button class="btn btn-ghost clickable" onclick="goToCalibrate()">Nur Desktop kalibrieren</button>
+      <button class="btn btn-primary clickable" onclick="doActivate()" id="activate-btn">Anmelden</button>
+      <button class="btn btn-ghost clickable" onclick="goToCalibrate()" id="calibrate-skip-btn">Nur Desktop kalibrieren</button>
     </div>
 
     <!-- ── INFO-KARTE 1: Von Wort zu Tat ── -->
@@ -757,24 +786,24 @@
       <div class="pipeline-row">
         <div class="pipeline-node">
           <div class="pn-icon">🗣️</div>
-          <div class="pn-lbl">Du sagst</div>
+          <div class="pn-lbl" id="pipeline-you">Du sagst</div>
         </div>
         <div class="pipeline-arrow">›</div>
         <div class="pipeline-node center-node">
           <div class="pn-icon">🧠</div>
-          <div class="pn-lbl">MIRA denkt</div>
+          <div class="pn-lbl" id="pipeline-mira">MIRA denkt</div>
         </div>
         <div class="pipeline-arrow">›</div>
         <div class="pipeline-node">
           <div class="pn-icon">✅</div>
-          <div class="pn-lbl">Erledigt</div>
+          <div class="pn-lbl" id="pipeline-done">Erledigt</div>
         </div>
       </div>
-      <div class="info-card-title">Von Wort zu Tat — in Sekunden</div>
-      <div class="info-card-body">
+      <div class="info-card-title" id="card1-title">Von Wort zu Tat — in Sekunden</div>
+      <div class="info-card-body" id="card1-body">
         Du schreibst oder sprichst was du willst. MIRA denkt kurz nach — und dann passiert es: Die Maus bewegt sich, Felder werden ausgefüllt, Mails geschrieben, Tabellen aktualisiert. Alles von selbst.<br><br>
         Kein Programmieren, keine Einrichtung, keine Technik.
-        <em>»Schick Schmidt eine Auftragsbestätigung«<br>→ MIRA öffnet Mail, findet die Adresse, schreibt und sendet.</em>
+        <em id="card1-example">»Schick Schmidt eine Auftragsbestätigung«<br>→ MIRA öffnet Mail, findet die Adresse, schreibt und sendet.</em>
       </div>
     </div>
 
@@ -797,8 +826,8 @@
           <span>Windows</span>
         </div>
       </div>
-      <div class="info-card-title">Läuft auf Mac &amp; Windows</div>
-      <div class="info-card-body">
+      <div class="info-card-title" id="card2-title">Läuft auf Mac &amp; Windows</div>
+      <div class="info-card-body" id="card2-body">
         MIRA liest deinen Bildschirm direkt vom Betriebssystem — präziser als jeder Screenshot. Auf dem Mac heißt diese Technik <strong style="color:var(--text)">AX Tree</strong>, auf Windows <strong style="color:var(--text)">UI Automation</strong>. Zwei Namen, eine Funktion: MIRA sieht jeden Button, jedes Textfeld, jede Zahl auf deinem Bildschirm — egal ob Mac oder PC.
       </div>
     </div>
@@ -814,33 +843,38 @@
     <div class="logo-mark">M</div>
     <div class="logo-info">
       <div class="logo-name">MIRA Agent</div>
-      <div class="logo-sub">Einrichtung</div>
+      <div class="logo-sub" id="calibrate-subtitle">Einrichtung</div>
+    </div>
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de2" style="background:#34c759;color:#000">DE</span>
+      <span class="lang-option" id="lang-en2">EN</span>
     </div>
   </div>
   <div class="content">
     <div class="cal-hero">
       <div class="cal-icon">🖥</div>
-      <div class="cal-title">Desktop einrichten</div>
-      <div class="cal-sub">MIRA braucht deinen Desktop als<br>Ausgangspunkt für alle Routen.</div>
+      <div class="cal-title" id="calibrate-title">Desktop einrichten</div>
+      <div class="cal-sub" id="calibrate-sub">MIRA braucht deinen Desktop als<br>Ausgangspunkt für alle Routen.</div>
 
       <div class="cal-step">
         <div class="cal-step-num">1</div>
-        <div class="cal-step-text">Gehe auf deinen <strong>Desktop</strong> – minimiere alle Fenster</div>
+        <div class="cal-step-text" id="calibrate-step1">Gehe auf deinen <strong>Desktop</strong> – minimiere alle Fenster</div>
       </div>
       <div class="cal-step">
         <div class="cal-step-num">2</div>
-        <div class="cal-step-text">Drücke <strong>0</strong> auf deiner Tastatur</div>
+        <div class="cal-step-text" id="calibrate-step2">Drücke <strong>0</strong> auf deiner Tastatur</div>
       </div>
       <div class="cal-step">
         <div class="cal-step-num">3</div>
-        <div class="cal-step-text">MIRA speichert deinen Desktop als Startpunkt</div>
+        <div class="cal-step-text" id="calibrate-step3">MIRA speichert deinen Desktop als Startpunkt</div>
       </div>
 
       <div style="margin-top: 28px; width: 100%;">
-        <button class="btn btn-primary clickable" onclick="startDesktopCalibration()" style="margin-bottom:8px">
+        <button class="btn btn-primary clickable" onclick="startDesktopCalibration()" style="margin-bottom:8px" id="calibrate-btn">
           Desktop jetzt kalibrieren
         </button>
-        <button class="btn btn-ghost clickable" onclick="skipCalibration()">Überspringen</button>
+        <button class="btn btn-ghost clickable" onclick="skipCalibration()" id="calibrate-skip">Überspringen</button>
       </div>
     </div>
   </div>
@@ -857,6 +891,11 @@
       <div class="logo-sub" id="d-status-sub">Bereit</div>
     </div>
     <div class="header-badge show" id="d-badge"><span class="status-dot"></span>Aktiv</div>
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de3" style="background:#34c759;color:#000">DE</span>
+      <span class="lang-option" id="lang-en3">EN</span>
+    </div>
     <button id="kill-btn" onclick="killCurrentTask()" title="Task sofort stoppen" style="
       margin-left:8px;background:none;border:1px solid rgba(255,69,58,0.0);cursor:pointer;
       color:#3d4460;font-size:13px;padding:4px 8px;border-radius:8px;
@@ -878,17 +917,17 @@
     <div class="stats-grid">
       <div class="stat-card">
         <div class="stat-val" id="d-tier">—</div>
-        <div class="stat-lbl">Plan</div>
+        <div class="stat-lbl" id="d-plan">Plan</div>
       </div>
       <div class="stat-card">
         <div class="stat-val" id="d-tasks">—</div>
-        <div class="stat-lbl">Tasks übrig</div>
+        <div class="stat-lbl" id="d-tasks-left">Tasks übrig</div>
       </div>
       <div class="stat-card" style="grid-column:1/-1">
         <div style="display:flex;align-items:center;justify-content:space-between">
           <div>
             <div class="stat-val" id="d-token-balance" style="font-size:20px">—</div>
-            <div class="stat-lbl">Tokens</div>
+            <div class="stat-lbl" id="d-tokens">Tokens</div>
           </div>
           <div id="d-token-low" style="font-size:10px;color:var(--red);display:none">⚠ Niedrig</div>
         </div>
@@ -897,15 +936,15 @@
 
     <div class="conn-card">
       <div class="conn-header">
-        <div class="conn-title">Website verbinden</div>
-        <div class="conn-sub">Auf getmira.space/mitarbeiter eingeben</div>
+        <div class="conn-title" id="conn-title">Website verbinden</div>
+        <div class="conn-sub" id="conn-sub">Auf getmira.space/mitarbeiter eingeben</div>
       </div>
       <div class="conn-field">
-        <div class="conn-lbl">Device ID</div>
+        <div class="conn-lbl" id="conn-device">Device ID</div>
         <div class="conn-val" id="d-device-id">—</div>
       </div>
       <div class="conn-field">
-        <div class="conn-lbl">PIN</div>
+        <div class="conn-lbl" id="conn-pin-label">PIN</div>
         <div class="conn-val pin" id="d-pin">—</div>
       </div>
     </div>
@@ -932,7 +971,7 @@
     <!-- Hey MIRA Hint -->
     <div style="margin-top:6px;padding:0 2px;font-size:10px;color:var(--text3)">
       <span style="font-family:'JetBrains Mono',monospace;color:var(--border2)">⌘⇧M</span>
-      <span style="margin-left:4px">→ Chat mit MIRA öffnen</span>
+      <span style="margin-left:4px" id="voice-hint">→ Chat mit MIRA öffnen</span>
     </div>
 
     <!-- Stille-Countdown (erscheint während Recording) -->
@@ -942,7 +981,7 @@
 
     <!-- Erkannter Text (Vorschau) -->
     <div id="voice-transcript-card" style="display:none;background:var(--surface2);border:1px solid var(--border2);border-radius:12px;padding:12px 14px;margin-top:4px">
-      <div style="font-size:11px;color:var(--text2);margin-bottom:4px">Erkannt:</div>
+      <div style="font-size:11px;color:var(--text2);margin-bottom:4px" id="voice-recognized">Erkannt:</div>
       <div id="voice-transcript-text" style="font-size:13px;color:var(--text);line-height:1.5"></div>
     </div>
 
@@ -950,14 +989,14 @@
 
     <!-- ── TEAM-STRIP ── -->
     <div onclick="ipcRenderer.invoke('open-mitarbeiter')" style="cursor:pointer;margin-bottom:4px">
-      <div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#3d4460;margin-bottom:8px">Unsere Mitarbeiter</div>
+      <div style="font-size:9px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#3d4460;margin-bottom:8px" id="team-title">Unsere Mitarbeiter</div>
       <div style="display:flex;gap:6px;align-items:center">
         <img src="https://api.dicebear.com/9.x/bottts/svg?seed=HansDispatch&backgroundColor=080a10&eyes=bulging&mouth=smile01" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Hans Dispatch · Dispatcher" loading="lazy" />
         <img src="https://api.dicebear.com/9.x/bottts/svg?seed=ErikaVision&backgroundColor=080a10&eyes=eva&mouth=smile02" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Dr. Erika W. · WahrnehmungsAmt" loading="lazy" />
         <img src="https://api.dicebear.com/9.x/bottts/svg?seed=Brigitte42&backgroundColor=080a10&eyes=robocop&mouth=smile03" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Brigitte I. · InformationsAmt" loading="lazy" />
         <img src="https://api.dicebear.com/9.x/bottts/svg?seed=SvenRAM&backgroundColor=080a10&eyes=gooey&mouth=bite" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Sven K. · SessionContext" loading="lazy" />
         <img src="https://api.dicebear.com/9.x/bottts/svg?seed=FranzSecurity&backgroundColor=080a10&eyes=hearts&mouth=bite" width="30" height="30" style="border-radius:6px;border:1px solid #1c2035;flex-shrink:0" title="Franz G. · GefahrenAmt" loading="lazy" />
-        <div style="flex:1;font-size:10px;color:#3d4460;text-align:right;line-height:1.3">7 online<br>0 krank</div>
+        <div style="flex:1;font-size:10px;color:#3d4460;text-align:right;line-height:1.3" id="team-status">7 online<br>0 krank</div>
       </div>
     </div>
 
@@ -968,7 +1007,7 @@
       <div class="training-header">
         <div class="training-icon" id="training-icon">👁</div>
         <div>
-          <div class="training-title">1-Stunden Training</div>
+          <div class="training-title" id="training-title">1-Stunden Training</div>
           <div class="training-sub" id="training-sub-text">Arbeite normal — MIRA lernt dabei mit.</div>
         </div>
       </div>
@@ -979,8 +1018,8 @@
           <div class="training-bar-fill" id="training-bar" style="width:0%"></div>
         </div>
         <div class="training-stats">
-          <div>Verbleibend: <span id="training-remaining">60 min</span></div>
-          <div>Beobachtet: <span id="training-obs">0</span> Klicks</div>
+          <div id="training-remaining-label">Verbleibend: <span id="training-remaining">60 min</span></div>
+          <div id="training-observed-label">Beobachtet: <span id="training-obs">0</span> Klicks</div>
         </div>
       </div>
 
@@ -998,7 +1037,7 @@
       <div class="training-header">
         <div class="training-icon" id="brutcamp-icon">🔢</div>
         <div>
-          <div class="training-title">Sehen lernen</div>
+          <div class="training-title" id="brutcamp-title">Sehen lernen</div>
           <div class="training-sub" id="brutcamp-sub">MIRA lernt Icons, Buttons und Felder — mathematisch.</div>
         </div>
       </div>
@@ -1007,26 +1046,26 @@
       </div>
     </div>
 
-    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('kb-open')" style="margin-bottom:8px">
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('kb-open')" style="margin-bottom:8px" id="kb-btn">
       🧠 Wissensbase bearbeiten
     </button>
-    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-device-knowledge')" style="margin-bottom:8px">
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-device-knowledge')" style="margin-bottom:8px" id="teach-btn">
       ✦ Mira beibringen
     </button>
-    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-user-profile')" style="margin-bottom:8px">
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-user-profile')" style="margin-bottom:8px" id="profile-btn">
       👤 Unternehmensprofil
     </button>
-    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-target-training')" style="margin-bottom:8px">
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('open-target-training')" style="margin-bottom:8px" id="click-calibration-btn">
       🎯 Klick-Kalibrierung
     </button>
-    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('templates-open')" style="margin-bottom:8px">
+    <button class="btn btn-green clickable" onclick="ipcRenderer.invoke('templates-open')" style="margin-bottom:8px" id="templates-btn">
       🌐 Template-Bibliothek
     </button>
-    <button class="btn btn-green clickable" onclick="showRouteScreen()" style="margin-bottom:8px">
+    <button class="btn btn-green clickable" onclick="showRouteScreen()" style="margin-bottom:8px" id="routes-btn">
       🗺 Routen verwalten
     </button>
-    <button class="btn btn-ghost clickable" onclick="goToCalibrate()">Desktop neu kalibrieren</button>
-    <button class="btn btn-ghost clickable" onclick="ipcRenderer.invoke('open-mitarbeiter')" style="margin-top:4px;border-color:#1c2035;color:#4a5068">👥 Unsere Mitarbeiter</button>
+    <button class="btn btn-ghost clickable" onclick="goToCalibrate()" id="recalibrate-btn">Desktop neu kalibrieren</button>
+    <button class="btn btn-ghost clickable" onclick="ipcRenderer.invoke('open-mitarbeiter')" style="margin-top:4px;border-color:#1c2035;color:#4a5068" id="team-btn">👥 Unsere Mitarbeiter</button>
   </div>
 </div>
 
@@ -1038,22 +1077,27 @@
     <div class="logo-mark">M</div>
     <div class="logo-info">
       <div class="logo-name">MIRA Agent</div>
-      <div class="logo-sub">Routen</div>
+      <div class="logo-sub" id="routes-subtitle">Routen</div>
+    </div>
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de4" style="background:#34c759;color:#000">DE</span>
+      <span class="lang-option" id="lang-en4">EN</span>
     </div>
   </div>
   <div class="content">
-    <button class="back-btn clickable" onclick="showDashboard()">← Zurück</button>
+    <button class="back-btn clickable" onclick="showDashboard()" id="back-btn">← Zurück</button>
 
     <!-- PC Vorstellen Card -->
     <div class="route-new-card" style="margin-bottom:12px;border-color:#00ff8820">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
         <div style="width:8px;height:8px;border-radius:50%;background:#00ff88;box-shadow:0 0 8px #00ff88"></div>
-        <div class="route-new-title" style="margin:0;color:#00ff88">Autonomes Handeln freischalten</div>
+        <div class="route-new-title" style="margin:0;color:#00ff88" id="pc-title">Autonomes Handeln freischalten</div>
       </div>
-      <div class="route-new-sub" style="margin-bottom:14px">
+      <div class="route-new-sub" style="margin-bottom:14px" id="pc-sub">
         Stelle MIRA deinen PC vor — einmalig, 10 Minuten. MIRA lernt deinen Browser, Mail, Dateien und Apps kennen und kann danach eigenständig handeln ohne jede Route zu trainieren.
       </div>
-      <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px" onclick="ipcRenderer.invoke('open-pc-training')">
+      <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px" onclick="ipcRenderer.invoke('open-pc-training')" id="pc-btn">
         🖥️ PC jetzt vorstellen
       </button>
     </div>
@@ -1062,28 +1106,28 @@
 <div class="route-new-card" style="margin-bottom:12px;border-color:#e8ff4720">
   <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
     <div style="width:8px;height:8px;border-radius:50%;background:#e8ff47;box-shadow:0 0 8px #e8ff47"></div>
-    <div class="route-new-title" style="margin:0;color:#e8ff47">Büro Setup</div>
+    <div class="route-new-title" style="margin:0;color:#e8ff47" id="office-title">Büro Setup</div>
   </div>
-  <div class="route-new-sub" style="margin-bottom:14px">
+  <div class="route-new-sub" style="margin-bottom:14px" id="office-sub">
     Richte MIRA für deinen Büro-Alltag ein — Mail, Excel, Word, Templates. Einmalig, 5 Minuten. Danach versteht MIRA komplexe Aufgaben wie "fasse Rechnungen aus Mail zusammen und trag sie in Excel ein".
   </div>
-  <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;background:#e8ff4715;border-color:#e8ff4740;color:#e8ff47" onclick="ipcRenderer.invoke('open-setup-overlay')">
+  <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;background:#e8ff4715;border-color:#e8ff4740;color:#e8ff47" onclick="ipcRenderer.invoke('open-setup-overlay')" id="office-start">
     ⚡ Büro Setup starten
   </button>
-  <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;margin-top:8px;background:#ff3b3015;border-color:#ff3b3040;color:#ff453a" onclick="handleLogout()">
+  <button class="btn btn-green clickable" style="width:100%;font-size:13px;padding:12px;margin-top:8px;background:#ff3b3015;border-color:#ff3b3040;color:#ff453a" onclick="handleLogout()" id="logout-btn">
     🚪 Abmelden
   </button>
 </div>
 
     <!-- Neue Route -->
     <div class="route-new-card">
-      <div class="route-new-title">Neue Route aufnehmen</div>
-      <div class="route-new-sub">Gib einen Namen ein, starte die Aufnahme und zeige MIRA was sie tun soll – Schritt für Schritt.</div>
+      <div class="route-new-title" id="new-route-title">Neue Route aufnehmen</div>
+      <div class="route-new-sub" id="new-route-sub">Gib einen Namen ein, starte die Aufnahme und zeige MIRA was sie tun soll – Schritt für Schritt.</div>
 
       <input class="route-input clickable" id="route-name-inp" placeholder="z.B. Rechnungen aus Gmail holen" />
 
       <div style="display:flex;gap:8px">
-        <button class="btn btn-green clickable" style="flex:1;font-size:13px;padding:12px" onclick="startRouteRecording()">
+        <button class="btn btn-green clickable" style="flex:1;font-size:13px;padding:12px" onclick="startRouteRecording()" id="record-start">
           🔴 Aufnahme starten
         </button>
       </div>
@@ -1091,25 +1135,25 @@
       <!-- Anleitung -->
       <div id="route-how" style="margin-top:16px;display:none">
         <div style="height:1px;background:var(--border);margin-bottom:14px"></div>
-        <div class="section-lbl">So geht's</div>
+        <div class="section-lbl" id="how-title">So geht's</div>
         <div style="display:flex;flex-direction:column;gap:6px">
-          <div style="font-size:11px;color:var(--text3);line-height:1.6"><span style="color:var(--gold);font-weight:700;font-family:'JetBrains Mono',monospace">0</span> → Desktop als Start</div>
-          <div style="font-size:11px;color:var(--text3);line-height:1.6"><span style="color:var(--green);font-weight:700;font-family:'JetBrains Mono',monospace">1–8</span> → Maus auf Element → Taste drücken → Befehl eingeben</div>
-          <div style="font-size:11px;color:var(--text3);line-height:1.6"><span style="color:var(--red);font-weight:700;font-family:'JetBrains Mono',monospace">9</span> → Fertig & speichern</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.6" id="how-step0"><span style="color:var(--gold);font-weight:700;font-family:'JetBrains Mono',monospace">0</span> → Desktop als Start</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.6" id="how-step1"><span style="color:var(--green);font-weight:700;font-family:'JetBrains Mono',monospace">1–8</span> → Maus auf Element → Taste drücken → Befehl eingeben</div>
+          <div style="font-size:11px;color:var(--text3);line-height:1.6" id="how-step2"><span style="color:var(--red);font-weight:700;font-family:'JetBrains Mono',monospace">9</span> → Fertig & speichern</div>
         </div>
       </div>
     </div>
 
     <!-- Route trainieren -->
     <div class="route-new-card" style="padding:14px 16px">
-      <button class="btn btn-ghost clickable" onclick="toggleTrainingInput()" style="width:100%;font-size:13px;padding:10px">
+      <button class="btn btn-ghost clickable" onclick="toggleTrainingInput()" style="width:100%;font-size:13px;padding:10px" id="train-route-btn">
         🎓 Route trainieren
       </button>
       <div id="training-input-wrap" style="display:none;margin-top:10px">
         <input id="training-cmd-input" placeholder="z.B. öffne Opera..."
           style="width:100%;background:#111;border:1px solid #222;border-radius:8px;
                  padding:10px;color:#fff;font-size:13px;outline:none;margin-bottom:8px">
-        <button class="btn btn-green clickable" style="width:100%" onclick="startTrainingFromInput()">Starten</button>
+        <button class="btn btn-green clickable" style="width:100%" onclick="startTrainingFromInput()" id="start-training-btn">Starten</button>
       </div>
     </div>
 
@@ -1118,7 +1162,7 @@
       <div class="running-card">
         <div style="display:flex;align-items:center;gap:8px;justify-content:center;margin-bottom:12px">
           <div style="width:8px;height:8px;border-radius:50%;background:var(--red);animation:breathe 1s infinite"></div>
-          <div style="font-size:13px;font-weight:700">Aufnahme läuft</div>
+          <div style="font-size:13px;font-weight:700" id="recording-title">Aufnahme läuft</div>
         </div>
         <div class="step-dots" id="rec-dots">
           <div class="step-dot" id="rdot-0"></div>
@@ -1131,8 +1175,8 @@
           <div class="step-dot" id="rdot-7"></div>
           <div class="step-dot" id="rdot-8"></div>
         </div>
-        <div class="running-step" id="rec-live-status" style="margin-top:12px">Warte auf Step 0 (Desktop)...</div>
-        <button class="btn btn-ghost clickable" style="margin-top:14px;font-size:12px;padding:10px" onclick="cancelRecording()">Abbrechen</button>
+        <div class="running-step" id="rec-live-status" style="margin-top:12px"></div>
+        <button class="btn btn-ghost clickable" style="margin-top:14px;font-size:12px;padding:10px" onclick="cancelRecording()" id="cancel-recording">Abbrechen</button>
       </div>
     </div>
 
@@ -1141,18 +1185,18 @@
       <div class="running-card">
         <div class="spinner"></div>
         <div class="running-title" id="run-title">Route läuft...</div>
-        <div class="running-step" id="run-step">Initialisiere...</div>
+        <div class="running-step" id="run-step"></div>
         <div class="step-dots" id="run-dots"></div>
       </div>
     </div>
 
     <!-- Route Liste -->
     <div id="route-list-section">
-      <div class="section-lbl">Gespeicherte Routen</div>
+      <div class="section-lbl" id="saved-routes-title">Gespeicherte Routen</div>
       <div class="route-list" id="route-list">
         <div class="empty-state">
           <div class="empty-icon">🗺</div>
-          Noch keine Routen.<br>Nimm deine erste auf!
+          <span id="no-routes">Noch keine Routen.<br>Nimm deine erste auf!</span>
         </div>
       </div>
     </div>
@@ -1164,6 +1208,353 @@
 
 <script>
   const { ipcRenderer } = require('electron');
+
+  // ====================================
+  // INTERNATIONALIZATION (DE/EN)
+  // ====================================
+  
+  const i18n = {
+    de: {
+      // Activation
+      'activate-subtitle': 'Virtueller Mitarbeiter',
+      'activate-welcome': 'Willkommen',
+      'activate-title': 'Aktiviere<br>deinen Agent.',
+      'activate-sub': 'Gib deinen 6-stelligen App-PIN ein. Du findest ihn in deinem MIRA-Account auf getmira.space.',
+      'activate-btn': 'Anmelden',
+      'calibrate-skip-btn': 'Nur Desktop kalibrieren',
+      
+      // Pipeline
+      'pipeline-you': 'Du sagst',
+      'pipeline-mira': 'MIRA denkt',
+      'pipeline-done': 'Erledigt',
+      
+      // Cards
+      'card1-title': 'Von Wort zu Tat — in Sekunden',
+      'card1-body': 'Du schreibst oder sprichst was du willst. MIRA denkt kurz nach — und dann passiert es: Die Maus bewegt sich, Felder werden ausgefüllt, Mails geschrieben, Tabellen aktualisiert. Alles von selbst.<br><br>Kein Programmieren, keine Einrichtung, keine Technik.',
+      'card1-example': '»Schick Schmidt eine Auftragsbestätigung«<br>→ MIRA öffnet Mail, findet die Adresse, schreibt und sendet.',
+      'card2-title': 'Läuft auf Mac & Windows',
+      'card2-body': 'MIRA liest deinen Bildschirm direkt vom Betriebssystem — präziser als jeder Screenshot. Auf dem Mac heißt diese Technik <strong style="color:var(--text)">AX Tree</strong>, auf Windows <strong style="color:var(--text)">UI Automation</strong>. Zwei Namen, eine Funktion: MIRA sieht jeden Button, jedes Textfeld, jede Zahl auf deinem Bildschirm — egal ob Mac oder PC.',
+      
+      // Calibration
+      'calibrate-subtitle': 'Einrichtung',
+      'calibrate-title': 'Desktop einrichten',
+      'calibrate-sub': 'MIRA braucht deinen Desktop als<br>Ausgangspunkt für alle Routen.',
+      'calibrate-step1': 'Gehe auf deinen <strong>Desktop</strong> – minimiere alle Fenster',
+      'calibrate-step2': 'Drücke <strong>0</strong> auf deiner Tastatur',
+      'calibrate-step3': 'MIRA speichert deinen Desktop als Startpunkt',
+      'calibrate-btn': 'Desktop jetzt kalibrieren',
+      'calibrate-skip': 'Überspringen',
+      
+      // Dashboard
+      'd-plan': 'Plan',
+      'd-tasks-left': 'Tasks übrig',
+      'd-tokens': 'Tokens',
+      'conn-title': 'Website verbinden',
+      'conn-sub': 'Auf getmira.space/mitarbeiter eingeben',
+      'conn-device': 'Device ID',
+      'conn-pin-label': 'PIN',
+      'voice-label': 'MIRA sprechen',
+      'voice-sub': 'Tippe oder sprich einen Befehl',
+      'voice-hint': '→ Chat mit MIRA öffnen',
+      'voice-recognized': 'Erkannt:',
+      'team-title': 'Unsere Mitarbeiter',
+      'team-status': '7 online<br>0 krank',
+      'training-title': '1-Stunden Training',
+      'training-sub-text': 'Arbeite normal — MIRA lernt dabei mit.',
+      'training-remaining-label': 'Verbleibend:',
+      'training-observed-label': 'Beobachtet:',
+      'training-btn-start': '▶ Training starten',
+      'training-btn-stop': '■ Training stoppen',
+      'brutcamp-title': 'Sehen lernen',
+      'brutcamp-sub': 'MIRA lernt Icons, Buttons und Felder — mathematisch.',
+      'kb-btn': '🧠 Wissensbase bearbeiten',
+      'teach-btn': '✦ Mira beibringen',
+      'profile-btn': '👤 Unternehmensprofil',
+      'click-calibration-btn': '🎯 Klick-Kalibrierung',
+      'templates-btn': '🌐 Template-Bibliothek',
+      'routes-btn': '🗺 Routen verwalten',
+      'recalibrate-btn': 'Desktop neu kalibrieren',
+      'team-btn': '👥 Unsere Mitarbeiter',
+      
+      // Routes
+      'routes-subtitle': 'Routen',
+      'back-btn': '← Zurück',
+      'pc-title': 'Autonomes Handeln freischalten',
+      'pc-sub': 'Stelle MIRA deinen PC vor — einmalig, 10 Minuten. MIRA lernt deinen Browser, Mail, Dateien und Apps kennen und kann danach eigenständig handeln ohne jede Route zu trainieren.',
+      'pc-btn': '🖥️ PC jetzt vorstellen',
+      'office-title': 'Büro Setup',
+      'office-sub': 'Richte MIRA für deinen Büro-Alltag ein — Mail, Excel, Word, Templates. Einmalig, 5 Minuten. Danach versteht MIRA komplexe Aufgaben wie "fasse Rechnungen aus Mail zusammen und trag sie in Excel ein".',
+      'office-start': '⚡ Büro Setup starten',
+      'logout-btn': '🚪 Abmelden',
+      'new-route-title': 'Neue Route aufnehmen',
+      'new-route-sub': 'Gib einen Namen ein, starte die Aufnahme und zeige MIRA was sie tun soll – Schritt für Schritt.',
+      'record-start': '🔴 Aufnahme starten',
+      'how-title': 'So geht\'s',
+      'how-step0': '<span style="color:var(--gold);font-weight:700;font-family:\'JetBrains Mono\',monospace">0</span> → Desktop als Start',
+      'how-step1': '<span style="color:var(--green);font-weight:700;font-family:\'JetBrains Mono\',monospace">1–8</span> → Maus auf Element → Taste drücken → Befehl eingeben',
+      'how-step2': '<span style="color:var(--red);font-weight:700;font-family:\'JetBrains Mono\',monospace">9</span> → Fertig & speichern',
+      'train-route-btn': '🎓 Route trainieren',
+      'start-training-btn': 'Starten',
+      'recording-title': 'Aufnahme läuft',
+      'cancel-recording': 'Abbrechen',
+      'saved-routes-title': 'Gespeicherte Routen',
+      'no-routes': 'Noch keine Routen.<br>Nimm deine erste auf!',
+      // Toast / confirm messages
+      't-enter-pin': 'PIN oder Code eingeben',
+      't-connecting': 'Verbinde...',
+      't-no-tasks': 'Keine Tasks mehr übrig — Code eingeben zum Aufladen',
+      't-training-stopped': 'Training gestoppt — Daten werden verarbeitet',
+      't-training-started': 'Training gestartet — arbeite normal weiter!',
+      't-training-failed': 'Training konnte nicht gestartet werden',
+      't-training-done': 'Klicks gelernt',
+      't-mira-learned': 'MIRA hat alles gelernt!',
+      't-pattern-deleted': 'Pattern gelöscht',
+      't-field-required': 'Feld-Name und Beschreibung erforderlich',
+      't-go-desktop': 'Gehe auf Desktop und drücke 0',
+      't-name-route': 'Bitte Route einen Namen geben',
+      't-recording-cancelled': 'Aufnahme abgebrochen',
+      't-desktop-calibrated': 'Desktop kalibriert!',
+      't-session-expired': 'Sitzung abgelaufen – bitte neu einloggen',
+      't-subscription-expired': 'Subscription abgelaufen – bitte verlängern',
+      't-device-deactivated': 'Gerät deaktiviert – bitte neu anmelden',
+      't-logged-out': 'Erfolgreich abgemeldet',
+      't-logout-confirm': 'Wirklich abmelden? MIRA wird gestoppt.',
+      't-mic-denied': 'Mikrofon-Zugriff verweigert',
+      't-speech-unavailable': 'Spracherkennung nicht verfügbar',
+      't-speech-network': 'Spracherkennung: Netzwerkfehler',
+      't-task-killed': '🛑 Task gestoppt',
+      't-recording-started': 'Aufnahme gestartet',
+      't-route-saved': 'gespeichert',
+      't-route-deleted': 'gelöscht',
+      't-steps-done': 'Steps erledigt',
+      't-step-failed': 'fehlgeschlagen',
+      't-error': 'Fehler',
+      't-unknown': 'unbekannt',
+      't-delete-confirm': 'wirklich löschen?',
+      'd-ready': 'Bereit',
+      'd-active': 'Aktiv',
+      'd-offline': 'Offline',
+      'd-no-conn': 'Keine Verbindung',
+      'd-token-low': '⚠ Niedrig',
+      't-wait-step0': 'Warte auf Step 0 (Desktop)...',
+      't-desktop-saved': 'Desktop gespeichert ✓ Gehe zu Step 1...',
+      't-all-steps': 'Alle Steps aufgenommen → drücke 9 zum Speichern',
+      't-step-done': '✓ → gehe zu Step',
+      't-initializing': 'Initialisiere...',
+      't-starting': 'Starte...',
+      't-scanning': 'MIRA scannt deinen Screen…',
+      't-found-elements': 'Elemente gefunden — lass uns starten',
+      't-bc-done': '✅ Training abgeschlossen!',
+      't-move-mouse': 'Bewege die Maus zu: "%cmd%" → dann Bestätigen',
+      't-training-error': 'Training Fehler',
+      't-ok': '✓ Alles klar, ich kümmere mich darum!',
+      't-unknown-error': 'Unbekannter Fehler',
+      't-conn-error': '❌ Verbindungsfehler: ',
+    },
+    en: {
+      // Activation
+      'activate-subtitle': 'Virtual Assistant',
+      'activate-welcome': 'Welcome',
+      'activate-title': 'Activate<br>your Agent.',
+      'activate-sub': 'Enter your 6-digit app PIN. You can find it in your MIRA account at getmira.space.',
+      'activate-btn': 'Login',
+      'calibrate-skip-btn': 'Calibrate Desktop only',
+      
+      // Pipeline
+      'pipeline-you': 'You say',
+      'pipeline-mira': 'MIRA thinks',
+      'pipeline-done': 'Done',
+      
+      // Cards
+      'card1-title': 'From words to action — in seconds',
+      'card1-body': 'You type or speak what you want. MIRA thinks briefly — and then it happens: The mouse moves, fields are filled, emails written, spreadsheets updated. All by itself.<br><br>No coding, no setup, no tech.',
+      'card1-example': '"Send Schmidt an order confirmation"<br>→ MIRA opens mail, finds the address, writes and sends.',
+      'card2-title': 'Runs on Mac & Windows',
+      'card2-body': 'MIRA reads your screen directly from the operating system — more precise than any screenshot. On Mac this technology is called <strong style="color:var(--text)">AX Tree</strong>, on Windows <strong style="color:var(--text)">UI Automation</strong>. Two names, one function: MIRA sees every button, every text field, every number on your screen — whether Mac or PC.',
+      
+      // Calibration
+      'calibrate-subtitle': 'Setup',
+      'calibrate-title': 'Desktop Setup',
+      'calibrate-sub': 'MIRA needs your desktop as<br>starting point for all routes.',
+      'calibrate-step1': 'Go to your <strong>Desktop</strong> – minimize all windows',
+      'calibrate-step2': 'Press <strong>0</strong> on your keyboard',
+      'calibrate-step3': 'MIRA saves your desktop as starting point',
+      'calibrate-btn': 'Calibrate Desktop now',
+      'calibrate-skip': 'Skip',
+      
+      // Dashboard
+      'd-plan': 'Plan',
+      'd-tasks-left': 'Tasks left',
+      'd-tokens': 'Tokens',
+      'conn-title': 'Connect Website',
+      'conn-sub': 'Enter at getmira.space/mitarbeiter',
+      'conn-device': 'Device ID',
+      'conn-pin-label': 'PIN',
+      'voice-label': 'Talk to MIRA',
+      'voice-sub': 'Type or speak a command',
+      'voice-hint': '→ Open chat with MIRA',
+      'voice-recognized': 'Recognized:',
+      'team-title': 'Our Team',
+      'team-status': '7 online<br>0 sick',
+      'training-title': '1-Hour Training',
+      'training-sub-text': 'Work normally — MIRA learns along the way.',
+      'training-remaining-label': 'Remaining:',
+      'training-observed-label': 'Observed:',
+      'training-btn-start': '▶ Start training',
+      'training-btn-stop': '■ Stop training',
+      'brutcamp-title': 'Learning to See',
+      'brutcamp-sub': 'MIRA learns icons, buttons and fields — mathematically.',
+      'kb-btn': '🧠 Edit knowledge base',
+      'teach-btn': '✦ Teach Mira',
+      'profile-btn': '👤 Company profile',
+      'click-calibration-btn': '🎯 Click calibration',
+      'templates-btn': '🌐 Template library',
+      'routes-btn': '🗺 Manage routes',
+      'recalibrate-btn': 'Recalibrate desktop',
+      'team-btn': '👥 Our team',
+      
+      // Routes
+      'routes-subtitle': 'Routes',
+      'back-btn': '← Back',
+      'pc-title': 'Unlock autonomous action',
+      'pc-sub': 'Introduce your PC to MIRA — one-time, 10 minutes. MIRA learns your browser, mail, files and apps and can then act independently without training any route.',
+      'pc-btn': '🖥️ Introduce PC now',
+      'office-title': 'Office Setup',
+      'office-sub': 'Set up MIRA for your office routine — mail, Excel, Word, templates. One-time, 5 minutes. Afterwards MIRA understands complex tasks like "summarize invoices from mail and enter them in Excel".',
+      'office-start': '⚡ Start office setup',
+      'logout-btn': '🚪 Logout',
+      'new-route-title': 'Record new route',
+      'new-route-sub': 'Enter a name, start recording and show MIRA what to do – step by step.',
+      'record-start': '🔴 Start recording',
+      'how-title': 'How it works',
+      'how-step0': '<span style="color:var(--gold);font-weight:700;font-family:\'JetBrains Mono\',monospace">0</span> → Desktop as start',
+      'how-step1': '<span style="color:var(--green);font-weight:700;font-family:\'JetBrains Mono\',monospace">1–8</span> → Mouse on element → press key → enter command',
+      'how-step2': '<span style="color:var(--red);font-weight:700;font-family:\'JetBrains Mono\',monospace">9</span> → Finish & save',
+      'train-route-btn': '🎓 Train route',
+      'start-training-btn': 'Start',
+      'recording-title': 'Recording',
+      'cancel-recording': 'Cancel',
+      'saved-routes-title': 'Saved routes',
+      'no-routes': 'No routes yet.<br>Record your first one!',
+      // Toast / confirm messages
+      't-enter-pin': 'Enter PIN or code',
+      't-connecting': 'Connecting...',
+      't-no-tasks': 'No tasks left — enter code to top up',
+      't-training-stopped': 'Training stopped — data is being processed',
+      't-training-started': 'Training started — keep working normally!',
+      't-training-failed': 'Training could not be started',
+      't-training-done': 'clicks learned',
+      't-mira-learned': 'MIRA has learned everything!',
+      't-pattern-deleted': 'Pattern deleted',
+      't-field-required': 'Field name and description required',
+      't-go-desktop': 'Go to Desktop and press 0',
+      't-name-route': 'Please name the route',
+      't-recording-cancelled': 'Recording cancelled',
+      't-desktop-calibrated': 'Desktop calibrated!',
+      't-session-expired': 'Session expired – please log in again',
+      't-subscription-expired': 'Subscription expired – please renew',
+      't-device-deactivated': 'Device deactivated – please log in again',
+      't-logged-out': 'Successfully logged out',
+      't-logout-confirm': 'Really log out? MIRA will stop.',
+      't-mic-denied': 'Microphone access denied',
+      't-speech-unavailable': 'Speech recognition not available',
+      't-speech-network': 'Speech recognition: network error',
+      't-task-killed': '🛑 Task stopped',
+      't-recording-started': 'Recording started',
+      't-route-saved': 'saved',
+      't-route-deleted': 'deleted',
+      't-steps-done': 'steps completed',
+      't-step-failed': 'failed',
+      't-error': 'Error',
+      't-unknown': 'unknown',
+      't-delete-confirm': 'really delete?',
+      'd-ready': 'Ready',
+      'd-active': 'Active',
+      'd-offline': 'Offline',
+      'd-no-conn': 'No connection',
+      'd-token-low': '⚠ Low',
+      't-wait-step0': 'Waiting for Step 0 (Desktop)...',
+      't-desktop-saved': 'Desktop saved ✓ Go to Step 1...',
+      't-all-steps': 'All steps recorded → press 9 to save',
+      't-step-done': '✓ → go to Step',
+      't-initializing': 'Initializing...',
+      't-starting': 'Starting...',
+      't-scanning': 'MIRA is scanning your screen…',
+      't-found-elements': 'elements found — let\'s start',
+      't-bc-done': '✅ Training complete!',
+      't-move-mouse': 'Move mouse to: "%cmd%" → then confirm',
+      't-training-error': 'Training error',
+      't-ok': '✓ Got it, I\'ll take care of it!',
+      't-unknown-error': 'Unknown error',
+      't-conn-error': '❌ Connection error: ',
+    }
+  };
+
+  // Helper: translate key
+  function t(key) { return (i18n[currentLang] && i18n[currentLang][key]) || key; }
+
+  let currentLang = localStorage.getItem('mira_language') || 'de';
+
+  function toggleLanguage() {
+    currentLang = currentLang === 'de' ? 'en' : 'de';
+    localStorage.setItem('mira_language', currentLang);
+    updateUILanguage();
+  }
+
+  function updateUILanguage() {
+    // Update all DE/EN toggle buttons
+    document.querySelectorAll('[id^="lang-de"]').forEach(el => {
+      el.style.background = currentLang === 'de' ? '#34c759' : 'transparent';
+      el.style.color = currentLang === 'de' ? '#000' : 'var(--text2)';
+    });
+    document.querySelectorAll('[id^="lang-en"]').forEach(el => {
+      el.style.background = currentLang === 'en' ? '#34c759' : 'transparent';
+      el.style.color = currentLang === 'en' ? '#000' : 'var(--text2)';
+    });
+
+    // Update all text elements
+    const elements = document.querySelectorAll('[id]');
+    elements.forEach(el => {
+      const id = el.id;
+      if (i18n[currentLang][id]) {
+        if (id.includes('body') || id.includes('sub') || id.includes('step') || id.includes('hint') || id.includes('status')) {
+          el.innerHTML = i18n[currentLang][id];
+        } else {
+          el.textContent = i18n[currentLang][id];
+        }
+      }
+    });
+
+    // Update training button text based on state
+    const trainingBtn = document.getElementById('training-btn');
+    if (trainingBtn) {
+      trainingBtn.textContent = _trainingActive
+        ? i18n[currentLang]['training-btn-stop']
+        : i18n[currentLang]['training-btn-start'];
+    }
+
+    // Update d-badge (only if agent is online — don't overwrite offline state)
+    const badge = document.getElementById('d-badge');
+    if (badge && !badge.style.color) { // no color = online state
+      badge.innerHTML = `<span class="status-dot"></span>${t('d-active')}`;
+    }
+
+    // Update d-status-sub (only if showing "Ready/Bereit")
+    const statusSub = document.getElementById('d-status-sub');
+    if (statusSub && (statusSub.textContent === 'Bereit' || statusSub.textContent === 'Ready')) {
+      statusSub.textContent = t('d-ready');
+    }
+
+    // Update d-token-low visible text
+    const tokenLow = document.getElementById('d-token-low');
+    if (tokenLow && tokenLow.style.display !== 'none') {
+      tokenLow.textContent = t('d-token-low');
+    }
+  }
+
+  // ====================================
+  // EXISTING CODE (everything below stays exactly the same)
+  // ====================================
 
   // ── Auto-Update Banner ──
   ipcRenderer.on('update-status', (event, status) => {
@@ -1231,8 +1622,8 @@ function showRouteScreen() {
 
   async function doActivate() {
     const code = document.getElementById('inp-code').value.trim();
-    if (!code) { toast('PIN oder Code eingeben', 'error'); return; }
-    toast('Verbinde...', 'info');
+    if (!code) { toast(t('t-enter-pin'), 'error'); return; }
+    toast(t('t-connecting'), 'info');
     // 6-stellige Zahl → PIN-Login, sonst → alter Code-Weg
     const isPin = /^\d{6}$/.test(code);
     const result = await ipcRenderer.invoke(isPin ? 'activate-pin' : 'activate-token', code);
@@ -1272,7 +1663,7 @@ function startStatsRefresh() {
       // ← NEU: Bei 0 Tasks raus zum Login
       if (stats.tasks_remaining === 0) {
         stopStatsRefresh();
-        toast('Keine Tasks mehr übrig — Code eingeben zum Aufladen', 'error');
+        toast(t('t-no-tasks'), 'error');
         setTimeout(() => showScreen('screen-activate'), 2000);
       }
     }
@@ -1315,14 +1706,14 @@ async function fillDashboard(data) {
     if (_trainingActive) {
       await ipcRenderer.invoke('stop-passive-training');
       setTrainingUI(false, null);
-      toast('Training gestoppt — Daten werden verarbeitet', 'info');
+      toast(t('t-training-stopped'), 'info');
     } else {
       const res = await ipcRenderer.invoke('start-passive-training');
       if (res.success) {
         setTrainingUI(true, { remaining_min: 60, observations: 0, elapsed_ms: 0 });
-        toast('Training gestartet — arbeite normal weiter!', 'success');
+        toast(t('t-training-started'), 'success');
       } else {
-        toast('Training konnte nicht gestartet werden', 'error');
+        toast(t('t-training-failed'), 'error');
       }
     }
   }
@@ -1335,14 +1726,14 @@ async function fillDashboard(data) {
 
     if (active) {
       card.classList.add('active');
-      btn.textContent = '■ Training stoppen';
-      sub.textContent = 'MIRA beobachtet — arbeite ganz normal.';
+      btn.textContent = i18n[currentLang]['training-btn-stop'];
+      sub.textContent = i18n[currentLang]['training-sub-text'];
       document.getElementById('training-progress-wrap').style.display = 'block';
       if (prog) updateTrainingProgress(prog);
     } else {
       card.classList.remove('active');
-      btn.textContent = '▶ Training starten';
-      sub.textContent = 'Arbeite normal — MIRA lernt dabei mit.';
+      btn.textContent = i18n[currentLang]['training-btn-start'];
+      sub.textContent = i18n[currentLang]['training-sub-text'];
       document.getElementById('training-progress-wrap').style.display = 'none';
       document.getElementById('training-bar').style.width = '0%';
     }
@@ -1364,7 +1755,7 @@ async function fillDashboard(data) {
 
   ipcRenderer.on('passive-training-done', (event, result) => {
     setTrainingUI(false, null);
-    toast(`✅ Training abgeschlossen — ${result.observations} Klicks gelernt!`, 'success');
+    toast(`✅ ${result.observations} ${t('t-training-done')}!`, 'success');
   });
 
   // Beim Dashboard-Laden: Status abfragen (falls Training noch läuft)
@@ -1410,7 +1801,7 @@ async function fillDashboard(data) {
   // ── Interaktives Training ──
   async function startInteraktivesTraining() {
     showBrutcampView('training');
-    document.getElementById('bc-training-status').textContent = 'MIRA scannt deinen Screen…';
+    document.getElementById('bc-training-status').textContent = t('t-scanning');
     document.getElementById('bc-training-frage').style.display = 'none';
     document.getElementById('bc-progress-bar').style.width = '0%';
 
@@ -1422,7 +1813,7 @@ async function fillDashboard(data) {
     }
     _bcSession = { id: res.sessionId, total: res.totalElements };
     document.getElementById('bc-training-status').textContent =
-      `${res.totalElements} Elemente gefunden — lass uns starten`;
+      `${res.totalElements} ${t('t-found-elements')}`;
     zeigeNaechsteFrage(res.aktuelleFrage, 0);
   }
 
@@ -1477,8 +1868,8 @@ async function fillDashboard(data) {
   function trainingFertig() {
     document.getElementById('bc-training-frage').style.display = 'none';
     document.getElementById('bc-progress-bar').style.width = '100%';
-    document.getElementById('bc-training-status').textContent = '✅ Training abgeschlossen!';
-    toast('MIRA hat alles gelernt!', 'success');
+    document.getElementById('bc-training-status').textContent = t('t-bc-done');
+    toast(t('t-mira-learned'), 'success');
     _bcSession = null;
     setTimeout(() => { showBrutcampView('home'); loadBrutcampPatternList(); loadBrutcampStats(); }, 1500);
   }
@@ -1496,7 +1887,7 @@ async function fillDashboard(data) {
       <div class="brutcamp-pattern-row">
         <div class="brutcamp-pattern-info">
           <div class="brutcamp-pattern-label">${p.label}</div>
-          <div class="brutcamp-pattern-meta">${p.kategorie} · ${p.trefferCount||0}× genutzt · ${new Date(p.gelernt).toLocaleDateString('de-DE')}</div>
+          <div class="brutcamp-pattern-meta">${p.kategorie} · ${p.trefferCount||0}× ${currentLang==='en'?'used':'genutzt'} · ${new Date(p.gelernt).toLocaleDateString(currentLang==='en'?'en-US':'de-DE')}</div>
         </div>
         <button class="brutcamp-del-btn" onclick="deletePattern('${p.key}')">✕</button>
       </div>`).join('');
@@ -1506,7 +1897,7 @@ async function fillDashboard(data) {
     await ipcRenderer.invoke('brutcamp-delete', { key });
     await loadBrutcampPatternList();
     await loadBrutcampStats();
-    toast('Pattern gelöscht', 'info');
+    toast(t('t-pattern-deleted'), 'info');
   }
 
   // ── Feld-Wissen ──
@@ -1514,9 +1905,9 @@ async function fillDashboard(data) {
     const feld = document.getElementById('bc-feld-name').value.trim();
     const typ  = document.getElementById('bc-feld-typ').value;
     const desc = document.getElementById('bc-feld-desc').value.trim();
-    if (!feld || !desc) { toast('Feld-Name und Beschreibung erforderlich', 'warning'); return; }
+    if (!feld || !desc) { toast(t('t-field-required'), 'warning'); return; }
     await ipcRenderer.invoke('brutcamp-lern-feld', { feldLabel: feld, typ, beschreibung: desc });
-    toast(`✅ Feld "${feld}" = ${typ} gelernt!`, 'success');
+    toast(`✅ "${feld}" = ${typ} ${currentLang==='en'?'learned':'gelernt'}!`, 'success');
     document.getElementById('bc-feld-name').value = '';
     document.getElementById('bc-feld-desc').value = '';
   }
@@ -1531,7 +1922,7 @@ async function fillDashboard(data) {
   async function startDesktopCalibration() {
     const result = await ipcRenderer.invoke('start-route-record', '__desktop_calibration__');
     if (result.success) {
-      toast('Gehe auf Desktop und drücke 0', 'info');
+      toast(t('t-go-desktop'), 'info');
     }
   }
 
@@ -1548,7 +1939,7 @@ async function fillDashboard(data) {
 
   async function startRouteRecording() {
     const name = document.getElementById('route-name-inp').value.trim();
-    if (!name) { toast('Bitte Route einen Namen geben', 'error'); return; }
+    if (!name) { toast(t('t-name-route'), 'error'); return; }
 
     const result = await ipcRenderer.invoke('start-route-record', name);
     if (result.success) {
@@ -1558,8 +1949,8 @@ async function fillDashboard(data) {
       document.getElementById('route-how').style.display = 'none';
       document.getElementById('route-list-section').style.display = 'none';
       resetRecDots();
-      document.getElementById('rec-live-status').textContent = 'Warte auf Step 0 (Desktop)...';
-      toast(`Aufnahme "${name}" gestartet`, 'success');
+      document.getElementById('rec-live-status').textContent = t('t-wait-step0');
+      toast(`"${name}" ${t('t-recording-started')}`, 'success');
     }
   }
 
@@ -1568,7 +1959,7 @@ async function fillDashboard(data) {
     isRecording = false;
     document.getElementById('recording-live').style.display = 'none';
     document.getElementById('route-list-section').style.display = 'block';
-    toast('Aufnahme abgebrochen', 'error');
+    toast(t('t-recording-cancelled'), 'error');
   }
 
   function resetRecDots() {
@@ -1585,7 +1976,7 @@ async function fillDashboard(data) {
     // Desktop calibration special case
     if (!isRecording) {
       localStorage.setItem('mira_desktop_calibrated', 'true');
-      toast('Desktop kalibriert!', 'success');
+      toast(t('t-desktop-calibrated'), 'success');
       fillDashboard({
         tier: localStorage.getItem('mira_tier') || '—',
         tasks: localStorage.getItem('mira_tasks') || '—',
@@ -1604,10 +1995,10 @@ async function fillDashboard(data) {
     if (nextDot) nextDot.className = 'step-dot active';
 
     const status = stepNum === 0
-      ? 'Desktop gespeichert ✓ Gehe zu Step 1...'
+      ? t('t-desktop-saved')
       : stepNum >= 8
-        ? 'Alle Steps aufgenommen → drücke 9 zum Speichern'
-        : `Step ${stepNum} ✓ → gehe zu Step ${stepNum + 1}`;
+        ? t('t-all-steps')
+        : `Step ${stepNum} ${t('t-step-done')} ${stepNum + 1}`;
 
     document.getElementById('rec-live-status').textContent = status;
   });
@@ -1618,7 +2009,7 @@ async function fillDashboard(data) {
     document.getElementById('recording-live').style.display = 'none';
     document.getElementById('route-list-section').style.display = 'block';
     document.getElementById('route-name-inp').value = '';
-    toast(`"${name}" gespeichert – ${steps} Steps`, 'success');
+    toast(`"${name}" ${t('t-route-saved')} – ${steps} Steps`, 'success');
     loadRoutes();
   });
 
@@ -1626,7 +2017,7 @@ async function fillDashboard(data) {
     isRecording = false;
     document.getElementById('recording-live').style.display = 'none';
     document.getElementById('route-list-section').style.display = 'block';
-    toast('Aufnahme abgebrochen', 'error');
+    toast(t('t-recording-cancelled'), 'error');
   });
 
   // ══════════════════════════════════
@@ -1641,7 +2032,7 @@ async function fillDashboard(data) {
       container.innerHTML = `
         <div class="empty-state">
           <div class="empty-icon">🗺</div>
-          Noch keine Routen.<br>Nimm deine erste auf!
+          <span id="no-routes">Noch keine Routen.<br>Nimm deine erste auf!</span>
         </div>`;
       return;
     }
@@ -1661,13 +2052,13 @@ async function fillDashboard(data) {
   }
 
  async function deleteRoute(routeId, routeName) {
-  if (!confirm(`"${routeName}" wirklich löschen?`)) return;
+  if (!confirm(`"${routeName}" ${t('t-delete-confirm')}`)) return;
   const result = await ipcRenderer.invoke('route-delete', routeId);
   if (result.success) {
-    toast(`"${routeName}" gelöscht`, 'success');
+    toast(`"${routeName}" ${t('t-route-deleted')}`, 'success');
     loadRoutes();
   } else {
-    toast('Fehler: ' + (result.error || 'unbekannt'), 'error');
+    toast(`${t('t-error')}: ` + (result.error || t('t-unknown')), 'error');
   }
 }
 
@@ -1675,7 +2066,7 @@ async function fillDashboard(data) {
     document.getElementById('route-list-section').style.display = 'none';
     document.getElementById('route-running').style.display = 'block';
     document.getElementById('run-title').textContent = routeName;
-    document.getElementById('run-step').textContent = 'Starte...';
+    document.getElementById('run-step').textContent = t('t-starting');
 
     // Build step dots
     const dots = document.getElementById('run-dots');
@@ -1689,9 +2080,9 @@ async function fillDashboard(data) {
     document.getElementById('route-list-section').style.display = 'block';
 
     if (result.success) {
-      toast(`✅ ${result.steps_completed} Steps erledigt!`, 'success');
+      toast(`✅ ${result.steps_completed} ${t('t-steps-done')}!`, 'success');
     } else {
-      toast(`❌ Step ${result.failed_at_step} fehlgeschlagen: ${result.reason || result.error || ''}`, 'error');
+      toast(`❌ Step ${result.failed_at_step} ${t('t-step-failed')}: ${result.reason || result.error || ''}`, 'error');
     }
     loadRoutes();
   }
@@ -1712,42 +2103,42 @@ async function fillDashboard(data) {
   ipcRenderer.on('session-expired', () => {
   stopStatsRefresh();
   showScreen('screen-activate');
-  toast('Sitzung abgelaufen – bitte neu einloggen', 'error');
+  toast(t('t-session-expired'), 'error');
 });
 
 ipcRenderer.on('force-logout', (event, { reason } = {}) => {
   stopStatsRefresh();
   showScreen('screen-activate');
-  toast(reason === 'Subscription abgelaufen' ? 'Subscription abgelaufen – bitte verlängern' : 'Gerät deaktiviert – bitte neu anmelden', 'error');
+  toast(reason === 'Subscription abgelaufen' ? t('t-subscription-expired') : t('t-device-deactivated'), 'error');
 });
 
 async function handleLogout() {
-  const confirmed = confirm('Wirklich abmelden? MIRA wird gestoppt.');
+  const confirmed = confirm(t('t-logout-confirm'));
   if (!confirmed) return;
   await ipcRenderer.invoke('logout');
   stopStatsRefresh();
   showScreen('screen-activate');
-  toast('Erfolgreich abgemeldet', 'success');
+  toast(t('t-logged-out'), 'success');
 }
 
 ipcRenderer.on('agent-offline', () => {
   const badge = document.getElementById('d-badge');
   if (badge) {
-    badge.innerHTML = '<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff453a;margin-right:6px"></span>Offline';
+    badge.innerHTML = `<span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:#ff453a;margin-right:6px"></span>${t('d-offline')}`;
     badge.style.background = 'rgba(255,69,58,0.15)';
     badge.style.color = '#ff453a';
   }
-  document.getElementById('d-status-sub').textContent = 'Keine Verbindung';
+  document.getElementById('d-status-sub').textContent = t('d-no-conn');
 });
 
 ipcRenderer.on('agent-online', () => {
   const badge = document.getElementById('d-badge');
   if (badge) {
-    badge.innerHTML = '<span class="status-dot"></span>Aktiv';
+    badge.innerHTML = `<span class="status-dot"></span>${t('d-active')}`;
     badge.style.background = '';
     badge.style.color = '';
   }
-  document.getElementById('d-status-sub').textContent = 'Bereit';
+  document.getElementById('d-status-sub').textContent = t('d-ready');
 });
 
 ipcRenderer.on('token-balance-updated', (event, { balance, low_balance }) => {
@@ -1778,7 +2169,7 @@ function trainingNo() {
 // User bewegt Maus zur richtigen Stelle
 ipcRenderer.on('training-move-mouse', (event, data) => {
   document.getElementById('training-status').textContent = 
-    `Bewege die Maus zu: "${data.command}" → dann Bestätigen`;
+    t('t-move-mouse').replace('%cmd%', data.command);
 });
 
 async function trainingConfirmPosition() {
@@ -1805,7 +2196,7 @@ function startTrainingFromInput() {
 async function startTraining(command) {
   const data = await ipcRenderer.invoke('training-start', command);
   if (!data.success) {
-    alert('Training Fehler: ' + (data.error || 'Unbekannt'));
+    alert(`${t('t-training-error')}: ` + (data.error || t('t-unknown')));
     return;
   }
   console.log(`🎓 Training gestartet: "${data.route_name}"`);
@@ -1821,8 +2212,6 @@ async function startTraining(command) {
   document.getElementById('route-name-inp')?.addEventListener('focus', () => {
     document.getElementById('route-how').style.display = 'block';
   });
-
-
 
   // ══════════════════════════════════════════════════════════════════════════
   // VOICE — Spracheingabe mit automatischer Stille-Erkennung
@@ -1933,16 +2322,16 @@ async function startTraining(command) {
     ipcRenderer.invoke('voice-context-answer', { text }).then(res => {
       _mcRemoveThinking();
       if (res?.queued) {
-        mcAddMiraMsg('✓ Alles klar, ich kümmere mich darum!');
+        mcAddMiraMsg(t('t-ok'));
         setTimeout(() => closeMiraChat(), 2200);
       } else {
-        const reason = res?.reason || 'Unbekannter Fehler';
+        const reason = res?.reason || t('t-unknown-error');
         mcAddMiraMsg('❌ ' + reason);
         _mcEnableInput();
       }
     }).catch((err) => {
       _mcRemoveThinking();
-      mcAddMiraMsg('❌ Verbindungsfehler: ' + (err?.message || ''));
+      mcAddMiraMsg(t('t-conn-error') + (err?.message || ''));
       _mcEnableInput();
     });
   }
@@ -1956,7 +2345,7 @@ async function startTraining(command) {
   ipcRenderer.on('task-killed', (event, { hadTask }) => {
     const btn = document.getElementById('kill-btn');
     if (btn) btn.style.display = 'none';
-    if (hadTask) toast('🛑 Task gestoppt', 'error');
+    if (hadTask) toast(t('t-task-killed'), 'error');
   });
 
   // Intern: kill-btn ein/ausblenden je nach laufendem Task
@@ -2068,14 +2457,14 @@ async function startTraining(command) {
     try {
       voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     } catch (err) {
-      toast('Mikrofon-Zugriff verweigert', 'error');
+      toast(t('t-mic-denied'), 'error');
       return;
     }
 
     // Web Speech API für Transkription
     const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
     if (!SR) {
-      toast('Speech Recognition nicht verfügbar', 'error');
+      toast(t('t-speech-unavailable'), 'error');
       voiceStream.getTracks().forEach(t => t.stop());
       return;
     }
@@ -2094,7 +2483,7 @@ async function startTraining(command) {
 
     // ── Speech Recognition ──
     voiceRecognition = new SR();
-    voiceRecognition.lang             = 'de-DE';
+    voiceRecognition.lang             = currentLang === 'en' ? 'en-US' : 'de-DE';
     voiceRecognition.interimResults   = true;
     voiceRecognition.continuous       = true;
     voiceRecognition.maxAlternatives  = 1;
@@ -2119,7 +2508,7 @@ async function startTraining(command) {
           }
         }, 300);
       } else if (evt.error === 'not-allowed') {
-        toast('Mikrofon-Zugriff verweigert', 'error');
+        toast(t('t-mic-denied'), 'error');
         stopVoice(false);
       }
     };
@@ -2236,12 +2625,12 @@ async function startTraining(command) {
     const sub  = document.getElementById('voice-sub');
     if (listening) {
       card.classList.add('listening');
-      lbl.textContent = 'Ich höre zu…';
+      lbl.textContent = i18n[currentLang]['voice-label'] + '…';
       sub.textContent = 'Stille wird automatisch erkannt';
     } else {
       card.classList.remove('listening');
-      lbl.textContent = 'MIRA sprechen';
-      sub.textContent = 'Tippe oder sprich einen Befehl';
+      lbl.textContent = i18n[currentLang]['voice-label'];
+      sub.textContent = i18n[currentLang]['voice-sub'];
     }
   }
 
@@ -2280,10 +2669,10 @@ async function startTraining(command) {
   function toggleMicForChat() {
     if (_chatSR) { _stopChatSR(); return; }
     const SR = window.webkitSpeechRecognition || window.SpeechRecognition;
-    if (!SR) { toast('Spracherkennung nicht verfügbar', 'error'); return; }
+    if (!SR) { toast(t('t-speech-unavailable'), 'error'); return; }
 
     _chatSR = new SR();
-    _chatSR.lang = 'de-DE';
+    _chatSR.lang = currentLang === 'en' ? 'en-US' : 'de-DE';
     _chatSR.interimResults = true;
     _chatSR.continuous = false;
 
@@ -2308,7 +2697,7 @@ async function startTraining(command) {
     _chatSR.onerror = (e) => {
       console.warn('Chat-Mic SR error:', e.error);
       _stopChatSR();
-      if (e.error === 'network') toast('Spracherkennung: Netzwerkfehler', 'error');
+      if (e.error === 'network') toast(t('t-speech-network'), 'error');
     };
 
     try { _chatSR.start(); } catch(e) { _chatSR = null; }
@@ -2326,6 +2715,9 @@ async function startTraining(command) {
     if (wakeWordPending) return;
     openMiraChat();
   });
+
+  // Initialize language on load
+  updateUILanguage();
 
 </script>
 
