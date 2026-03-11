@@ -60,6 +60,35 @@
   .mira-logo { font-family: 'Syne', sans-serif; font-weight: 800; font-size: 16px; color: var(--accent); }
   .setup-badge { font-size: 9px; background: var(--border); color: var(--muted); padding: 2px 7px; border-radius: 20px; letter-spacing: 1px; text-transform: uppercase; }
 
+  .topbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+  }
+
+  .lang-toggle {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 2px 6px;
+    display: flex;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .lang-option {
+    padding: 3px 8px;
+    border-radius: 16px;
+    font-size: 10px;
+    font-weight: 600;
+    transition: all 0.15s;
+    color: var(--muted);
+  }
+  .lang-option.active {
+    background: var(--accent);
+    color: #000;
+  }
+
   .close-btn {
     background: none; border: 1px solid var(--border); color: var(--muted);
     width: 28px; height: 28px; border-radius: 5px; cursor: pointer; font-size: 14px;
@@ -346,9 +375,16 @@
 <div class="topbar">
   <div class="topbar-left">
     <div class="mira-logo">MIRA</div>
-    <div class="setup-badge">Büro Setup</div>
+    <div class="setup-badge" id="setup-badge">Büro Setup</div>
   </div>
-  <button class="close-btn" onclick="closeSetup()">✕</button>
+  <div class="topbar-right">
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de" style="background:#e8ff47;color:#000">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
+    </div>
+    <button class="close-btn" onclick="closeSetup()">✕</button>
+  </div>
 </div>
 
 <!-- MAIN -->
@@ -356,34 +392,34 @@
 
   <!-- SIDEBAR -->
   <div class="sidebar">
-    <div class="sidebar-label">Schritte</div>
+    <div class="sidebar-label" id="steps-label">Schritte</div>
     <div class="step-item active" id="nav-0" onclick="tryGoToStep(0)">
       <div class="step-num" id="num-0">1</div>
-      <div class="step-label">Mailprogramm</div>
+      <div class="step-label" id="step-0-label">Mailprogramm</div>
     </div>
     <div class="step-item locked" id="nav-1" onclick="tryGoToStep(1)">
       <div class="step-num" id="num-1">2</div>
-      <div class="step-label">Mail-Zone markieren</div>
+      <div class="step-label" id="step-1-label">Mail-Zone markieren</div>
     </div>
     <div class="step-item locked" id="nav-2" onclick="tryGoToStep(2)">
       <div class="step-num" id="num-2">3</div>
-      <div class="step-label">5 Mails trainieren</div>
+      <div class="step-label" id="step-2-label">5 Mails trainieren</div>
     </div>
     <div class="step-item locked" id="nav-3" onclick="tryGoToStep(3)">
       <div class="step-num" id="num-3">4</div>
-      <div class="step-label">Suchleiste</div>
+      <div class="step-label" id="step-3-label">Suchleiste</div>
     </div>
     <div class="step-item locked" id="nav-4" onclick="tryGoToStep(4)">
       <div class="step-num" id="num-4">5</div>
-      <div class="step-label">Ausgabe-App</div>
+      <div class="step-label" id="step-4-label">Ausgabe-App</div>
     </div>
     <div class="step-item locked" id="nav-5" onclick="tryGoToStep(5)">
       <div class="step-num" id="num-5">6</div>
-      <div class="step-label">Templates</div>
+      <div class="step-label" id="step-5-label">Templates</div>
     </div>
     <div class="step-item locked" id="nav-6" onclick="tryGoToStep(6)">
       <div class="step-num" id="num-6">✓</div>
-      <div class="step-label">Fertig</div>
+      <div class="step-label" id="step-6-label">Fertig</div>
     </div>
   </div>
 
@@ -392,41 +428,41 @@
 
     <!-- STEP 0: Mailprogramm -->
     <div class="step-page active" id="step-0">
-      <div class="step-tag">Schritt 1 / 6</div>
-      <div class="step-title">Welches Mailprogramm?</div>
-      <div class="step-desc">Öffne dein Mailprogramm, dann wähle es hier.</div>
+      <div class="step-tag" id="step-0-tag">Schritt 1 / 6</div>
+      <div class="step-title" id="step-0-title">Welches Mailprogramm?</div>
+      <div class="step-desc" id="step-0-desc">Öffne dein Mailprogramm, dann wähle es hier.</div>
       <div class="options-grid">
-        <div class="option-card" onclick="selectMail('gmail', this)"><div class="option-icon">📧</div><div class="option-label">Gmail</div></div>
-        <div class="option-card" onclick="selectMail('outlook', this)"><div class="option-icon">📮</div><div class="option-label">Outlook</div></div>
-        <div class="option-card" onclick="selectMail('apple_mail', this)"><div class="option-icon">✉️</div><div class="option-label">Apple Mail</div></div>
-        <div class="option-card" onclick="selectMail('thunderbird', this)"><div class="option-icon">🦅</div><div class="option-label">Thunderbird</div></div>
-        <div class="option-card" onclick="selectMail('yahoo', this)"><div class="option-icon">📬</div><div class="option-label">Yahoo</div></div>
-        <div class="option-card" onclick="selectMail('andere', this)"><div class="option-icon">📂</div><div class="option-label">Andere</div></div>
+        <div class="option-card" onclick="selectMail('gmail', this)"><div class="option-icon">📧</div><div class="option-label" id="mail-gmail">Gmail</div></div>
+        <div class="option-card" onclick="selectMail('outlook', this)"><div class="option-icon">📮</div><div class="option-label" id="mail-outlook">Outlook</div></div>
+        <div class="option-card" onclick="selectMail('apple_mail', this)"><div class="option-icon">✉️</div><div class="option-label" id="mail-apple">Apple Mail</div></div>
+        <div class="option-card" onclick="selectMail('thunderbird', this)"><div class="option-icon">🦅</div><div class="option-label" id="mail-thunderbird">Thunderbird</div></div>
+        <div class="option-card" onclick="selectMail('yahoo', this)"><div class="option-icon">📬</div><div class="option-label" id="mail-yahoo">Yahoo</div></div>
+        <div class="option-card" onclick="selectMail('andere', this)"><div class="option-icon">📂</div><div class="option-label" id="mail-other">Andere</div></div>
       </div>
     </div>
 
     <!-- STEP 1: Mail-Zone -->
     <div class="step-page" id="step-1">
-      <div class="step-tag">Schritt 2 / 6</div>
-      <div class="step-title">Mail-Inhalt Zone</div>
-      <div class="step-desc">Öffne eine Mail. Markiere dann den Bereich wo der Text steht.</div>
+      <div class="step-tag" id="step-1-tag">Schritt 2 / 6</div>
+      <div class="step-title" id="step-1-title">Mail-Inhalt Zone</div>
+      <div class="step-desc" id="step-1-desc">Öffne eine Mail. Markiere dann den Bereich wo der Text steht.</div>
       <div class="scroll-hint">
         <span>🖱️</span>
-        Lange Mails: MIRA scrollt automatisch mit Mausrad und macht mehrere Screenshots.
+        <span id="scroll-hint">Lange Mails: MIRA scrollt automatisch mit Mausrad und macht mehrere Screenshots.</span>
       </div>
       <div class="instruction">
         <div class="instruction-icon">📌</div>
-        <div class="instruction-text">Klick <strong>"Zone markieren"</strong> → dann ziehe mit der Maus über den Mail-Inhalt-Bereich.</div>
+        <div class="instruction-text" id="zone-instruction">Klick <strong>"Zone markieren"</strong> → dann ziehe mit der Maus über den Mail-Inhalt-Bereich.</div>
       </div>
       <div class="zone-area">
         <div class="zone-row">
           <div class="zone-info">
-            <div class="zone-name">Mail-Inhalt Fläche</div>
+            <div class="zone-name" id="mail-zone-name">Mail-Inhalt Fläche</div>
             <div class="zone-coords" id="mail-zone-coords">Noch nicht markiert</div>
           </div>
           <div class="zone-status" id="mail-zone-status">ausstehend</div>
           <button class="capture-btn" id="mail-zone-btn" onclick="startZoneCapture('mail_content_zone', 'mail-zone-coords', 'mail-zone-status', 'mail-zone-btn')">
-            Zone markieren
+            <span id="zone-btn">Zone markieren</span>
           </button>
         </div>
       </div>
@@ -434,12 +470,12 @@
 
     <!-- STEP 2: 5 Mails -->
     <div class="step-page" id="step-2">
-      <div class="step-tag">Schritt 3 / 6</div>
-      <div class="step-title">5 Mails trainieren</div>
-      <div class="step-desc">Öffne 5 verschiedene Mails — MIRA macht jeweils einen Screenshot und lernt die Zone sicher zu erkennen.</div>
+      <div class="step-tag" id="step-2-tag">Schritt 3 / 6</div>
+      <div class="step-title" id="step-2-title">5 Mails trainieren</div>
+      <div class="step-desc" id="step-2-desc">Öffne 5 verschiedene Mails — MIRA macht jeweils einen Screenshot und lernt die Zone sicher zu erkennen.</div>
       <div class="instruction">
         <div class="instruction-icon">📖</div>
-        <div class="instruction-text">Öffne <strong>Mail 1</strong> → klick "Screenshot". Dann Mail 2 → Screenshot. Bis Mail 5. Je verschiedener, desto besser.</div>
+        <div class="instruction-text" id="mail-training-instruction">Öffne <strong>Mail 1</strong> → klick "Screenshot". Dann Mail 2 → Screenshot. Bis Mail 5. Je verschiedener, desto besser.</div>
       </div>
       <div class="mail-slots" id="mail-slots"></div>
       <div class="progress-label" id="mail-progress">0 / 5 Mails trainiert (mind. 3 nötig)</div>
@@ -447,35 +483,35 @@
 
     <!-- STEP 3: Suchleiste -->
     <div class="step-page" id="step-3">
-      <div class="step-tag">Schritt 4 / 6</div>
-      <div class="step-title">Suchleiste markieren</div>
-      <div class="step-desc">Damit MIRA nach bestimmten Mails suchen kann — z.B. "alle Rechnungen heute".</div>
+      <div class="step-tag" id="step-3-tag">Schritt 4 / 6</div>
+      <div class="step-title" id="step-3-title">Suchleiste markieren</div>
+      <div class="step-desc" id="step-3-desc">Damit MIRA nach bestimmten Mails suchen kann — z.B. "alle Rechnungen heute".</div>
       <div class="instruction">
         <div class="instruction-icon">🔍</div>
-        <div class="instruction-text">Klick die Suchleiste in deinem Mailprogramm an → dann hier <strong>"Markieren"</strong>.</div>
+        <div class="instruction-text" id="search-instruction">Klick die Suchleiste in deinem Mailprogramm an → dann hier <strong>"Markieren"</strong>.</div>
       </div>
       <div class="zone-area">
         <div class="zone-row">
           <div class="zone-info">
-            <div class="zone-name">Mail-Suchleiste</div>
+            <div class="zone-name" id="search-zone-name">Mail-Suchleiste</div>
             <div class="zone-coords" id="search-zone-coords">Noch nicht markiert</div>
           </div>
           <div class="zone-status" id="search-zone-status">ausstehend</div>
           <button class="capture-btn" id="search-zone-btn" onclick="startZoneCapture('mail_search_zone', 'search-zone-coords', 'search-zone-status', 'search-zone-btn')">
-            Markieren
+            <span id="search-btn">Markieren</span>
           </button>
         </div>
       </div>
-      <div style="margin-top:6px; font-size:10px; color:var(--muted); margin-bottom:6px;">Optional:</div>
+      <div style="margin-top:6px; font-size:10px; color:var(--muted); margin-bottom:6px;" id="optional-label">Optional:</div>
       <div class="zone-area">
         <div class="zone-row">
           <div class="zone-info">
-            <div class="zone-name">Posteingang Button</div>
+            <div class="zone-name" id="inbox-zone-name">Posteingang Button</div>
             <div class="zone-coords" id="inbox-zone-coords">Optional</div>
           </div>
           <div class="zone-status" id="inbox-zone-status">optional</div>
           <button class="capture-btn" id="inbox-zone-btn" onclick="startZoneCapture('mail_inbox_zone', 'inbox-zone-coords', 'inbox-zone-status', 'inbox-zone-btn')">
-            Markieren
+            <span id="inbox-btn">Markieren</span>
           </button>
         </div>
       </div>
@@ -483,30 +519,30 @@
 
     <!-- STEP 4: Ausgabe -->
     <div class="step-page" id="step-4">
-      <div class="step-tag">Schritt 5 / 6</div>
-      <div class="step-title">Wohin sollen die Daten?</div>
-      <div class="step-desc">Wo sollen Infos aus Mails landen? Mehrfachauswahl möglich.</div>
+      <div class="step-tag" id="step-4-tag">Schritt 5 / 6</div>
+      <div class="step-title" id="step-4-title">Wohin sollen die Daten?</div>
+      <div class="step-desc" id="step-4-desc">Wo sollen Infos aus Mails landen? Mehrfachauswahl möglich.</div>
       <div class="options-grid">
-        <div class="option-card" onclick="toggleOutput('excel', this)"><div class="option-icon">📊</div><div class="option-label">Excel</div></div>
-        <div class="option-card" onclick="toggleOutput('google_sheets', this)"><div class="option-icon">🗒️</div><div class="option-label">Google Sheets</div></div>
-        <div class="option-card" onclick="toggleOutput('word', this)"><div class="option-icon">📝</div><div class="option-label">Word</div></div>
-        <div class="option-card" onclick="toggleOutput('google_docs', this)"><div class="option-icon">📄</div><div class="option-label">Google Docs</div></div>
-        <div class="option-card" onclick="toggleOutput('notion', this)"><div class="option-icon">⬛</div><div class="option-label">Notion</div></div>
-        <div class="option-card" onclick="toggleOutput('apple_notes', this)"><div class="option-icon">🍎</div><div class="option-label">Apple Notes</div></div>
-        <div class="option-card" onclick="toggleOutput('onenote', this)"><div class="option-icon">📓</div><div class="option-label">OneNote</div></div>
-        <div class="option-card" onclick="toggleOutput('andere', this)"><div class="option-icon">➕</div><div class="option-label">Andere</div></div>
+        <div class="option-card" onclick="toggleOutput('excel', this)"><div class="option-icon">📊</div><div class="option-label" id="output-excel">Excel</div></div>
+        <div class="option-card" onclick="toggleOutput('google_sheets', this)"><div class="option-icon">🗒️</div><div class="option-label" id="output-sheets">Google Sheets</div></div>
+        <div class="option-card" onclick="toggleOutput('word', this)"><div class="option-icon">📝</div><div class="option-label" id="output-word">Word</div></div>
+        <div class="option-card" onclick="toggleOutput('google_docs', this)"><div class="option-icon">📄</div><div class="option-label" id="output-docs">Google Docs</div></div>
+        <div class="option-card" onclick="toggleOutput('notion', this)"><div class="option-icon">⬛</div><div class="option-label" id="output-notion">Notion</div></div>
+        <div class="option-card" onclick="toggleOutput('apple_notes', this)"><div class="option-icon">🍎</div><div class="option-label" id="output-apple-notes">Apple Notes</div></div>
+        <div class="option-card" onclick="toggleOutput('onenote', this)"><div class="option-icon">📓</div><div class="option-label" id="output-onenote">OneNote</div></div>
+        <div class="option-card" onclick="toggleOutput('andere', this)"><div class="option-icon">➕</div><div class="option-label" id="output-other">Andere</div></div>
       </div>
       <div class="instruction">
         <div class="instruction-icon">⚡</div>
-        <div class="instruction-text"><strong>Excel & Word:</strong> Electron greift direkt in Datei — 100% zuverlässig.<br><strong>Andere:</strong> MIRA steuert via Screenshot + Klicken.</div>
+        <div class="instruction-text" id="output-instruction"><strong>Excel & Word:</strong> Electron greift direkt in Datei — 100% zuverlässig.<br><strong>Andere:</strong> MIRA steuert via Screenshot + Klicken.</div>
       </div>
     </div>
 
     <!-- STEP 5: Templates -->
     <div class="step-page" id="step-5">
-      <div class="step-tag">Schritt 6 / 6</div>
-      <div class="step-title">Deine Templates</div>
-      <div class="step-desc">Bis zu 4 Templates. Name + Felder definieren. Jederzeit änderbar.</div>
+      <div class="step-tag" id="step-5-tag">Schritt 6 / 6</div>
+      <div class="step-title" id="step-5-title">Deine Templates</div>
+      <div class="step-desc" id="step-5-desc">Bis zu 4 Templates. Name + Felder definieren. Jederzeit änderbar.</div>
       <div class="template-grid" id="template-grid"></div>
     </div>
 
@@ -514,11 +550,11 @@
     <div class="step-page" id="step-6">
       <div class="complete-screen">
         <div class="complete-icon">⚡</div>
-        <div class="complete-title">MIRA ist bereit.</div>
-        <div class="complete-sub">Setup gespeichert in device_knowledge. Training Overlay bleibt verfügbar für Feintuning.</div>
+        <div class="complete-title" id="complete-title">MIRA ist bereit.</div>
+        <div class="complete-sub" id="complete-sub">Setup gespeichert in device_knowledge. Training Overlay bleibt verfügbar für Feintuning.</div>
         <div class="summary-box" id="summary-box"></div>
-        <div class="saved-pill"><div class="saved-dot"></div>device_knowledge gespeichert</div>
-        <button class="btn-finish" onclick="finishSetup()">Setup abschließen</button>
+        <div class="saved-pill"><div class="saved-dot"></div><span id="saved-text">device_knowledge gespeichert</span></div>
+        <button class="btn-finish" onclick="finishSetup()" id="finish-btn">Setup abschließen</button>
       </div>
     </div>
 
@@ -529,8 +565,8 @@
 <div class="bottombar">
   <div class="progress-track" id="progress-track"></div>
   <div class="nav-btns">
-    <button class="btn-back" id="btn-back" onclick="prevStep()" style="display:none">← Zurück</button>
-    <button class="btn-next" id="btn-next" onclick="nextStep()" disabled>Weiter →</button>
+    <button class="btn-back" id="btn-back" onclick="prevStep()" style="display:none"><span id="back-text">← Zurück</span></button>
+    <button class="btn-next" id="btn-next" onclick="nextStep()" disabled><span id="next-text">Weiter</span> →</button>
   </div>
 </div>
 
@@ -543,6 +579,368 @@
 
 <script>
 const { ipcRenderer } = require('electron');
+
+// ====================================
+// INTERNATIONALIZATION (DE/EN)
+// ====================================
+
+const i18n = {
+  de: {
+    'setup-badge': 'Büro Setup',
+    'steps-label': 'Schritte',
+    'step-0-label': 'Mailprogramm',
+    'step-1-label': 'Mail-Zone markieren',
+    'step-2-label': '5 Mails trainieren',
+    'step-3-label': 'Suchleiste',
+    'step-4-label': 'Ausgabe-App',
+    'step-5-label': 'Templates',
+    'step-6-label': 'Fertig',
+    
+    'step-0-tag': 'Schritt 1 / 6',
+    'step-0-title': 'Welches Mailprogramm?',
+    'step-0-desc': 'Öffne dein Mailprogramm, dann wähle es hier.',
+    'mail-gmail': 'Gmail',
+    'mail-outlook': 'Outlook',
+    'mail-apple': 'Apple Mail',
+    'mail-thunderbird': 'Thunderbird',
+    'mail-yahoo': 'Yahoo',
+    'mail-other': 'Andere',
+    
+    'step-1-tag': 'Schritt 2 / 6',
+    'step-1-title': 'Mail-Inhalt Zone',
+    'step-1-desc': 'Öffne eine Mail. Markiere dann den Bereich wo der Text steht.',
+    'scroll-hint': 'Lange Mails: MIRA scrollt automatisch mit Mausrad und macht mehrere Screenshots.',
+    'zone-instruction': 'Klick <strong>"Zone markieren"</strong> → dann ziehe mit der Maus über den Mail-Inhalt-Bereich.',
+    'mail-zone-name': 'Mail-Inhalt Fläche',
+    'zone-coords-pending': 'Noch nicht markiert',
+    'zone-status-pending': 'ausstehend',
+    'zone-btn': 'Zone markieren',
+    
+    'step-2-tag': 'Schritt 3 / 6',
+    'step-2-title': '5 Mails trainieren',
+    'step-2-desc': 'Öffne 5 verschiedene Mails — MIRA macht jeweils einen Screenshot und lernt die Zone sicher zu erkennen.',
+    'mail-training-instruction': 'Öffne <strong>Mail 1</strong> → klick "Screenshot". Dann Mail 2 → Screenshot. Bis Mail 5. Je verschiedener, desto besser.',
+    'mail-progress': '{done} / 5 Mails trainiert (mind. 3 nötig)',
+    'mail-progress-min': '{done} / 5 Mails trainiert (mind. 3 nötig)',
+    'mail-progress-ok': '{done} / 5 Mails trainiert ✓',
+    'mail-slot-text': 'Mail {num} öffnen, dann Screenshot machen',
+    'mail-slot-btn': 'Screenshot',
+    'mail-slot-retry': 'Nochmal',
+    'mail-slot-done': 'Mail {num} — trainiert {time}',
+    
+    'step-3-tag': 'Schritt 4 / 6',
+    'step-3-title': 'Suchleiste markieren',
+    'step-3-desc': 'Damit MIRA nach bestimmten Mails suchen kann — z.B. "alle Rechnungen heute".',
+    'search-instruction': 'Klick die Suchleiste in deinem Mailprogramm an → dann hier <strong>"Markieren"</strong>.',
+    'search-zone-name': 'Mail-Suchleiste',
+    'search-btn': 'Markieren',
+    'optional-label': 'Optional:',
+    'inbox-zone-name': 'Posteingang Button',
+    'inbox-btn': 'Markieren',
+    
+    'step-4-tag': 'Schritt 5 / 6',
+    'step-4-title': 'Wohin sollen die Daten?',
+    'step-4-desc': 'Wo sollen Infos aus Mails landen? Mehrfachauswahl möglich.',
+    'output-excel': 'Excel',
+    'output-sheets': 'Google Sheets',
+    'output-word': 'Word',
+    'output-docs': 'Google Docs',
+    'output-notion': 'Notion',
+    'output-apple-notes': 'Apple Notes',
+    'output-onenote': 'OneNote',
+    'output-other': 'Andere',
+    'output-instruction': '<strong>Excel & Word:</strong> Electron greift direkt in Datei — 100% zuverlässig.<br><strong>Andere:</strong> MIRA steuert via Screenshot + Klicken.',
+    
+    'step-5-tag': 'Schritt 6 / 6',
+    'step-5-title': 'Deine Templates',
+    'step-5-desc': 'Bis zu 4 Templates. Name + Felder definieren. Jederzeit änderbar.',
+    'template-num': 'TEMPLATE {num}',
+    'template-status-empty': 'leer',
+    'template-status-ready': 'bereit ✓',
+    'template-name-placeholder': 'Name (z.B. Klageschrift, Rechnung...)',
+    'field-placeholder': 'Feld (z.B. Mandant, Betrag...)',
+    'field-btn': 'markieren',
+    'field-btn-captured': '✓',
+    'add-field': '+ Feld hinzufügen',
+    
+    'complete-title': 'MIRA ist bereit.',
+    'complete-sub': 'Setup gespeichert in device_knowledge. Training Overlay bleibt verfügbar für Feintuning.',
+    'saved-text': 'device_knowledge gespeichert',
+    'finish-btn': 'Setup abschließen',
+    'optional-text': 'Optional',
+
+    'back-text': '← Zurück',
+    'next-text': 'Weiter',
+    'next-finish': 'Abschließen',
+    
+    'summary-mail': 'Mailprogramm',
+    'summary-zone': 'Mail-Zone',
+    'summary-saved': 'gespeichert ✓',
+    'summary-mails': 'Mails trainiert',
+    'summary-search': 'Suchleiste',
+    'summary-output': 'Ausgabe-Apps',
+    'summary-templates': 'Templates bereit',
+    
+    'capture-tip': 'Fläche markieren — Maus ziehen, dann loslassen',
+    'capture-waiting': 'Markiere...',
+  },
+  en: {
+    'setup-badge': 'Office Setup',
+    'steps-label': 'Steps',
+    'step-0-label': 'Mail App',
+    'step-1-label': 'Mark mail zone',
+    'step-2-label': 'Train 5 emails',
+    'step-3-label': 'Search bar',
+    'step-4-label': 'Output app',
+    'step-5-label': 'Templates',
+    'step-6-label': 'Done',
+    
+    'step-0-tag': 'Step 1 / 6',
+    'step-0-title': 'Which mail app?',
+    'step-0-desc': 'Open your mail app, then select it here.',
+    'mail-gmail': 'Gmail',
+    'mail-outlook': 'Outlook',
+    'mail-apple': 'Apple Mail',
+    'mail-thunderbird': 'Thunderbird',
+    'mail-yahoo': 'Yahoo',
+    'mail-other': 'Other',
+    
+    'step-1-tag': 'Step 2 / 6',
+    'step-1-title': 'Mail content zone',
+    'step-1-desc': 'Open an email. Then mark the area where the text is.',
+    'scroll-hint': 'Long emails: MIRA automatically scrolls with mouse wheel and takes multiple screenshots.',
+    'zone-instruction': 'Click <strong>"Mark zone"</strong> → then drag the mouse over the mail content area.',
+    'mail-zone-name': 'Mail content area',
+    'zone-coords-pending': 'Not marked yet',
+    'zone-status-pending': 'pending',
+    'zone-btn': 'Mark zone',
+    
+    'step-2-tag': 'Step 3 / 6',
+    'step-2-title': 'Train 5 emails',
+    'step-2-desc': 'Open 5 different emails — MIRA takes a screenshot of each and learns to reliably recognize the zone.',
+    'mail-training-instruction': 'Open <strong>Email 1</strong> → click "Screenshot". Then Email 2 → Screenshot. Up to Email 5. The more varied, the better.',
+    'mail-progress': '{done} / 5 emails trained (min. 3 required)',
+    'mail-progress-min': '{done} / 5 emails trained (min. 3 required)',
+    'mail-progress-ok': '{done} / 5 emails trained ✓',
+    'mail-slot-text': 'Open email {num}, then take screenshot',
+    'mail-slot-btn': 'Screenshot',
+    'mail-slot-retry': 'Again',
+    'mail-slot-done': 'Email {num} — trained {time}',
+    
+    'step-3-tag': 'Step 4 / 6',
+    'step-3-title': 'Mark search bar',
+    'step-3-desc': 'So MIRA can search for specific emails — e.g. "all invoices today".',
+    'search-instruction': 'Click the search bar in your mail app → then click <strong>"Mark"</strong> here.',
+    'search-zone-name': 'Mail search bar',
+    'search-btn': 'Mark',
+    'optional-label': 'Optional:',
+    'inbox-zone-name': 'Inbox button',
+    'inbox-btn': 'Mark',
+    
+    'step-4-tag': 'Step 5 / 6',
+    'step-4-title': 'Where should the data go?',
+    'step-4-desc': 'Where should info from emails land? Multiple selection possible.',
+    'output-excel': 'Excel',
+    'output-sheets': 'Google Sheets',
+    'output-word': 'Word',
+    'output-docs': 'Google Docs',
+    'output-notion': 'Notion',
+    'output-apple-notes': 'Apple Notes',
+    'output-onenote': 'OneNote',
+    'output-other': 'Other',
+    'output-instruction': '<strong>Excel & Word:</strong> Electron accesses file directly — 100% reliable.<br><strong>Others:</strong> MIRA controls via screenshot + clicking.',
+    
+    'step-5-tag': 'Step 6 / 6',
+    'step-5-title': 'Your templates',
+    'step-5-desc': 'Up to 4 templates. Define name + fields. Can be changed anytime.',
+    'template-num': 'TEMPLATE {num}',
+    'template-status-empty': 'empty',
+    'template-status-ready': 'ready ✓',
+    'template-name-placeholder': 'Name (e.g. Legal brief, Invoice...)',
+    'field-placeholder': 'Field (e.g. Client, Amount...)',
+    'field-btn': 'mark',
+    'field-btn-captured': '✓',
+    'add-field': '+ Add field',
+    
+    'complete-title': 'MIRA is ready.',
+    'complete-sub': 'Setup saved in device_knowledge. Training overlay remains available for fine-tuning.',
+    'saved-text': 'device_knowledge saved',
+    'finish-btn': 'Complete setup',
+    'optional-text': 'Optional',
+
+    'back-text': '← Back',
+    'next-text': 'Next',
+    'next-finish': 'Finish',
+    
+    'summary-mail': 'Mail app',
+    'summary-zone': 'Mail zone',
+    'summary-saved': 'saved ✓',
+    'summary-mails': 'Emails trained',
+    'summary-search': 'Search bar',
+    'summary-output': 'Output apps',
+    'summary-templates': 'Templates ready',
+    
+    'capture-tip': 'Mark area — drag mouse, then release',
+    'capture-waiting': 'Marking...',
+  }
+};
+
+let currentLang = localStorage.getItem('mira_language') || 'de';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'de' ? 'en' : 'de';
+  localStorage.setItem('mira_language', currentLang);
+  updateUILanguage();
+  updateDynamicTexts(); // Update texts that depend on state
+}
+
+function updateUILanguage() {
+  // Update toggle buttons
+  document.querySelectorAll('.lang-option').forEach(el => {
+    if (el.id === 'lang-de') {
+      el.style.background = currentLang === 'de' ? '#e8ff47' : 'transparent';
+      el.style.color = currentLang === 'de' ? '#000' : 'var(--muted)';
+    }
+    if (el.id === 'lang-en') {
+      el.style.background = currentLang === 'en' ? '#e8ff47' : 'transparent';
+      el.style.color = currentLang === 'en' ? '#000' : 'var(--muted)';
+    }
+  });
+
+  // Update all static text elements
+  const elements = [
+    'setup-badge', 'steps-label', 'step-0-label', 'step-1-label', 'step-2-label',
+    'step-3-label', 'step-4-label', 'step-5-label', 'step-6-label',
+    'step-0-tag', 'step-0-title', 'step-0-desc', 'step-1-tag', 'step-1-title',
+    'step-1-desc', 'step-2-tag', 'step-2-title', 'step-2-desc', 'step-3-tag',
+    'step-3-title', 'step-3-desc', 'step-4-tag', 'step-4-title', 'step-4-desc',
+    'step-5-tag', 'step-5-title', 'step-5-desc', 'complete-title', 'complete-sub',
+    'saved-text', 'finish-btn', 'back-text', 'next-text', 'optional-label',
+    'capture-tip'
+  ];
+
+  elements.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = i18n[currentLang][id];
+  });
+
+  // Update instruction texts (contain HTML)
+  document.getElementById('zone-instruction').innerHTML = i18n[currentLang]['zone-instruction'];
+  document.getElementById('search-instruction').innerHTML = i18n[currentLang]['search-instruction'];
+  document.getElementById('output-instruction').innerHTML = i18n[currentLang]['output-instruction'];
+  document.getElementById('mail-training-instruction').innerHTML = i18n[currentLang]['mail-training-instruction'];
+  document.getElementById('scroll-hint').textContent = i18n[currentLang]['scroll-hint'];
+
+  // Update mail options
+  const mailOptions = ['gmail', 'outlook', 'apple', 'thunderbird', 'yahoo', 'other'];
+  mailOptions.forEach(opt => {
+    const el = document.getElementById(`mail-${opt}`);
+    if (el) el.textContent = i18n[currentLang][`mail-${opt}`];
+  });
+
+  // Update output options
+  const outputOptions = ['excel', 'sheets', 'word', 'docs', 'notion', 'apple-notes', 'onenote', 'other'];
+  outputOptions.forEach(opt => {
+    const el = document.getElementById(`output-${opt}`);
+    if (el) el.textContent = i18n[currentLang][`output-${opt}`];
+  });
+
+  // Update zone names
+  document.getElementById('mail-zone-name').textContent = i18n[currentLang]['mail-zone-name'];
+  document.getElementById('search-zone-name').textContent = i18n[currentLang]['search-zone-name'];
+  document.getElementById('inbox-zone-name').textContent = i18n[currentLang]['inbox-zone-name'];
+
+  // Update buttons
+  document.getElementById('zone-btn').textContent = i18n[currentLang]['zone-btn'];
+  document.getElementById('search-btn').textContent = i18n[currentLang]['search-btn'];
+  document.getElementById('inbox-btn').textContent = i18n[currentLang]['inbox-btn'];
+
+  // Update next button text
+  updateNextButtonText();
+}
+
+function updateNextButtonText() {
+  const nextSpan = document.getElementById('next-text');
+  if (S.step === 5) {
+    nextSpan.textContent = i18n[currentLang]['next-finish'];
+  } else {
+    nextSpan.textContent = i18n[currentLang]['next-text'];
+  }
+}
+
+function updateDynamicTexts() {
+  // Update mail slots
+  for (let i = 0; i < 5; i++) {
+    const txt = document.getElementById(`ms-txt-${i}`);
+    const btn = document.getElementById(`ms-btn-${i}`);
+    if (txt) {
+      if (S.mailTraining[i]) {
+        txt.textContent = i18n[currentLang]['mail-slot-done']
+          .replace('{num}', i+1)
+          .replace('{time}', new Date().toLocaleTimeString(currentLang === 'de' ? 'de-DE' : 'en-US'));
+      } else {
+        txt.textContent = i18n[currentLang]['mail-slot-text'].replace('{num}', i+1);
+      }
+    }
+    if (btn) {
+      if (S.mailTraining[i]) {
+        btn.textContent = i18n[currentLang]['mail-slot-retry'];
+      } else {
+        btn.textContent = i18n[currentLang]['mail-slot-btn'];
+      }
+    }
+  }
+
+  // Update mail progress
+  const done = S.mailTraining.filter(Boolean).length;
+  const progressEl = document.getElementById('mail-progress');
+  if (progressEl) {
+    if (done >= 3) {
+      progressEl.textContent = i18n[currentLang]['mail-progress-ok'].replace('{done}', done);
+    } else {
+      progressEl.textContent = i18n[currentLang]['mail-progress-min'].replace('{done}', done);
+    }
+  }
+
+  // Update zone status texts
+  updateZoneStatusText('mail-zone-status', S.zones['mail_content_zone']);
+  updateZoneStatusText('search-zone-status', S.zones['mail_search_zone']);
+  updateZoneStatusText('inbox-zone-status', S.zones['mail_inbox_zone']);
+
+  // Update zone coords
+  if (S.zones['mail_content_zone']) {
+    const z = S.zones['mail_content_zone'];
+    document.getElementById('mail-zone-coords').textContent = `x1:${z.x1} y1:${z.y1} → x2:${z.x2} y2:${z.y2}`;
+  } else {
+    document.getElementById('mail-zone-coords').textContent = i18n[currentLang]['zone-coords-pending'];
+  }
+
+  if (S.zones['mail_search_zone']) {
+    const z = S.zones['mail_search_zone'];
+    document.getElementById('search-zone-coords').textContent = `x1:${z.x1} y1:${z.y1} → x2:${z.x2} y2:${z.y2}`;
+  } else {
+    document.getElementById('search-zone-coords').textContent = i18n[currentLang]['zone-coords-pending'];
+  }
+
+  if (S.zones['mail_inbox_zone']) {
+    const z = S.zones['mail_inbox_zone'];
+    document.getElementById('inbox-zone-coords').textContent = `x1:${z.x1} y1:${z.y1} → x2:${z.x2} y2:${z.y2}`;
+  } else {
+    document.getElementById('inbox-zone-coords').textContent = i18n[currentLang]['optional-text'] || 'Optional';
+  }
+}
+
+function updateZoneStatusText(elId, zone) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  if (zone) {
+    el.textContent = i18n[currentLang]['summary-saved'];
+    el.className = 'zone-status captured';
+  } else {
+    el.textContent = i18n[currentLang]['zone-status-pending'];
+    el.className = 'zone-status';
+  }
+}
 
 // ==================== STATE ====================
 const S = {
@@ -569,6 +967,7 @@ const S = {
 
 // ==================== INIT ====================
 function init() {
+  updateUILanguage();
   buildProgress();
   buildMailSlots();
   buildTemplates();
@@ -593,8 +992,8 @@ function buildMailSlots() {
     c.innerHTML += `
       <div class="mail-slot" id="ms-${i}">
         <div class="mail-slot-num" id="ms-num-${i}">${i+1}</div>
-        <div class="mail-slot-text" id="ms-txt-${i}">Mail ${i+1} öffnen, dann Screenshot machen</div>
-        <div class="mail-slot-action" id="ms-btn-${i}" onclick="captureMailTraining(${i})">Screenshot</div>
+        <div class="mail-slot-text" id="ms-txt-${i}">${i18n[currentLang]['mail-slot-text'].replace('{num}', i+1)}</div>
+        <div class="mail-slot-action" id="ms-btn-${i}" onclick="captureMailTraining(${i})">${i18n[currentLang]['mail-slot-btn']}</div>
       </div>`;
   }
 }
@@ -606,15 +1005,15 @@ function buildTemplates() {
     g.innerHTML += `
       <div class="template-card" id="tc-${i}">
         <div class="template-header">
-          <div class="template-num">TEMPLATE ${i+1}</div>
-          <div class="template-status" id="ts-${i}">leer</div>
+          <div class="template-num" id="template-num-${i}">${i18n[currentLang]['template-num'].replace('{num}', i+1)}</div>
+          <div class="template-status" id="ts-${i}">${i18n[currentLang]['template-status-empty']}</div>
         </div>
-        <input class="t-input" placeholder="Name (z.B. Klageschrift, Rechnung...)"
+        <input class="t-input" placeholder="${i18n[currentLang]['template-name-placeholder']}"
           oninput="updateTName(${i}, this.value)" id="tn-${i}"/>
         <div class="t-fields" id="tf-${i}">
           ${renderTemplateFields(i)}
         </div>
-        <button class="add-field-btn" onclick="addTField(${i})">+ Feld hinzufügen</button>
+        <button class="add-field-btn" onclick="addTField(${i})">${i18n[currentLang]['add-field']}</button>
       </div>`;
   });
 }
@@ -622,10 +1021,10 @@ function buildTemplates() {
 function renderTemplateFields(ti) {
   return S.templates[ti].fields.map((f, fi) => `
     <div class="t-field-row" id="tfr-${ti}-${fi}">
-      <input class="t-field-input" placeholder="Feld (z.B. Mandant, Betrag...)"
+      <input class="t-field-input" placeholder="${i18n[currentLang]['field-placeholder']}"
         value="${f.label}" oninput="updateTField(${ti}, ${fi}, this.value)"/>
       <button class="t-field-btn ${f.zone ? 'captured' : ''}" onclick="captureTFieldZone(${ti}, ${fi})">
-        ${f.zone ? '✓' : 'markieren'}
+        ${f.zone ? i18n[currentLang]['field-btn-captured'] : i18n[currentLang]['field-btn']}
       </button>
     </div>`).join('');
 }
@@ -669,7 +1068,7 @@ function updateNav() {
   } else {
     next.style.display = 'block';
     next.disabled = !canProceed(S.step);
-    next.textContent = S.step === 5 ? 'Abschließen →' : 'Weiter →';
+    updateNextButtonText();
   }
 }
 
@@ -711,23 +1110,36 @@ function selectMail(app, el) {
 // ==================== ZONE CAPTURE ====================
 async function startZoneCapture(key, coordId, statusId, btnId, callback) {
   const btn = document.getElementById(btnId);
-  if (btn) { btn.classList.add('waiting'); btn.textContent = 'Markiere...'; }
+  if (btn) { 
+    btn.classList.add('waiting'); 
+    const btnSpan = btn.querySelector('span');
+    if (btnSpan) btnSpan.textContent = i18n[currentLang]['capture-waiting'];
+  }
 
   const zone = await ipcRenderer.invoke('setup-capture-zone');
 
   if (!zone) {
-    if (btn) { btn.classList.remove('waiting'); btn.textContent = 'Zone markieren'; }
+    if (btn) { 
+      btn.classList.remove('waiting'); 
+      const btnSpan = btn.querySelector('span');
+      if (btnSpan) btnSpan.textContent = i18n[currentLang]['zone-btn'];
+    }
     return;
   }
 
   S.zones[key] = zone;
-  if (coordId) document.getElementById(coordId).textContent = `x1:${zone.x1} y1:${zone.y1} → x2:${zone.x2} y2:${zone.y2}`;
-  if (statusId) {
-    const el = document.getElementById(statusId);
-    el.textContent = 'gespeichert ✓';
-    el.className = 'zone-status captured';
+  if (coordId) {
+    const el = document.getElementById(coordId);
+    el.textContent = `x1:${zone.x1} y1:${zone.y1} → x2:${zone.x2} y2:${zone.y2}`;
   }
-  if (btn) { btn.classList.remove('waiting'); btn.textContent = 'Neu markieren'; }
+  if (statusId) {
+    updateZoneStatusText(statusId, zone);
+  }
+  if (btn) { 
+    btn.classList.remove('waiting'); 
+    const btnSpan = btn.querySelector('span');
+    if (btnSpan) btnSpan.textContent = i18n[currentLang]['zone-btn'];
+  }
   if (callback) callback(zone);
 
   saveKnowledge(key, { zone, source: 'wizard' });
@@ -747,7 +1159,8 @@ function cancelCapture() {
   if (cb && cb.btnId) {
     const btn = document.getElementById(cb.btnId);
     btn.classList.remove('waiting');
-    btn.textContent = 'Zone markieren';
+    const btnSpan = btn.querySelector('span');
+    if (btnSpan) btnSpan.textContent = i18n[currentLang]['zone-btn'];
   }
   closeCapture();
 }
@@ -760,7 +1173,7 @@ document.addEventListener('keydown', e => {
 async function captureMailTraining(index) {
   const btn = document.getElementById(`ms-btn-${index}`);
   btn.classList.add('capturing');
-  btn.textContent = 'Wird aufgenommen...';
+  btn.textContent = i18n[currentLang]['capture-waiting'];
 
   // Screenshot via Electron
   const sc = await ipcRenderer.invoke('setup-screenshot');
@@ -784,13 +1197,13 @@ async function captureMailTraining(index) {
 
   slot.classList.add('done');
   num.textContent = '✓';
-  txt.textContent = `Mail ${index+1} — trainiert ${new Date().toLocaleTimeString('de-DE')}`;
+  txt.textContent = i18n[currentLang]['mail-slot-done']
+    .replace('{num}', index+1)
+    .replace('{time}', new Date().toLocaleTimeString(currentLang === 'de' ? 'de-DE' : 'en-US'));
   btn.classList.remove('capturing');
-  btn.textContent = 'Nochmal';
+  btn.textContent = i18n[currentLang]['mail-slot-retry'];
 
-  const done = S.mailTraining.filter(Boolean).length;
-  document.getElementById('mail-progress').textContent = `${done} / 5 Mails trainiert${done < 3 ? ' (mind. 3 nötig)' : ' ✓'}`;
-
+  updateDynamicTexts();
   updateNav();
 }
 
@@ -825,12 +1238,12 @@ function checkTemplateStatus(i) {
   const status = document.getElementById(`ts-${i}`);
   const card = document.getElementById(`tc-${i}`);
   if (hasName && hasField) {
-    status.textContent = 'bereit ✓';
+    status.textContent = i18n[currentLang]['template-status-ready'];
     status.className = 'template-status ready';
     card.classList.add('ready-template');
     saveKnowledge(`template_${i}`, { name: t.name, fields: t.fields, source: 'wizard' });
   } else {
-    status.textContent = 'leer';
+    status.textContent = i18n[currentLang]['template-status-empty'];
     status.className = 'template-status';
     card.classList.remove('ready-template');
   }
@@ -844,9 +1257,9 @@ function addTField(ti) {
   row.className = 't-field-row';
   row.id = `tfr-${ti}-${fi}`;
   row.innerHTML = `
-    <input class="t-field-input" placeholder="Feld..."
+    <input class="t-field-input" placeholder="${i18n[currentLang]['field-placeholder']}"
       oninput="updateTField(${ti}, ${fi}, this.value)"/>
-    <button class="t-field-btn" onclick="captureTFieldZone(${ti}, ${fi})">markieren</button>`;
+    <button class="t-field-btn" onclick="captureTFieldZone(${ti}, ${fi})">${i18n[currentLang]['field-btn']}</button>`;
   container.appendChild(row);
 }
 
@@ -855,7 +1268,7 @@ function captureTFieldZone(ti, fi) {
   startZoneCapture(key, null, null, null, (zone) => {
     S.templates[ti].fields[fi].zone = zone;
     const btn = document.querySelector(`#tfr-${ti}-${fi} .t-field-btn`);
-    if (btn) { btn.textContent = '✓'; btn.classList.add('captured'); }
+    if (btn) { btn.textContent = i18n[currentLang]['field-btn-captured']; btn.classList.add('captured'); }
     checkTemplateStatus(ti);
   });
 }
@@ -864,12 +1277,12 @@ function captureTFieldZone(ti, fi) {
 function buildSummary() {
   const readyT = S.templates.filter(t => t.name.trim().length > 0).length;
   document.getElementById('summary-box').innerHTML = `
-    <div class="summary-row"><span class="summary-key">Mailprogramm</span><span class="summary-val ok">${S.mailApp || '—'}</span></div>
-    <div class="summary-row"><span class="summary-key">Mail-Zone</span><span class="summary-val ${S.zones['mail_content_zone'] ? 'ok' : ''}">${S.zones['mail_content_zone'] ? 'gespeichert ✓' : '—'}</span></div>
-    <div class="summary-row"><span class="summary-key">Mails trainiert</span><span class="summary-val ok">${S.mailTraining.filter(Boolean).length} / 5</span></div>
-    <div class="summary-row"><span class="summary-key">Suchleiste</span><span class="summary-val ${S.zones['mail_search_zone'] ? 'ok' : ''}">${S.zones['mail_search_zone'] ? 'gespeichert ✓' : '—'}</span></div>
-    <div class="summary-row"><span class="summary-key">Ausgabe-Apps</span><span class="summary-val ok">${[...S.outputs].join(', ') || '—'}</span></div>
-    <div class="summary-row"><span class="summary-key">Templates bereit</span><span class="summary-val ok">${readyT}</span></div>`;
+    <div class="summary-row"><span class="summary-key">${i18n[currentLang]['summary-mail']}</span><span class="summary-val ok">${S.mailApp || '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">${i18n[currentLang]['summary-zone']}</span><span class="summary-val ${S.zones['mail_content_zone'] ? 'ok' : ''}">${S.zones['mail_content_zone'] ? i18n[currentLang]['summary-saved'] : '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">${i18n[currentLang]['summary-mails']}</span><span class="summary-val ok">${S.mailTraining.filter(Boolean).length} / 5</span></div>
+    <div class="summary-row"><span class="summary-key">${i18n[currentLang]['summary-search']}</span><span class="summary-val ${S.zones['mail_search_zone'] ? 'ok' : ''}">${S.zones['mail_search_zone'] ? i18n[currentLang]['summary-saved'] : '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">${i18n[currentLang]['summary-output']}</span><span class="summary-val ok">${[...S.outputs].join(', ') || '—'}</span></div>
+    <div class="summary-row"><span class="summary-key">${i18n[currentLang]['summary-templates']}</span><span class="summary-val ok">${readyT}</span></div>`;
 }
 
 // ==================== SAVE ====================

@@ -13,9 +13,41 @@
   --red:#ef5350; --purple:#ce93d8; --orange:#ffb74d; --cyan:#4dd0e1;
 }
 body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code','Consolas',monospace; min-height:100vh; overflow-x:hidden; font-size:13px; }
-.titlebar { height:40px; -webkit-app-region:drag; display:flex; align-items:center; padding:0 16px; background:var(--bg); border-bottom:1px solid var(--b1); position:sticky; top:0; z-index:99; }
+.titlebar { 
+  height:40px; -webkit-app-region:drag; display:flex; align-items:center; 
+  padding:0 16px; background:var(--bg); border-bottom:1px solid var(--b1); 
+  position:sticky; top:0; z-index:99; 
+  justify-content: space-between;
+}
 .titlebar-txt { -webkit-app-region:no-drag; color:var(--t2); font-size:11px; }
 .titlebar-txt span { color:var(--green); }
+.titlebar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  -webkit-app-region: no-drag;
+}
+.lang-toggle {
+  background: var(--s1);
+  border: 1px solid var(--b1);
+  border-radius: 20px;
+  padding: 2px 6px;
+  display: flex;
+  gap: 4px;
+  cursor: pointer;
+}
+.lang-option {
+  padding: 3px 8px;
+  border-radius: 16px;
+  font-size: 10px;
+  font-weight: 600;
+  transition: all 0.15s;
+  color: var(--t2);
+}
+.lang-option.active {
+  background: var(--green);
+  color: #000;
+}
 
 .page { max-width:760px; margin:0 auto; padding:28px 20px 60px; }
 
@@ -156,7 +188,14 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
 <body>
 
 <div class="titlebar">
-  <span class="titlebar-txt"><span>MIRA</span>Corp AG — /proc/belegschaft — PID 1 bis 7</span>
+  <span class="titlebar-txt"><span>MIRA</span>Corp AG — <span id="titlebar-text">/proc/belegschaft — PID 1 bis 7</span></span>
+  <div class="titlebar-right">
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de" style="background:#00e676;color:#000">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
+    </div>
+  </div>
 </div>
 
 <div class="page">
@@ -166,29 +205,29 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
     <div class="term-bar">
       <div class="term-dot r"></div><div class="term-dot y"></div><div class="term-dot g"></div>
     </div>
-    <div class="term-line term-prompt">cat /etc/mira/team.json | jq '.'</div>
+    <div class="term-line term-prompt" id="terminal-cmd">cat /etc/mira/team.json | jq '.'</div>
     <div class="term-line"><span class="out">{</span></div>
-    <div class="term-line">&nbsp;&nbsp;<span class="out">"company":</span> <span class="warn">"MIRA Corp AG"</span>,</div>
-    <div class="term-line">&nbsp;&nbsp;<span class="out">"employees":</span> <span class="green">7</span>,</div>
-    <div class="term-line">&nbsp;&nbsp;<span class="out">"sick_days_total":</span> <span class="green">0</span>,</div>
-    <div class="term-line">&nbsp;&nbsp;<span class="out">"salary_budget":</span> <span class="green">0.00</span>,&nbsp;<span class="err">// kein Kommentar</span></div>
-    <div class="term-line">&nbsp;&nbsp;<span class="out">"uptime":</span> <span class="warn">"since last npm start"</span>,</div>
-    <div class="term-line">&nbsp;&nbsp;<span class="out">"overtime":</span> <span class="warn">"Infinity"</span></div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out" id="term-company">"company":</span> <span class="warn" id="term-company-val">"MIRA Corp AG"</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out" id="term-employees">"employees":</span> <span class="green">7</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out" id="term-sick">"sick_days_total":</span> <span class="green">0</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out" id="term-salary">"salary_budget":</span> <span class="green">0.00</span>,&nbsp;<span class="err" id="term-salary-comment">// kein Kommentar</span></div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out" id="term-uptime">"uptime":</span> <span class="warn" id="term-uptime-val">"since last npm start"</span>,</div>
+    <div class="term-line">&nbsp;&nbsp;<span class="out" id="term-overtime">"overtime":</span> <span class="warn" id="term-overtime-val">"Infinity"</span></div>
     <div class="term-line"><span class="out">}</span></div>
     <div class="term-line" style="margin-top:6px"><span class="term-prompt"></span><span class="term-cursor"></span></div>
   </div>
 
   <!-- ERROR LOG -->
   <div class="error-log">
-    <div class="log-title">⚠ SYSTEM NOTICE — /var/log/mira/hr.log</div>
-    <div class="log-line">[WARN]&nbsp; Alle Mitarbeiter laufen single-threaded. Parallelisierung: <code>geplant</code></div>
-    <div class="log-line">[INFO]&nbsp; Kündigung via <code>process.exit(1)</code>. Bitte Betriebsrat informieren.</div>
-    <div class="log-line">[INFO]&nbsp; Urlaubsanträge werden geprüft. Worker hat kein Konzept von Urlaub.</div>
-    <div class="log-line">[WARN]&nbsp; Gehaltserhöhung: <code>undefined</code>. Kein Bug. Feature.</div>
+    <div class="log-title" id="log-title">⚠ SYSTEM NOTICE — /var/log/mira/hr.log</div>
+    <div class="log-line" id="log-warn-1">[WARN]&nbsp; Alle Mitarbeiter laufen single-threaded. Parallelisierung: <code>geplant</code></div>
+    <div class="log-line" id="log-info-1">[INFO]&nbsp; Kündigung via <code>process.exit(1)</code>. Bitte Betriebsrat informieren.</div>
+    <div class="log-line" id="log-info-2">[INFO]&nbsp; Urlaubsanträge werden geprüft. Worker hat kein Konzept von Urlaub.</div>
+    <div class="log-line" id="log-warn-2">[WARN]&nbsp; Gehaltserhöhung: <code>undefined</code>. Kein Bug. Feature.</div>
   </div>
 
   <!-- FÜHRUNGSEBENE -->
-  <div class="section-label">Kernel-Ebene / Ring 0</div>
+  <div class="section-label" id="section-kernel">Kernel-Ebene / Ring 0</div>
   <div class="grid" style="margin-bottom:28px">
 
     <!-- HANS DISPATCH -->
@@ -197,30 +236,30 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=HansDispatch&backgroundColor=080a10&eyes=bulging&mouth=smile01" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Hans Dispatch</div>
+          <div class="emp-name" id="hans-name">Hans Dispatch</div>
           <div class="emp-pid">PID <span>1337</span> · PPID root</div>
-          <div class="badge" style="--ac:#64b5f6;--ac-bg:#64b5f612;--ac-bd:#64b5f625">dispatcher</div>
+          <div class="badge" style="--ac:#64b5f6;--ac-bg:#64b5f612;--ac-bd:#64b5f625" id="hans-badge">dispatcher</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs">
-          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val blue">Leitender Intent-Koordinator</span></div>
-          <div class="spec-row"><span class="spec-key">Stack</span><span class="spec-val">GPT-4o-mini + Regex-Fallback</span></div>
-          <div class="spec-row"><span class="spec-key">Latenz</span><span class="spec-val green">~280ms cold, 0ms warm</span></div>
-          <div class="spec-row"><span class="spec-key">Ausb.</span><span class="spec-val">MIT (Man In Terminal), 2023</span></div>
-          <div class="spec-row"><span class="spec-key">Fehler</span><span class="spec-val yellow">graceful degradation</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-role">Rolle</span><span class="spec-val blue" id="hans-role">Leitender Intent-Koordinator</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-stack">Stack</span><span class="spec-val" id="hans-stack">GPT-4o-mini + Regex-Fallback</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-latency">Latenz</span><span class="spec-val green" id="hans-latency">~280ms cold, 0ms warm</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-edu">Ausb.</span><span class="spec-val" id="hans-edu">MIT (Man In Terminal), 2023</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-error">Fehler</span><span class="spec-val yellow" id="hans-error">graceful degradation</span></div>
         </div>
-        <div class="bio">
+        <div class="bio" id="hans-bio">
           Hans verteilt jeden eingehenden Befehl an den richtigen Prozess.
           Kennt <strong>40+ Intent-Muster</strong> auswendig — den Rest delegiert er stillschweigend
           an <code>GPT-4o-mini</code> und tut danach so, als wäre es sein Plan gewesen.
           Hat noch nie ein <code>throw</code> unbeantwortet gelassen.
         </div>
-        <div class="quote">Ich sehe einen Intent. Ich sehe einen Plan. Der Plan bin ich.</div>
+        <div class="quote" id="hans-quote">Ich sehe einen Intent. Ich sehe einen Plan. Der Plan bin ich.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot green"></div>RUNNING · dispatch-full</div>
-        <div class="uptime">Calls/Session: <strong>∞</strong></div>
+        <div class="status"><div class="dot green"></div><span id="hans-status">RUNNING · dispatch-full</span></div>
+        <div class="uptime"><span id="hans-calls">Calls/Session</span>: <strong>∞</strong></div>
       </div>
     </div>
 
@@ -230,37 +269,37 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=ErikaVision&backgroundColor=080a10&eyes=eva&mouth=smile02" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Dr. Erika W.</div>
+          <div class="emp-name" id="erika-name">Dr. Erika W.</div>
           <div class="emp-pid">PID <span>4200</span> · CPU: GPU-delegiert</div>
-          <div class="badge" style="--ac:#ce93d8;--ac-bg:#ce93d812;--ac-bd:#ce93d825">wahrnehmungs-amt</div>
+          <div class="badge" style="--ac:#ce93d8;--ac-bg:#ce93d812;--ac-bd:#ce93d825" id="erika-badge">wahrnehmungs-amt</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs">
-          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val purple">Vision-Analystin, MSc.</span></div>
-          <div class="spec-row"><span class="spec-key">Modell</span><span class="spec-val">GPT-4o-mini Vision</span></div>
-          <div class="spec-row"><span class="spec-key">Cache</span><span class="spec-val green">2000ms TTL (stolz drauf)</span></div>
-          <div class="spec-row"><span class="spec-key">Output</span><span class="spec-val">JSON: scene, dangers, is_form</span></div>
-          <div class="spec-row"><span class="spec-key">Augen</span><span class="spec-val yellow">base64-PNG, 800px komprimiert</span></div>
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val purple" id="erika-role">Vision-Analystin, MSc.</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-model">Modell</span><span class="spec-val" id="erika-model">GPT-4o-mini Vision</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-cache">Cache</span><span class="spec-val green" id="erika-cache">2000ms TTL (stolz drauf)</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-output">Output</span><span class="spec-val" id="erika-output">JSON: scene, dangers, is_form</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-eyes">Augen</span><span class="spec-val yellow" id="erika-eyes">base64-PNG, 800px komprimiert</span></div>
         </div>
-        <div class="bio">
+        <div class="bio" id="erika-bio">
           Erika scannt jeden Bildschirm auf <strong>Formulare, Gefahren und App-Typ</strong>.
           Braucht <code>2000ms</code> Bedenkzeit (Cache), was sie als „Kontemplation"
           bezeichnet. Hat bei einem Senden-Button einmal <code>danger: true</code>
           zurückgegeben — und wurde dann doch nicht aufgehalten.
         </div>
-        <div class="quote">Das ist kein Button. Das ist ein Haftungsrisiko.</div>
+        <div class="quote" id="erika-quote">Das ist kein Button. Das ist ein Haftungsrisiko.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot blue"></div>SCANNING · /api/brain/perceive</div>
-        <div class="uptime">Scans/h: <strong>~30</strong></div>
+        <div class="status"><div class="dot blue"></div><span id="erika-status">SCANNING · /api/brain/perceive</span></div>
+        <div class="uptime"><span id="erika-scans">Scans/h</span>: <strong>~30</strong></div>
       </div>
     </div>
 
   </div>
 
   <!-- SACHBEARBEITUNG -->
-  <div class="section-label">User-Space / Ring 3</div>
+  <div class="section-label" id="section-userspace">User-Space / Ring 3</div>
   <div class="grid" style="margin-bottom:28px">
 
     <!-- BRIGITTE -->
@@ -269,31 +308,31 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=Brigitte42&backgroundColor=080a10&eyes=robocop&mouth=smile03" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Brigitte I.</div>
+          <div class="emp-name" id="brigitte-name">Brigitte I.</div>
           <div class="emp-pid">PID <span>2048</span> · state: WAITING</div>
-          <div class="badge" style="--ac:#ffd54f;--ac-bg:#ffd54f12;--ac-bd:#ffd54f25">informations-amt</div>
+          <div class="badge" style="--ac:#ffd54f;--ac-bg:#ffd54f12;--ac-bd:#ffd54f25" id="brigitte-badge">informations-amt</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs">
-          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val yellow">Sachbearb. Kontextprüfung</span></div>
-          <div class="spec-row"><span class="spec-key">Blocking</span><span class="spec-val red">JA — wartet auf Input</span></div>
-          <div class="spec-row"><span class="spec-key">Fragen</span><span class="spec-val green">max 1 pro Kontext-Typ</span></div>
-          <div class="spec-row"><span class="spec-key">Memory</span><span class="spec-val">Set&lt;string&gt; (kein Vergessen)</span></div>
-          <div class="spec-row"><span class="spec-key">Timeout</span><span class="spec-val yellow">45.000ms dann null</span></div>
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val yellow" id="brigitte-role">Sachbearb. Kontextprüfung</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-blocking">Blocking</span><span class="spec-val red" id="brigitte-blocking">JA — wartet auf Input</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-questions">Fragen</span><span class="spec-val green" id="brigitte-questions">max 1 pro Kontext-Typ</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-memory">Memory</span><span class="spec-val" id="brigitte-memory">Set&lt;string&gt; (kein Vergessen)</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-timeout">Timeout</span><span class="spec-val yellow" id="brigitte-timeout">45.000ms dann null</span></div>
         </div>
-        <div class="bio">
+        <div class="bio" id="brigitte-bio">
           Brigitte prüft vor jeder Aktion ob alle Infos vorliegen.
           Stellt exakt <strong>eine Frage pro Kontext-Lücke</strong> — nie dieselbe zweimal
           (<code>Set&lt;asked&gt;</code>). Bei gefährlichen Buttons öffnet sie einen
           <code>dialog.showMessageBox</code>. Wartet 45 Sekunden auf Antwort,
           dann <code>return null</code> — mit Würde.
         </div>
-        <div class="quote">Haben Sie die erforderlichen Unterlagen? Ich warte. Timeout: 45s.</div>
+        <div class="quote" id="brigitte-quote">Haben Sie die erforderlichen Unterlagen? Ich warte. Timeout: 45s.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot yellow"></div>BLOCKED · awaiting user input</div>
-        <div class="uptime">Asked: <strong>Set.size queries</strong></div>
+        <div class="status"><div class="dot yellow"></div><span id="brigitte-status">BLOCKED · awaiting user input</span></div>
+        <div class="uptime"><span id="brigitte-asked">Asked</span>: <strong>Set.size queries</strong></div>
       </div>
     </div>
 
@@ -303,37 +342,37 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=SvenRAM&backgroundColor=080a10&eyes=gooey&mouth=bite" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Sven K.</div>
+          <div class="emp-name" id="sven-name">Sven K.</div>
           <div class="emp-pid">PID <span>0001</span> · RAM-resident · Singleton</div>
-          <div class="badge">session-context</div>
+          <div class="badge" id="sven-badge">session-context</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs">
-          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val green">Persistentes Arbeitsgedächtnis</span></div>
-          <div class="spec-row"><span class="spec-key">Speicher</span><span class="spec-val">Heap · kein Disk-Write</span></div>
-          <div class="spec-row"><span class="spec-key">Steps</span><span class="spec-val yellow">FIFO max 20 (selektiv)</span></div>
-          <div class="spec-row"><span class="spec-key">Pattern</span><span class="spec-val blue">Singleton (require() cached)</span></div>
-          <div class="spec-row"><span class="spec-key">Ableben</span><span class="spec-val red">process.exit() oder Ctrl+C</span></div>
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val green" id="sven-role">Persistentes Arbeitsgedächtnis</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-storage">Speicher</span><span class="spec-val" id="sven-storage">Heap · kein Disk-Write</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-steps">Steps</span><span class="spec-val yellow" id="sven-steps">FIFO max 20 (selektiv)</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-pattern">Pattern</span><span class="spec-val blue" id="sven-pattern">Singleton (require() cached)</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-death">Ableben</span><span class="spec-val red" id="sven-death">process.exit() oder Ctrl+C</span></div>
         </div>
-        <div class="bio">
+        <div class="bio" id="sven-bio">
           Sven ist das einzige Singleton im Team — existiert exakt einmal,
           seit <code>npm start</code>. Hält <strong>Ziel, Schritte, Fakten, Perception und
           Checkpoints</strong> im RAM. Injiziert sich in jeden LLM-Prompt via
           <code>toPromptString()</code>. Vergisst erst nach Step 21 (FIFO).
         </div>
-        <div class="quote">module.exports = new SessionContext(); // Ich. Bin. Einzigartig.</div>
+        <div class="quote" id="sven-quote">module.exports = new SessionContext(); // Ich. Bin. Einzigartig.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot green"></div>RUNNING · Singleton · RAM only</div>
-        <div class="uptime">Reset bei: <strong>process.exit</strong></div>
+        <div class="status"><div class="dot green"></div><span id="sven-status">RUNNING · Singleton · RAM only</span></div>
+        <div class="uptime"><span id="sven-reset">Reset bei</span>: <strong>process.exit</strong></div>
       </div>
     </div>
 
   </div>
 
   <!-- SICHERHEIT -->
-  <div class="section-label">Security-Ring / Interrupt-Handler</div>
+  <div class="section-label" id="section-security">Security-Ring / Interrupt-Handler</div>
   <div class="grid" style="margin-bottom:28px">
 
     <!-- FRANZ GEFAHR -->
@@ -342,31 +381,31 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=FranzSecurity&backgroundColor=080a10&eyes=hearts&mouth=bite" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Franz G.</div>
+          <div class="emp-name" id="franz-name">Franz G.</div>
           <div class="emp-pid">PID <span>9999</span> · SIGTERM-proof</div>
-          <div class="badge" style="--ac:#ef5350;--ac-bg:#ef535012;--ac-bd:#ef535025">gefahren-amt</div>
+          <div class="badge" style="--ac:#ef5350;--ac-bg:#ef535012;--ac-bd:#ef535025" id="franz-badge">gefahren-amt</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs">
-          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val red">Sicherheitsbeauft. / Watchdog</span></div>
-          <div class="spec-row"><span class="spec-key">MAX_RETRIES</span><span class="spec-val yellow">3 (unveränderlich)</span></div>
-          <div class="spec-row"><span class="spec-key">Lernkurve</span><span class="spec-val green">after 3× success → trusted</span></div>
-          <div class="spec-row"><span class="spec-key">Storage</span><span class="spec-val">device_knowledge (Supabase)</span></div>
-          <div class="spec-row"><span class="spec-key">Snapshot</span><span class="spec-val blue">vor JEDER riskanten Aktion</span></div>
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val red" id="franz-role">Sicherheitsbeauft. / Watchdog</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-retries">MAX_RETRIES</span><span class="spec-val yellow" id="franz-retries">3 (unveränderlich)</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-learning">Lernkurve</span><span class="spec-val green" id="franz-learning">after 3× success → trusted</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-storage2">Storage</span><span class="spec-val" id="franz-storage">device_knowledge (Supabase)</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-snapshot">Snapshot</span><span class="spec-val blue" id="franz-snapshot">vor JEDER riskanten Aktion</span></div>
         </div>
-        <div class="bio">
+        <div class="bio" id="franz-bio">
           Franz macht einen <strong>Snapshot</strong> bevor er irgendetwas berührt.
           Schlägt ein Klick fehl → <code>correct()</code> → Retry 1 → Retry 2 → Retry 3
           → <code>return { corrected: false, reason: "3 Versuche erschöpft" }</code>.
           Korrekturen die 3× klappen werden als <code>trusted</code> ins
           <code>device_knowledge</code> gespeichert. Er nennt das <em>Lebensweisheit</em>.
         </div>
-        <div class="quote">if (diff.changed) return ok; // sonst: nochmal. Nochmal. NOCHMAL.</div>
+        <div class="quote" id="franz-quote">if (diff.changed) return ok; // sonst: nochmal. Nochmal. NOCHMAL.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot red"></div>WATCHDOG · prüft nach jedem Click</div>
-        <div class="uptime">Confidence threshold: <strong>3</strong></div>
+        <div class="status"><div class="dot red"></div><span id="franz-status">WATCHDOG · prüft nach jedem Click</span></div>
+        <div class="uptime"><span id="franz-confidence">Confidence threshold</span>: <strong>3</strong></div>
       </div>
     </div>
 
@@ -376,38 +415,38 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=AxlSwift&backgroundColor=080a10&eyes=dizzy&mouth=smile01" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Axl Helper</div>
+          <div class="emp-name" id="axl-name">Axl Helper</div>
           <div class="emp-pid">PID <span>syscall</span> · Kernel-Bridge</div>
-          <div class="badge" style="--ac:#ffb74d;--ac-bg:#ffb74d12;--ac-bd:#ffb74d25">ax-layer</div>
+          <div class="badge" style="--ac:#ffb74d;--ac-bg:#ffb74d12;--ac-bd:#ffb74d25" id="axl-badge">ax-layer</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs">
-          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val orange">Cross-Platform UI-Archäologe</span></div>
-          <div class="spec-row"><span class="spec-key">macOS</span><span class="spec-val">Swift · AXUIElement · ~20ms</span></div>
-          <div class="spec-row"><span class="spec-key">Windows</span><span class="spec-val">C# · UI Automation · .NET 8</span></div>
-          <div class="spec-row"><span class="spec-key">Output</span><span class="spec-val blue">JSON · top-left origin</span></div>
-          <div class="spec-row"><span class="spec-key">Tier</span><span class="spec-val green">0a (JS) + 0b (Subprocess)</span></div>
+          <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val orange" id="axl-role">Cross-Platform UI-Archäologe</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-macos">macOS</span><span class="spec-val" id="axl-macos">Swift · AXUIElement · ~20ms</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-windows">Windows</span><span class="spec-val" id="axl-windows">C# · UI Automation · .NET 8</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-output2">Output</span><span class="spec-val blue" id="axl-output">JSON · top-left origin</span></div>
+          <div class="spec-row"><span class="spec-key" id="spec-tier">Tier</span><span class="spec-val green" id="axl-tier">0a (JS) + 0b (Subprocess)</span></div>
         </div>
-        <div class="bio">
+        <div class="bio" id="axl-bio">
           Axl liest <strong>jeden interaktiven Element-Baum</strong> des Betriebssystems —
           Buttons, Textfelder, versteckte Checkboxen, Labels ohne Text.
           Spricht auf Mac <code>Swift</code>, auf Windows <code>C#</code>,
           antwortet immer in <code>JSON</code>. Koordinaten: immer top-left.
           Braucht keine Screenshots. Braucht keine Augen. Hat den AX-Baum.
         </div>
-        <div class="quote">Tier 0b hat ein Match. Kein Screenshot nötig. Bitte danken.</div>
+        <div class="quote" id="axl-quote">Tier 0b hat ein Match. Kein Screenshot nötig. Bitte danken.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot blue"></div>READY · subprocess spawned</div>
-        <div class="uptime">Latenz: <strong>~20ms</strong></div>
+        <div class="status"><div class="dot blue"></div><span id="axl-status">READY · subprocess spawned</span></div>
+        <div class="uptime"><span id="axl-latency">Latenz</span>: <strong>~20ms</strong></div>
       </div>
     </div>
 
   </div>
 
   <!-- IT INFRASTRUKTUR -->
-  <div class="section-label">IT-Infrastruktur / Cache-Management</div>
+  <div class="section-label" id="section-it">IT-Infrastruktur / Cache-Management</div>
   <div class="grid single" style="margin-bottom:36px">
 
     <!-- KONRAD CONTEXT MANAGER -->
@@ -416,25 +455,25 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
       <div class="card-head">
         <div class="avatar" style="width:52px;height:52px"><img src="https://api.dicebear.com/9.x/bottts/svg?seed=KonradCache&backgroundColor=080a10&eyes=roundFrame01&mouth=smile02" loading="lazy"></div>
         <div class="meta">
-          <div class="emp-name">Konrad C. Manager</div>
+          <div class="emp-name" id="konrad-name">Konrad C. Manager</div>
           <div class="emp-pid">PID <span>400</span> · TTL 400ms · Singleton</div>
-          <div class="badge" style="--ac:#4dd0e1;--ac-bg:#4dd0e112;--ac-bd:#4dd0e125">context-manager</div>
+          <div class="badge" style="--ac:#4dd0e1;--ac-bg:#4dd0e112;--ac-bd:#4dd0e125" id="konrad-badge">context-manager</div>
         </div>
       </div>
       <div class="card-body">
         <div class="specs" style="grid-template-columns:1fr 1fr;display:grid;gap:0">
           <div>
-            <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val cyan">AX-State-Verwaltung</span></div>
-            <div class="spec-row"><span class="spec-key">Cache TTL</span><span class="spec-val green">exakt 400ms</span></div>
-            <div class="spec-row"><span class="spec-key">Fallbacks</span><span class="spec-val yellow">Tier 0a → 0b → 1 → 2 → 3</span></div>
+            <div class="spec-row"><span class="spec-key">Rolle</span><span class="spec-val cyan" id="konrad-role">AX-State-Verwaltung</span></div>
+            <div class="spec-row"><span class="spec-key" id="spec-cache-ttl">Cache TTL</span><span class="spec-val green" id="konrad-ttl">exakt 400ms</span></div>
+            <div class="spec-row"><span class="spec-key" id="spec-fallbacks">Fallbacks</span><span class="spec-val yellow" id="konrad-fallbacks">Tier 0a → 0b → 1 → 2 → 3</span></div>
           </div>
           <div>
-            <div class="spec-row"><span class="spec-key">invalidate()</span><span class="spec-val red">nach jedem Click/Type/Key</span></div>
-            <div class="spec-row"><span class="spec-key">Output</span><span class="spec-val blue">toPromptString() für LLM</span></div>
-            <div class="spec-row"><span class="spec-key">diffStates</span><span class="spec-val">JA — GefahrenAmt braucht's</span></div>
+            <div class="spec-row"><span class="spec-key" id="spec-invalidate">invalidate()</span><span class="spec-val red" id="konrad-invalidate">nach jedem Click/Type/Key</span></div>
+            <div class="spec-row"><span class="spec-key" id="spec-output3">Output</span><span class="spec-val blue" id="konrad-output">toPromptString() für LLM</span></div>
+            <div class="spec-row"><span class="spec-key" id="spec-diff">diffStates</span><span class="spec-val" id="konrad-diff">JA — GefahrenAmt braucht's</span></div>
           </div>
         </div>
-        <div class="bio" style="margin-top:10px">
+        <div class="bio" style="margin-top:10px" id="konrad-bio">
           Konrad hält jeden <strong>AX-State-Snapshot</strong> für 400ms warm — nicht eine Millisekunde mehr.
           Nach jedem Klick, jeder Eingabe, jedem Tastendruck ruft irgendjemand
           <code>invalidate()</code> bei ihm auf, und er fängt bei null an.
@@ -443,11 +482,11 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
           implementiert 5 Fallback-Tiers für wenn <code>findInState()</code> leer zurückkommt.
           Tier 3 ist manuell kalibrierte Koordinate. <em>Niemand mag Tier 3.</em>
         </div>
-        <div class="quote">Invalidiert. Frisch geladen. 400ms. Ich lebe im Jetzt.</div>
+        <div class="quote" id="konrad-quote">Invalidiert. Frisch geladen. 400ms. Ich lebe im Jetzt.</div>
       </div>
       <div class="card-foot">
-        <div class="status"><div class="dot green"></div>CACHED · toPromptString() ready</div>
-        <div class="uptime">Tier-0a Hit-Rate: <strong>~78 %</strong></div>
+        <div class="status"><div class="dot green"></div><span id="konrad-status">CACHED · toPromptString() ready</span></div>
+        <div class="uptime"><span id="konrad-hitrate">Tier-0a Hit-Rate</span>: <strong>~78 %</strong></div>
       </div>
     </div>
 
@@ -455,20 +494,421 @@ body { background:var(--bg); color:var(--text); font-family:'SF Mono','Fira Code
 
   <!-- FOOTER -->
   <div class="footer">
-    <div style="color:var(--t2)">MIRA Corp AG · /proc/belegschaft · alle Rechte vorbehalten</div>
-    <div>Keiner dieser Mitarbeiter hat je einen Urlaubsantrag gestellt. Wir finden das effizient.</div>
-    <div style="margin-top:4px;color:var(--t3)">
+    <div style="color:var(--t2)" id="footer-company">MIRA Corp AG · /proc/belegschaft · alle Rechte vorbehalten</div>
+    <div id="footer-note">Keiner dieser Mitarbeiter hat je einen Urlaubsantrag gestellt. Wir finden das effizient.</div>
+    <div style="margin-top:4px;color:var(--t3)" id="footer-build">
       Build: <strong id="bd">—</strong> &nbsp;·&nbsp;
       Node: <strong id="nv">—</strong> &nbsp;·&nbsp;
       Electron: <strong id="ev">—</strong>
     </div>
-    <button class="close-btn" onclick="window.close()">⌘W · Schließen</button>
+    <button class="close-btn" onclick="window.close()" id="close-btn">⌘W · Schließen</button>
   </div>
 
 </div>
 
 <script>
-document.getElementById('bd').textContent = new Date().toLocaleDateString('de-DE');
+const { ipcRenderer } = require('electron');
+
+// ====================================
+// INTERNATIONALIZATION (DE/EN)
+// ====================================
+
+const i18n = {
+  de: {
+    'titlebar-text': '/proc/belegschaft — PID 1 bis 7',
+    
+    // Terminal
+    'terminal-cmd': 'cat /etc/mira/team.json | jq \'.\'',
+    'term-company': '"company":',
+    'term-company-val': '"MIRA Corp AG"',
+    'term-employees': '"employees":',
+    'term-sick': '"sick_days_total":',
+    'term-salary': '"salary_budget":',
+    'term-salary-comment': '// kein Kommentar',
+    'term-uptime': '"uptime":',
+    'term-uptime-val': '"since last npm start"',
+    'term-overtime': '"overtime":',
+    'term-overtime-val': '"Infinity"',
+    
+    // Error log
+    'log-title': '⚠ SYSTEM NOTICE — /var/log/mira/hr.log',
+    'log-warn-1': '[WARN]&nbsp; Alle Mitarbeiter laufen single-threaded. Parallelisierung: <code>geplant</code>',
+    'log-info-1': '[INFO]&nbsp; Kündigung via <code>process.exit(1)</code>. Bitte Betriebsrat informieren.',
+    'log-info-2': '[INFO]&nbsp; Urlaubsanträge werden geprüft. Worker hat kein Konzept von Urlaub.',
+    'log-warn-2': '[WARN]&nbsp; Gehaltserhöhung: <code>undefined</code>. Kein Bug. Feature.',
+    
+    // Sections
+    'section-kernel': 'Kernel-Ebene / Ring 0',
+    'section-userspace': 'User-Space / Ring 3',
+    'section-security': 'Security-Ring / Interrupt-Handler',
+    'section-it': 'IT-Infrastruktur / Cache-Management',
+    
+    // Spec keys
+    'spec-role': 'Rolle',
+    'spec-stack': 'Stack',
+    'spec-latency': 'Latenz',
+    'spec-edu': 'Ausb.',
+    'spec-error': 'Fehler',
+    'spec-model': 'Modell',
+    'spec-cache': 'Cache',
+    'spec-output': 'Output',
+    'spec-eyes': 'Augen',
+    'spec-blocking': 'Blocking',
+    'spec-questions': 'Fragen',
+    'spec-memory': 'Memory',
+    'spec-timeout': 'Timeout',
+    'spec-storage': 'Speicher',
+    'spec-steps': 'Steps',
+    'spec-pattern': 'Pattern',
+    'spec-death': 'Ableben',
+    'spec-retries': 'MAX_RETRIES',
+    'spec-learning': 'Lernkurve',
+    'spec-storage2': 'Storage',
+    'spec-snapshot': 'Snapshot',
+    'spec-macos': 'macOS',
+    'spec-windows': 'Windows',
+    'spec-output2': 'Output',
+    'spec-tier': 'Tier',
+    'spec-cache-ttl': 'Cache TTL',
+    'spec-fallbacks': 'Fallbacks',
+    'spec-invalidate': 'invalidate()',
+    'spec-output3': 'Output',
+    'spec-diff': 'diffStates',
+    
+    // Hans
+    'hans-name': 'Hans Dispatch',
+    'hans-badge': 'dispatcher',
+    'hans-role': 'Leitender Intent-Koordinator',
+    'hans-stack': 'GPT-4o-mini + Regex-Fallback',
+    'hans-latency': '~280ms cold, 0ms warm',
+    'hans-edu': 'MIT (Man In Terminal), 2023',
+    'hans-error': 'graceful degradation',
+    'hans-bio': 'Hans verteilt jeden eingehenden Befehl an den richtigen Prozess. Kennt <strong>40+ Intent-Muster</strong> auswendig — den Rest delegiert er stillschweigend an <code>GPT-4o-mini</code> und tut danach so, als wäre es sein Plan gewesen. Hat noch nie ein <code>throw</code> unbeantwortet gelassen.',
+    'hans-quote': 'Ich sehe einen Intent. Ich sehe einen Plan. Der Plan bin ich.',
+    'hans-status': 'RUNNING · dispatch-full',
+    'hans-calls': 'Calls/Session',
+    
+    // Erika
+    'erika-name': 'Dr. Erika W.',
+    'erika-badge': 'wahrnehmungs-amt',
+    'erika-role': 'Vision-Analystin, MSc.',
+    'erika-model': 'GPT-4o-mini Vision',
+    'erika-cache': '2000ms TTL (stolz drauf)',
+    'erika-output': 'JSON: scene, dangers, is_form',
+    'erika-eyes': 'base64-PNG, 800px komprimiert',
+    'erika-bio': 'Erika scannt jeden Bildschirm auf <strong>Formulare, Gefahren und App-Typ</strong>. Braucht <code>2000ms</code> Bedenkzeit (Cache), was sie als „Kontemplation" bezeichnet. Hat bei einem Senden-Button einmal <code>danger: true</code> zurückgegeben — und wurde dann doch nicht aufgehalten.',
+    'erika-quote': 'Das ist kein Button. Das ist ein Haftungsrisiko.',
+    'erika-status': 'SCANNING · /api/brain/perceive',
+    'erika-scans': 'Scans/h',
+    
+    // Brigitte
+    'brigitte-name': 'Brigitte I.',
+    'brigitte-badge': 'informations-amt',
+    'brigitte-role': 'Sachbearb. Kontextprüfung',
+    'brigitte-blocking': 'JA — wartet auf Input',
+    'brigitte-questions': 'max 1 pro Kontext-Typ',
+    'brigitte-memory': 'Set&lt;string&gt; (kein Vergessen)',
+    'brigitte-timeout': '45.000ms dann null',
+    'brigitte-bio': 'Brigitte prüft vor jeder Aktion ob alle Infos vorliegen. Stellt exakt <strong>eine Frage pro Kontext-Lücke</strong> — nie dieselbe zweimal (<code>Set&lt;asked&gt;</code>). Bei gefährlichen Buttons öffnet sie einen <code>dialog.showMessageBox</code>. Wartet 45 Sekunden auf Antwort, dann <code>return null</code> — mit Würde.',
+    'brigitte-quote': 'Haben Sie die erforderlichen Unterlagen? Ich warte. Timeout: 45s.',
+    'brigitte-status': 'BLOCKED · awaiting user input',
+    'brigitte-asked': 'Asked',
+    
+    // Sven
+    'sven-name': 'Sven K.',
+    'sven-badge': 'session-context',
+    'sven-role': 'Persistentes Arbeitsgedächtnis',
+    'sven-storage': 'Heap · kein Disk-Write',
+    'sven-steps': 'FIFO max 20 (selektiv)',
+    'sven-pattern': 'Singleton (require() cached)',
+    'sven-death': 'process.exit() oder Ctrl+C',
+    'sven-bio': 'Sven ist das einzige Singleton im Team — existiert exakt einmal, seit <code>npm start</code>. Hält <strong>Ziel, Schritte, Fakten, Perception und Checkpoints</strong> im RAM. Injiziert sich in jeden LLM-Prompt via <code>toPromptString()</code>. Vergisst erst nach Step 21 (FIFO).',
+    'sven-quote': 'module.exports = new SessionContext(); // Ich. Bin. Einzigartig.',
+    'sven-status': 'RUNNING · Singleton · RAM only',
+    'sven-reset': 'Reset bei',
+    
+    // Franz
+    'franz-name': 'Franz G.',
+    'franz-badge': 'gefahren-amt',
+    'franz-role': 'Sicherheitsbeauft. / Watchdog',
+    'franz-retries': '3 (unveränderlich)',
+    'franz-learning': 'after 3× success → trusted',
+    'franz-storage': 'device_knowledge (Supabase)',
+    'franz-snapshot': 'vor JEDER riskanten Aktion',
+    'franz-bio': 'Franz macht einen <strong>Snapshot</strong> bevor er irgendetwas berührt. Schlägt ein Klick fehl → <code>correct()</code> → Retry 1 → Retry 2 → Retry 3 → <code>return { corrected: false, reason: "3 Versuche erschöpft" }</code>. Korrekturen die 3× klappen werden als <code>trusted</code> ins <code>device_knowledge</code> gespeichert. Er nennt das <em>Lebensweisheit</em>.',
+    'franz-quote': 'if (diff.changed) return ok; // sonst: nochmal. Nochmal. NOCHMAL.',
+    'franz-status': 'WATCHDOG · prüft nach jedem Click',
+    'franz-confidence': 'Confidence threshold',
+    
+    // Axl
+    'axl-name': 'Axl Helper',
+    'axl-badge': 'ax-layer',
+    'axl-role': 'Cross-Platform UI-Archäologe',
+    'axl-macos': 'Swift · AXUIElement · ~20ms',
+    'axl-windows': 'C# · UI Automation · .NET 8',
+    'axl-output': 'JSON · top-left origin',
+    'axl-tier': '0a (JS) + 0b (Subprocess)',
+    'axl-bio': 'Axl liest <strong>jeden interaktiven Element-Baum</strong> des Betriebssystems — Buttons, Textfelder, versteckte Checkboxen, Labels ohne Text. Spricht auf Mac <code>Swift</code>, auf Windows <code>C#</code>, antwortet immer in <code>JSON</code>. Koordinaten: immer top-left. Braucht keine Screenshots. Braucht keine Augen. Hat den AX-Baum.',
+    'axl-quote': 'Tier 0b hat ein Match. Kein Screenshot nötig. Bitte danken.',
+    'axl-status': 'READY · subprocess spawned',
+    'axl-latency': 'Latenz',
+    
+    // Konrad
+    'konrad-name': 'Konrad C. Manager',
+    'konrad-badge': 'context-manager',
+    'konrad-role': 'AX-State-Verwaltung',
+    'konrad-ttl': 'exakt 400ms',
+    'konrad-fallbacks': 'Tier 0a → 0b → 1 → 2 → 3',
+    'konrad-invalidate': 'nach jedem Click/Type/Key',
+    'konrad-output': 'toPromptString() für LLM',
+    'konrad-diff': 'JA — GefahrenAmt braucht\'s',
+    'konrad-bio': 'Konrad hält jeden <strong>AX-State-Snapshot</strong> für 400ms warm — nicht eine Millisekunde mehr. Nach jedem Klick, jeder Eingabe, jedem Tastendruck ruft irgendjemand <code>invalidate()</code> bei ihm auf, und er fängt bei null an. Er nennt das <em>„agile Erkenntnistheorie"</em>. Stellt <code>toPromptString()</code> für alle LLM-Calls bereit und implementiert 5 Fallback-Tiers für wenn <code>findInState()</code> leer zurückkommt. Tier 3 ist manuell kalibrierte Koordinate. <em>Niemand mag Tier 3.</em>',
+    'konrad-quote': 'Invalidiert. Frisch geladen. 400ms. Ich lebe im Jetzt.',
+    'konrad-status': 'CACHED · toPromptString() ready',
+    'konrad-hitrate': 'Tier-0a Hit-Rate',
+    
+    // Footer
+    'footer-company': 'MIRA Corp AG · /proc/belegschaft · alle Rechte vorbehalten',
+    'footer-note': 'Keiner dieser Mitarbeiter hat je einen Urlaubsantrag gestellt. Wir finden das effizient.',
+    'footer-build': 'Build: <strong id="bd">—</strong> &nbsp;·&nbsp; Node: <strong id="nv">—</strong> &nbsp;·&nbsp; Electron: <strong id="ev">—</strong>',
+    'close-btn': '⌘W · Schließen',
+  },
+  en: {
+    'titlebar-text': '/proc/staff — PID 1 to 7',
+    
+    // Terminal
+    'terminal-cmd': 'cat /etc/mira/team.json | jq \'.\'',
+    'term-company': '"company":',
+    'term-company-val': '"MIRA Corp AG"',
+    'term-employees': '"employees":',
+    'term-sick': '"sick_days_total":',
+    'term-salary': '"salary_budget":',
+    'term-salary-comment': '// no comment',
+    'term-uptime': '"uptime":',
+    'term-uptime-val': '"since last npm start"',
+    'term-overtime': '"overtime":',
+    'term-overtime-val': '"Infinity"',
+    
+    // Error log
+    'log-title': '⚠ SYSTEM NOTICE — /var/log/mira/hr.log',
+    'log-warn-1': '[WARN]&nbsp; All employees run single-threaded. Parallelization: <code>planned</code>',
+    'log-info-1': '[INFO]&nbsp; Termination via <code>process.exit(1)</code>. Please inform works council.',
+    'log-info-2': '[INFO]&nbsp; Vacation requests are being reviewed. Worker has no concept of vacation.',
+    'log-warn-2': '[WARN]&nbsp; Salary increase: <code>undefined</code>. Not a bug. Feature.',
+    
+    // Sections
+    'section-kernel': 'Kernel Level / Ring 0',
+    'section-userspace': 'User Space / Ring 3',
+    'section-security': 'Security Ring / Interrupt Handler',
+    'section-it': 'IT Infrastructure / Cache Management',
+    
+    // Spec keys
+    'spec-role': 'Role',
+    'spec-stack': 'Stack',
+    'spec-latency': 'Latency',
+    'spec-edu': 'Edu.',
+    'spec-error': 'Error',
+    'spec-model': 'Model',
+    'spec-cache': 'Cache',
+    'spec-output': 'Output',
+    'spec-eyes': 'Eyes',
+    'spec-blocking': 'Blocking',
+    'spec-questions': 'Questions',
+    'spec-memory': 'Memory',
+    'spec-timeout': 'Timeout',
+    'spec-storage': 'Storage',
+    'spec-steps': 'Steps',
+    'spec-pattern': 'Pattern',
+    'spec-death': 'Death',
+    'spec-retries': 'MAX_RETRIES',
+    'spec-learning': 'Learning',
+    'spec-storage2': 'Storage',
+    'spec-snapshot': 'Snapshot',
+    'spec-macos': 'macOS',
+    'spec-windows': 'Windows',
+    'spec-output2': 'Output',
+    'spec-tier': 'Tier',
+    'spec-cache-ttl': 'Cache TTL',
+    'spec-fallbacks': 'Fallbacks',
+    'spec-invalidate': 'invalidate()',
+    'spec-output3': 'Output',
+    'spec-diff': 'diffStates',
+    
+    // Hans
+    'hans-name': 'Hans Dispatch',
+    'hans-badge': 'dispatcher',
+    'hans-role': 'Lead Intent Coordinator',
+    'hans-stack': 'GPT-4o-mini + Regex Fallback',
+    'hans-latency': '~280ms cold, 0ms warm',
+    'hans-edu': 'MIT (Man In Terminal), 2023',
+    'hans-error': 'graceful degradation',
+    'hans-bio': 'Hans distributes every incoming command to the right process. Knows <strong>40+ intent patterns</strong> by heart — silently delegates the rest to <code>GPT-4o-mini</code> and then acts like it was his plan. Never left a <code>throw</code> unanswered.',
+    'hans-quote': 'I see an intent. I see a plan. I am the plan.',
+    'hans-status': 'RUNNING · dispatch-full',
+    'hans-calls': 'Calls/Session',
+    
+    // Erika
+    'erika-name': 'Dr. Erika W.',
+    'erika-badge': 'perception-office',
+    'erika-role': 'Vision Analyst, MSc.',
+    'erika-model': 'GPT-4o-mini Vision',
+    'erika-cache': '2000ms TTL (proud of it)',
+    'erika-output': 'JSON: scene, dangers, is_form',
+    'erika-eyes': 'base64-PNG, 800px compressed',
+    'erika-bio': 'Erika scans every screen for <strong>forms, dangers and app type</strong>. Needs <code>2000ms</code> thinking time (cache), which she calls "contemplation". Once returned <code>danger: true</code> for a send button — and wasn\'t stopped anyway.',
+    'erika-quote': 'That\'s not a button. That\'s a liability.',
+    'erika-status': 'SCANNING · /api/brain/perceive',
+    'erika-scans': 'Scans/h',
+    
+    // Brigitte
+    'brigitte-name': 'Brigitte I.',
+    'brigitte-badge': 'information-office',
+    'brigitte-role': 'Clerk Context Check',
+    'brigitte-blocking': 'YES — waiting for input',
+    'brigitte-questions': 'max 1 per context type',
+    'brigitte-memory': 'Set&lt;string&gt; (never forgets)',
+    'brigitte-timeout': '45,000ms then null',
+    'brigitte-bio': 'Brigitte checks before every action if all info is present. Asks exactly <strong>one question per context gap</strong> — never the same twice (<code>Set&lt;asked&gt;</code>). For dangerous buttons opens a <code>dialog.showMessageBox</code>. Waits 45 seconds for answer, then <code>return null</code> — with dignity.',
+    'brigitte-quote': 'Do you have the required documents? I\'m waiting. Timeout: 45s.',
+    'brigitte-status': 'BLOCKED · awaiting user input',
+    'brigitte-asked': 'Asked',
+    
+    // Sven
+    'sven-name': 'Sven K.',
+    'sven-badge': 'session-context',
+    'sven-role': 'Persistent Working Memory',
+    'sven-storage': 'Heap · no disk write',
+    'sven-steps': 'FIFO max 20 (selective)',
+    'sven-pattern': 'Singleton (require() cached)',
+    'sven-death': 'process.exit() or Ctrl+C',
+    'sven-bio': 'Sven is the only singleton in the team — exists exactly once, since <code>npm start</code>. Holds <strong>goal, steps, facts, perception and checkpoints</strong> in RAM. Injects himself into every LLM prompt via <code>toPromptString()</code>. Only forgets after step 21 (FIFO).',
+    'sven-quote': 'module.exports = new SessionContext(); // I. Am. Unique.',
+    'sven-status': 'RUNNING · Singleton · RAM only',
+    'sven-reset': 'Reset on',
+    
+    // Franz
+    'franz-name': 'Franz G.',
+    'franz-badge': 'danger-office',
+    'franz-role': 'Security Officer / Watchdog',
+    'franz-retries': '3 (immutable)',
+    'franz-learning': 'after 3× success → trusted',
+    'franz-storage': 'device_knowledge (Supabase)',
+    'franz-snapshot': 'before ANY risky action',
+    'franz-bio': 'Franz takes a <strong>snapshot</strong> before touching anything. If a click fails → <code>correct()</code> → Retry 1 → Retry 2 → Retry 3 → <code>return { corrected: false, reason: "3 attempts exhausted" }</code>. Corrections that succeed 3× are saved as <code>trusted</code> in <code>device_knowledge</code>. He calls this <em>life wisdom</em>.',
+    'franz-quote': 'if (diff.changed) return ok; // else: again. Again. AGAIN.',
+    'franz-status': 'WATCHDOG · checks after every click',
+    'franz-confidence': 'Confidence threshold',
+    
+    // Axl
+    'axl-name': 'Axl Helper',
+    'axl-badge': 'ax-layer',
+    'axl-role': 'Cross-Platform UI Archaeologist',
+    'axl-macos': 'Swift · AXUIElement · ~20ms',
+    'axl-windows': 'C# · UI Automation · .NET 8',
+    'axl-output': 'JSON · top-left origin',
+    'axl-tier': '0a (JS) + 0b (Subprocess)',
+    'axl-bio': 'Axl reads <strong>every interactive element tree</strong> of the operating system — buttons, text fields, hidden checkboxes, labels without text. Speaks <code>Swift</code> on Mac, <code>C#</code> on Windows, always answers in <code>JSON</code>. Coordinates: always top-left. Needs no screenshots. Needs no eyes. Has the AX tree.',
+    'axl-quote': 'Tier 0b has a match. No screenshot needed. Please thank.',
+    'axl-status': 'READY · subprocess spawned',
+    'axl-latency': 'Latency',
+    
+    // Konrad
+    'konrad-name': 'Konrad C. Manager',
+    'konrad-badge': 'context-manager',
+    'konrad-role': 'AX State Management',
+    'konrad-ttl': 'exactly 400ms',
+    'konrad-fallbacks': 'Tier 0a → 0b → 1 → 2 → 3',
+    'konrad-invalidate': 'after every Click/Type/Key',
+    'konrad-output': 'toPromptString() for LLM',
+    'konrad-diff': 'YES — DangerOffice needs it',
+    'konrad-bio': 'Konrad keeps every <strong>AX state snapshot</strong> warm for 400ms — not a millisecond more. After every click, every input, every keypress someone calls <code>invalidate()</code> on him, and he starts from zero. He calls this <em>"agile epistemology"</em>. Provides <code>toPromptString()</code> for all LLM calls and implements 5 fallback tiers for when <code>findInState()</code> returns empty. Tier 3 is manually calibrated coordinate. <em>Nobody likes Tier 3.</em>',
+    'konrad-quote': 'Invalidated. Freshly loaded. 400ms. I live in the now.',
+    'konrad-status': 'CACHED · toPromptString() ready',
+    'konrad-hitrate': 'Tier-0a Hit Rate',
+    
+    // Footer
+    'footer-company': 'MIRA Corp AG · /proc/staff · all rights reserved',
+    'footer-note': 'None of these employees have ever requested vacation. We find that efficient.',
+    'footer-build': 'Build: <strong id="bd">—</strong> &nbsp;·&nbsp; Node: <strong id="nv">—</strong> &nbsp;·&nbsp; Electron: <strong id="ev">—</strong>',
+    'close-btn': '⌘W · Close',
+  }
+};
+
+let currentLang = localStorage.getItem('mira_language') || 'de';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'de' ? 'en' : 'de';
+  localStorage.setItem('mira_language', currentLang);
+  updateUILanguage();
+}
+
+function updateUILanguage() {
+  // Update toggle buttons
+  document.querySelectorAll('.lang-option').forEach(el => {
+    if (el.id === 'lang-de') {
+      el.style.background = currentLang === 'de' ? '#00e676' : 'transparent';
+      el.style.color = currentLang === 'de' ? '#000' : 'var(--t2)';
+    }
+    if (el.id === 'lang-en') {
+      el.style.background = currentLang === 'en' ? '#00e676' : 'transparent';
+      el.style.color = currentLang === 'en' ? '#000' : 'var(--t2)';
+    }
+  });
+
+  // Update all text elements
+  const elements = [
+    'titlebar-text', 'terminal-cmd', 'term-company', 'term-company-val',
+    'term-employees', 'term-sick', 'term-salary', 'term-salary-comment',
+    'term-uptime', 'term-uptime-val', 'term-overtime', 'term-overtime-val',
+    'log-title', 'log-warn-1', 'log-info-1', 'log-info-2', 'log-warn-2',
+    'section-kernel', 'section-userspace', 'section-security', 'section-it',
+    'spec-role', 'spec-stack', 'spec-latency', 'spec-edu', 'spec-error',
+    'spec-model', 'spec-cache', 'spec-output', 'spec-eyes', 'spec-blocking',
+    'spec-questions', 'spec-memory', 'spec-timeout', 'spec-storage', 'spec-steps',
+    'spec-pattern', 'spec-death', 'spec-retries', 'spec-learning', 'spec-storage2',
+    'spec-snapshot', 'spec-macos', 'spec-windows', 'spec-output2', 'spec-tier',
+    'spec-cache-ttl', 'spec-fallbacks', 'spec-invalidate', 'spec-output3', 'spec-diff',
+    'hans-name', 'hans-badge', 'hans-role', 'hans-stack', 'hans-latency',
+    'hans-edu', 'hans-error', 'hans-bio', 'hans-quote', 'hans-status', 'hans-calls',
+    'erika-name', 'erika-badge', 'erika-role', 'erika-model', 'erika-cache',
+    'erika-output', 'erika-eyes', 'erika-bio', 'erika-quote', 'erika-status', 'erika-scans',
+    'brigitte-name', 'brigitte-badge', 'brigitte-role', 'brigitte-blocking',
+    'brigitte-questions', 'brigitte-memory', 'brigitte-timeout', 'brigitte-bio',
+    'brigitte-quote', 'brigitte-status', 'brigitte-asked',
+    'sven-name', 'sven-badge', 'sven-role', 'sven-storage', 'sven-steps',
+    'sven-pattern', 'sven-death', 'sven-bio', 'sven-quote', 'sven-status', 'sven-reset',
+    'franz-name', 'franz-badge', 'franz-role', 'franz-retries', 'franz-learning',
+    'franz-storage', 'franz-snapshot', 'franz-bio', 'franz-quote', 'franz-status', 'franz-confidence',
+    'axl-name', 'axl-badge', 'axl-role', 'axl-macos', 'axl-windows', 'axl-output',
+    'axl-tier', 'axl-bio', 'axl-quote', 'axl-status', 'axl-latency',
+    'konrad-name', 'konrad-badge', 'konrad-role', 'konrad-ttl', 'konrad-fallbacks',
+    'konrad-invalidate', 'konrad-output', 'konrad-diff', 'konrad-bio', 'konrad-quote',
+    'konrad-status', 'konrad-hitrate',
+    'footer-company', 'footer-note', 'footer-build', 'close-btn'
+  ];
+
+  elements.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) {
+      if (id.includes('bio') || id.includes('warn') || id.includes('info') || id.includes('footer-build')) {
+        el.innerHTML = i18n[currentLang][id];
+      } else {
+        el.textContent = i18n[currentLang][id];
+      }
+    }
+  });
+
+  // Update terminal line with HTML content
+  const termLine = document.querySelector('.term-line.term-prompt');
+  if (termLine) {
+    termLine.innerHTML = i18n[currentLang]['terminal-cmd'];
+  }
+}
+
+// Initialize
+updateUILanguage();
+
+document.getElementById('bd').textContent = new Date().toLocaleDateString(currentLang === 'de' ? 'de-DE' : 'en-US');
 try {
   document.getElementById('nv').textContent = process.versions.node;
   document.getElementById('ev').textContent = process.versions.electron;

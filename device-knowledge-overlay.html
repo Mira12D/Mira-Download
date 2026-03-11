@@ -36,6 +36,35 @@
       letter-spacing: 0.5px;
     }
 
+    .titlebar-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .lang-toggle {
+      -webkit-app-region: no-drag;
+      background: #1e2130;
+      border: 1px solid #2a2d3a;
+      border-radius: 20px;
+      padding: 2px 6px;
+      display: flex;
+      gap: 4px;
+      cursor: pointer;
+    }
+    .lang-option {
+      padding: 3px 8px;
+      border-radius: 16px;
+      font-size: 10px;
+      font-weight: 600;
+      transition: all 0.15s;
+      color: #5a5f78;
+    }
+    .lang-option.active {
+      background: #6c63ff;
+      color: white;
+    }
+
     .titlebar-close {
       -webkit-app-region: no-drag;
       width: 22px;
@@ -273,30 +302,37 @@
 <body>
 
 <div class="titlebar">
-  <span class="titlebar-title">Mira beibringen</span>
-  <button class="titlebar-close" onclick="closeOverlay()">✕</button>
+  <span class="titlebar-title" id="titlebar-text">Mira beibringen</span>
+  <div class="titlebar-right">
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de" style="background:#6c63ff;color:white">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
+    </div>
+    <button class="titlebar-close" onclick="closeOverlay()">✕</button>
+  </div>
 </div>
 
 <div class="content">
 
   <!-- App auswählen -->
   <div>
-    <div class="section-label">App / Kontext</div>
+    <div class="section-label" id="app-label">App / Kontext</div>
     <div class="app-selector" id="app-chips">
-      <div class="app-chip active" data-app="Allgemein">Allgemein</div>
-      <div class="app-chip" data-app="Word">Word</div>
-      <div class="app-chip" data-app="Excel">Excel</div>
-      <div class="app-chip" data-app="Outlook">Outlook</div>
-      <div class="app-chip" data-app="Chrome">Chrome</div>
-      <div class="app-chip" data-app="Finder">Finder</div>
-      <div class="app-chip" data-app="Teams">Teams</div>
-      <div class="app-chip" data-app="Sonstiges">Sonstiges</div>
+      <div class="app-chip active" data-app="Allgemein" id="app-general">Allgemein</div>
+      <div class="app-chip" data-app="Word" id="app-word">Word</div>
+      <div class="app-chip" data-app="Excel" id="app-excel">Excel</div>
+      <div class="app-chip" data-app="Outlook" id="app-outlook">Outlook</div>
+      <div class="app-chip" data-app="Chrome" id="app-chrome">Chrome</div>
+      <div class="app-chip" data-app="Finder" id="app-finder">Finder</div>
+      <div class="app-chip" data-app="Teams" id="app-teams">Teams</div>
+      <div class="app-chip" data-app="Sonstiges" id="app-other">Sonstiges</div>
     </div>
   </div>
 
   <!-- Freitext -->
   <div>
-    <div class="section-label">Was soll Mira wissen?</div>
+    <div class="section-label" id="knowledge-label">Was soll Mira wissen?</div>
     <div class="text-area-wrap">
       <textarea id="knowledge-text"
         placeholder="z.B. Der Fett-Button ist in der Home-Toolbar oben links. Neue Seite öffnen: Datei → Neu. Tabelle einfügen: Einfügen → Tabelle. Speichern: Cmd+S."
@@ -308,13 +344,13 @@
 
   <!-- Screenshot -->
   <div>
-    <div class="section-label">Aktueller Bildschirm (optional)</div>
+    <div class="section-label" id="screenshot-label">Aktueller Bildschirm (optional)</div>
     <div class="screenshot-row">
       <button class="btn-screenshot" id="sc-btn" onclick="captureScreenshot()">
-        <span>📸</span> Screenshot hinzufügen
+        <span>📸</span> <span id="sc-btn-text">Screenshot hinzufügen</span>
       </button>
       <div class="screenshot-preview" id="sc-preview">
-        <span class="placeholder-text">Kein Screenshot</span>
+        <span class="placeholder-text" id="sc-placeholder">Kein Screenshot</span>
       </div>
     </div>
   </div>
@@ -326,12 +362,12 @@
 
   <!-- Submit -->
   <button class="btn-submit" id="submit-btn" onclick="submitKnowledge()">
-    Mira beibringen ✦
+    <span id="submit-text">Mira beibringen</span> ✦
   </button>
 
   <!-- Ergebnis -->
   <div class="result-panel" id="result-panel">
-    <div class="result-header">✦ Mira hat gelernt</div>
+    <div class="result-header" id="result-header">✦ Mira hat gelernt</div>
     <div id="learned-list"></div>
   </div>
 
@@ -343,9 +379,122 @@
 <script>
   const { ipcRenderer } = require('electron');
 
+  // ====================================
+  // INTERNATIONALIZATION (DE/EN)
+  // ====================================
+  
+  const i18n = {
+    de: {
+      'titlebar-text': 'Mira beibringen',
+      'app-label': 'App / Kontext',
+      'app-general': 'Allgemein',
+      'app-word': 'Word',
+      'app-excel': 'Excel',
+      'app-outlook': 'Outlook',
+      'app-chrome': 'Chrome',
+      'app-finder': 'Finder',
+      'app-teams': 'Teams',
+      'app-other': 'Sonstiges',
+      'knowledge-label': 'Was soll Mira wissen?',
+      'knowledge-placeholder': 'z.B. Der Fett-Button ist in der Home-Toolbar oben links. Neue Seite öffnen: Datei → Neu. Tabelle einfügen: Einfügen → Tabelle. Speichern: Cmd+S.',
+      'screenshot-label': 'Aktueller Bildschirm (optional)',
+      'sc-btn-text': 'Screenshot hinzufügen',
+      'sc-capturing': 'Wird aufgenommen...',
+      'sc-captured': 'Screenshot gespeichert',
+      'sc-placeholder': 'Kein Screenshot',
+      'submit-text': 'Mira beibringen',
+      'submit-loading': 'Mira lernt...',
+      'result-header': '✦ Mira hat gelernt',
+      'error-required': 'Bitte beschreibe was Mira lernen soll.',
+      'error-unknown': 'Unbekannter Fehler',
+      'error-connection': 'Verbindungsfehler: ',
+      'learned-general': 'Allgemein',
+      'learned-saved': 'Wissen gespeichert',
+    },
+    en: {
+      'titlebar-text': 'Teach Mira',
+      'app-label': 'App / Context',
+      'app-general': 'General',
+      'app-word': 'Word',
+      'app-excel': 'Excel',
+      'app-outlook': 'Outlook',
+      'app-chrome': 'Chrome',
+      'app-finder': 'Finder',
+      'app-teams': 'Teams',
+      'app-other': 'Other',
+      'knowledge-label': 'What should Mira know?',
+      'knowledge-placeholder': 'e.g. The bold button is in the Home toolbar top left. New page: File → New. Insert table: Insert → Table. Save: Cmd+S.',
+      'screenshot-label': 'Current screen (optional)',
+      'sc-btn-text': 'Add screenshot',
+      'sc-capturing': 'Capturing...',
+      'sc-captured': 'Screenshot saved',
+      'sc-placeholder': 'No screenshot',
+      'submit-text': 'Teach Mira',
+      'submit-loading': 'Mira is learning...',
+      'result-header': '✦ Mira learned',
+      'error-required': 'Please describe what Mira should learn.',
+      'error-unknown': 'Unknown error',
+      'error-connection': 'Connection error: ',
+      'learned-general': 'General',
+      'learned-saved': 'Knowledge saved',
+    }
+  };
+
+  let currentLang = localStorage.getItem('mira_language') || 'de';
   let selectedApp = 'Allgemein';
   let capturedScreenshot = null;
   let capturedAX = null;
+
+  function toggleLanguage() {
+    currentLang = currentLang === 'de' ? 'en' : 'de';
+    localStorage.setItem('mira_language', currentLang);
+    updateUILanguage();
+  }
+
+  function updateUILanguage() {
+    // Update toggle buttons
+    document.querySelectorAll('.lang-option').forEach(el => {
+      if (el.id === 'lang-de') {
+        el.style.background = currentLang === 'de' ? '#6c63ff' : 'transparent';
+        el.style.color = currentLang === 'de' ? 'white' : '#5a5f78';
+      }
+      if (el.id === 'lang-en') {
+        el.style.background = currentLang === 'en' ? '#6c63ff' : 'transparent';
+        el.style.color = currentLang === 'en' ? 'white' : '#5a5f78';
+      }
+    });
+
+    // Update all text elements
+    const elements = [
+      'titlebar-text', 'app-label', 'knowledge-label', 'screenshot-label',
+      'sc-btn-text', 'sc-placeholder', 'submit-text', 'result-header',
+      'app-general', 'app-word', 'app-excel', 'app-outlook', 'app-chrome',
+      'app-finder', 'app-teams', 'app-other'
+    ];
+
+    elements.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = i18n[currentLang][id];
+    });
+
+    // Update placeholder
+    const textarea = document.getElementById('knowledge-text');
+    if (textarea) textarea.placeholder = i18n[currentLang]['knowledge-placeholder'];
+
+    // Update app chips text (they have their own IDs now)
+    document.querySelectorAll('.app-chip').forEach(chip => {
+      const appId = chip.id;
+      if (appId && i18n[currentLang][appId]) {
+        chip.textContent = i18n[currentLang][appId];
+      }
+    });
+
+    // Update button states if needed
+    const scBtn = document.getElementById('sc-btn');
+    if (scBtn && scBtn.classList.contains('captured')) {
+      document.getElementById('sc-btn-text').textContent = i18n[currentLang]['sc-captured'];
+    }
+  }
 
   // App-Chip Auswahl
   document.getElementById('app-chips').addEventListener('click', (e) => {
@@ -363,18 +512,19 @@
 
   async function captureScreenshot() {
     const btn = document.getElementById('sc-btn');
+    const btnText = document.getElementById('sc-btn-text');
     btn.disabled = true;
-    btn.innerHTML = '<span>⏳</span> Wird aufgenommen...';
+    btnText.textContent = i18n[currentLang]['sc-capturing'];
     try {
       const result = await ipcRenderer.invoke('device-knowledge-screenshot');
       capturedScreenshot = result.screenshot;
       capturedAX = result.ax_state;
       btn.classList.add('captured');
-      btn.innerHTML = '<span>✓</span> Screenshot gespeichert';
+      btnText.textContent = i18n[currentLang]['sc-captured'];
       const preview = document.getElementById('sc-preview');
       preview.innerHTML = `<img src="data:image/jpeg;base64,${capturedScreenshot}" alt="screenshot">`;
     } catch(e) {
-      btn.innerHTML = '<span>📸</span> Screenshot hinzufügen';
+      btnText.textContent = i18n[currentLang]['sc-btn-text'];
     }
     btn.disabled = false;
   }
@@ -382,13 +532,14 @@
   async function submitKnowledge() {
     const text = document.getElementById('knowledge-text').value.trim();
     if (!text) {
-      showError('Bitte beschreibe was Mira lernen soll.');
+      showError(i18n[currentLang]['error-required']);
       return;
     }
 
     const btn = document.getElementById('submit-btn');
+    const submitText = document.getElementById('submit-text');
     btn.disabled = true;
-    btn.textContent = 'Mira lernt...';
+    submitText.textContent = i18n[currentLang]['submit-loading'];
     document.getElementById('loading-bar').classList.add('active');
     document.getElementById('result-panel').classList.remove('visible');
     document.getElementById('error-panel').classList.remove('visible');
@@ -408,21 +559,22 @@
         capturedScreenshot = null;
         capturedAX = null;
         const scBtn = document.getElementById('sc-btn');
+        const scBtnText = document.getElementById('sc-btn-text');
         scBtn.classList.remove('captured');
-        scBtn.innerHTML = '<span>📸</span> Screenshot hinzufügen';
-        document.getElementById('sc-preview').innerHTML = '<span class="placeholder-text">Kein Screenshot</span>';
+        scBtnText.textContent = i18n[currentLang]['sc-btn-text'];
+        document.getElementById('sc-preview').innerHTML = `<span class="placeholder-text" id="sc-placeholder">${i18n[currentLang]['sc-placeholder']}</span>`;
       } else if (result.success) {
-        showResult([{ konzept: 'Allgemein', beschreibung: 'Wissen gespeichert' }]);
+        showResult([{ konzept: i18n[currentLang]['learned-general'], beschreibung: i18n[currentLang]['learned-saved'] }]);
       } else {
-        showError(result.error || 'Unbekannter Fehler');
+        showError(result.error || i18n[currentLang]['error-unknown']);
       }
     } catch(e) {
-      showError('Verbindungsfehler: ' + e.message);
+      showError(i18n[currentLang]['error-connection'] + e.message);
     }
 
     document.getElementById('loading-bar').classList.remove('active');
     btn.disabled = false;
-    btn.textContent = 'Mira beibringen ✦';
+    submitText.textContent = i18n[currentLang]['submit-text'];
   }
 
   function showResult(learned) {
@@ -448,6 +600,9 @@
   function closeOverlay() {
     ipcRenderer.invoke('device-knowledge-close');
   }
+
+  // Initialize language
+  updateUILanguage();
 </script>
 
 </body>

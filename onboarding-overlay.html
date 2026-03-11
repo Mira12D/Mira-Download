@@ -57,6 +57,34 @@
   .dot.active { background: var(--accent); width: 20px; border-radius: 3px; }
   .dot.done   { background: var(--green); }
 
+  /* ── Language Toggle ── */
+  .lang-toggle {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    padding: 4px 8px;
+    display: flex;
+    gap: 4px;
+    cursor: pointer;
+    -webkit-app-region: no-drag;
+  }
+  .lang-option {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 600;
+    transition: all 0.15s;
+    color: var(--text2);
+  }
+  .lang-option.active {
+    background: var(--accent);
+    color: white;
+  }
+
   /* ── Typography ── */
   .title {
     font-size: 26px; font-weight: 800;
@@ -213,93 +241,99 @@
 </head>
 <body>
 
+<!-- Language Toggle -->
+<div class="lang-toggle" onclick="toggleLanguage()">
+  <span class="lang-option" id="lang-de" style="background:#6c63ff;color:white">DE</span>
+  <span class="lang-option" id="lang-en">EN</span>
+</div>
+
 <!-- ═══ STEP 0: AX PERMISSION ═══ -->
 <div id="step-0" class="screen" style="display:none">
   <div class="mira-ring" style="background:linear-gradient(135deg,#f59e0b,#fbbf24);animation:none">🔐</div>
-  <div class="title" style="font-size:20px">Zugriff benötigt</div>
-  <div class="subtitle">
+  <div class="title" style="font-size:20px" id="perm-title">Zugriff benötigt</div>
+  <div class="subtitle" id="perm-text">
     MIRA benötigt Zugriff auf die <b>Bedienungshilfen</b>, um deine Apps zu steuern.<br><br>
     Systemeinstellungen wurden automatisch geöffnet.<br>
     Aktiviere <b>MIRA Agent</b> in<br>Datenschutz &amp; Sicherheit → Bedienungshilfen.
   </div>
-  <button class="btn btn-primary" id="perm-check-btn" onclick="recheckPermission()">Ich habe es aktiviert ✓</button>
+  <button class="btn btn-primary" id="perm-check-btn" onclick="recheckPermission()"><span id="perm-btn">Ich habe es aktiviert ✓</span></button>
   <div id="perm-status" style="font-size:12px;color:#f87171;margin-top:12px;min-height:18px"></div>
 </div>
 
 <!-- ═══ STEP 1: WELCOME ═══ -->
 <div id="step-1" class="screen active">
   <div class="mira-ring">M</div>
-  <div class="title">Hallo, ich bin MIRA.</div>
-  <div class="subtitle">Deine digitale Büroassistentin. Ich lerne deinen Job kennen — damit du dich auf das Wesentliche konzentrieren kannst.</div>
-  <button class="btn btn-primary" onclick="goTo(2)">Los geht's →</button>
+  <div class="title" id="welcome-title">Hallo, ich bin MIRA.</div>
+  <div class="subtitle" id="welcome-text">Deine digitale Büroassistentin. Ich lerne deinen Job kennen — damit du dich auf das Wesentliche konzentrieren kannst.</div>
+  <button class="btn btn-primary" onclick="goTo(2)"><span id="start-btn">Los geht's</span> →</button>
 </div>
 
 <!-- ═══ STEP 2: SCAN ═══ -->
 <div id="step-2" class="screen">
   <div class="mira-ring scan" id="scan-ring">🔍</div>
-  <div class="title" style="font-size:20px">Ich scanne dein System…</div>
+  <div class="title" style="font-size:20px" id="scan-title">Ich scanne dein System…</div>
   <div class="scan-status" id="scan-status">Suche nach installierten Apps…</div>
   <div class="app-grid" id="app-grid"></div>
-  <button class="btn btn-primary" id="scan-next-btn" style="display:none" onclick="goTo(3)">Weiter →</button>
+  <button class="btn btn-primary" id="scan-next-btn" style="display:none" onclick="goTo(3)"><span id="scan-next">Weiter</span> →</button>
 </div>
 
 <!-- ═══ STEP 3: JOB SETUP ═══ -->
 <div id="step-3" class="screen">
-  <div class="title" style="font-size:20px;margin-bottom:6px">Was machst du täglich?</div>
-  <div class="subtitle" style="margin-bottom:20px">Keine langen Einstellungen. Nur 2 Fragen.</div>
+  <div class="title" style="font-size:20px;margin-bottom:6px" id="setup-title">Was machst du täglich?</div>
+  <div class="subtitle" style="margin-bottom:20px" id="setup-sub">Keine langen Einstellungen. Nur 2 Fragen.</div>
   <div class="questions">
 
     <div class="q-row">
-      <span class="q-label">Branche</span>
+      <span class="q-label" id="industry-label">Branche</span>
       <div class="industry-grid" id="industry-grid">
-        <button class="industry-btn" data-v="handel"        onclick="selectIndustry(this)">🛒 Handel / E-Commerce</button>
-        <button class="industry-btn" data-v="gastronomie"   onclick="selectIndustry(this)">🍽 Gastronomie</button>
-        <button class="industry-btn" data-v="buero"         onclick="selectIndustry(this)">🏢 Büro / Verwaltung</button>
-        <button class="industry-btn" data-v="it"            onclick="selectIndustry(this)">💻 IT / Freelancer</button>
-        <button class="industry-btn" data-v="handwerk"      onclick="selectIndustry(this)">🔧 Handwerk / Bau</button>
-        <button class="industry-btn" data-v="sonstige"      onclick="selectIndustry(this)">✦ Sonstiges</button>
+        <button class="industry-btn" data-v="handel"        onclick="selectIndustry(this)"><span id="industry-retail">🛒 Handel / E-Commerce</span></button>
+        <button class="industry-btn" data-v="gastronomie"   onclick="selectIndustry(this)"><span id="industry-gastro">🍽 Gastronomie</span></button>
+        <button class="industry-btn" data-v="buero"         onclick="selectIndustry(this)"><span id="industry-office">🏢 Büro / Verwaltung</span></button>
+        <button class="industry-btn" data-v="it"            onclick="selectIndustry(this)"><span id="industry-it">💻 IT / Freelancer</span></button>
+        <button class="industry-btn" data-v="handwerk"      onclick="selectIndustry(this)"><span id="industry-craft">🔧 Handwerk / Bau</span></button>
+        <button class="industry-btn" data-v="sonstige"      onclick="selectIndustry(this)"><span id="industry-other">✦ Sonstiges</span></button>
       </div>
     </div>
 
     <div class="q-row">
-      <span class="q-label">Was machst du täglich? (mehrfach wählbar)</span>
+      <span class="q-label" id="tasks-label">Was machst du täglich? (mehrfach wählbar)</span>
       <div class="task-chips" id="task-chips">
-        <div class="task-chip" data-v="emails"       onclick="toggleTask(this)">📧 E-Mails</div>
-        <div class="task-chip" data-v="rechnungen"   onclick="toggleTask(this)">🧾 Rechnungen</div>
-        <div class="task-chip" data-v="bestellungen" onclick="toggleTask(this)">📦 Bestellungen</div>
-        <div class="task-chip" data-v="berichte"     onclick="toggleTask(this)">📊 Berichte</div>
-        <div class="task-chip" data-v="kalender"     onclick="toggleTask(this)">📅 Termine</div>
-        <div class="task-chip" data-v="dokumente"    onclick="toggleTask(this)">📄 Dokumente</div>
-        <div class="task-chip" data-v="buchhaltung"  onclick="toggleTask(this)">💰 Buchhaltung</div>
-        <div class="task-chip" data-v="support"      onclick="toggleTask(this)">🎧 Support</div>
+        <div class="task-chip" data-v="emails"       onclick="toggleTask(this)">📧 <span id="task-emails">E-Mails</span></div>
+        <div class="task-chip" data-v="rechnungen"   onclick="toggleTask(this)">🧾 <span id="task-invoices">Rechnungen</span></div>
+        <div class="task-chip" data-v="bestellungen" onclick="toggleTask(this)">📦 <span id="task-orders">Bestellungen</span></div>
+        <div class="task-chip" data-v="berichte"     onclick="toggleTask(this)">📊 <span id="task-reports">Berichte</span></div>
+        <div class="task-chip" data-v="kalender"     onclick="toggleTask(this)">📅 <span id="task-calendar">Termine</span></div>
+        <div class="task-chip" data-v="dokumente"    onclick="toggleTask(this)">📄 <span id="task-docs">Dokumente</span></div>
+        <div class="task-chip" data-v="buchhaltung"  onclick="toggleTask(this)">💰 <span id="task-accounting">Buchhaltung</span></div>
+        <div class="task-chip" data-v="support"      onclick="toggleTask(this)">🎧 <span id="task-support">Support</span></div>
       </div>
     </div>
 
   </div>
-  <button class="btn btn-primary" id="setup-next-btn" style="margin-top:8px" onclick="goToGenerate()">MIRA einrichten →</button>
+  <button class="btn btn-primary" id="setup-next-btn" style="margin-top:8px" onclick="goToGenerate()"><span id="setup-btn">MIRA einrichten</span> →</button>
 </div>
 
 <!-- ═══ STEP 4: GENERATING ═══ -->
 <div id="step-4" class="screen">
   <div class="mira-ring scan">⚙️</div>
-  <div class="title" style="font-size:20px">Ich lerne deinen Job…</div>
-  <div class="subtitle" style="margin-bottom:0">Einen Moment. Ich richte alles ein.</div>
+  <div class="title" style="font-size:20px" id="gen-title">Ich lerne deinen Job…</div>
+  <div class="subtitle" style="margin-bottom:0" id="gen-sub">Einen Moment. Ich richte alles ein.</div>
   <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
-  <div class="progress-label" id="progress-label">Analysiere gefundene Apps…</div>
+  <div class="progress-label" id="progress-label"></div>
 </div>
 
 <!-- ═══ STEP 5: READY ═══ -->
 <div id="step-5" class="screen">
   <div class="mira-ring done">✓</div>
-  <div class="title">Ich bin bereit.</div>
-  <div class="subtitle" style="margin-bottom:20px">Ich kenne deinen Job. Ich fange an.</div>
+  <div class="title" id="ready-title">Ich bin bereit.</div>
+  <div class="subtitle" style="margin-bottom:20px" id="ready-sub">Ich kenne deinen Job. Ich fange an.</div>
   <ul class="ready-list" id="ready-list">
     <li><span class="check">✓</span> <span id="rl-apps">Apps erkannt</span></li>
     <li><span class="check">✓</span> <span id="rl-triggers">Trigger aktiviert</span></li>
     <li><span class="check">✓</span> <span id="rl-limits">Grenzen gesetzt</span></li>
-    <li><span class="check">✓</span> Bereit für Aufgaben</li>
+    <li><span class="check">✓</span> <span id="rl-ready">Bereit für Aufgaben</span></li>
   </ul>
-  <button class="btn btn-primary" onclick="finish()">Loslegen →</button>
+  <button class="btn btn-primary" onclick="finish()"><span id="finish-btn">Loslegen</span> →</button>
 </div>
 
 <!-- ── Step dots ── -->
@@ -313,6 +347,196 @@
 
 <script>
 const { ipcRenderer } = require('electron');
+
+// ====================================
+// INTERNATIONALIZATION (DE/EN)
+// ====================================
+
+const i18n = {
+  de: {
+    // Permission screen
+    'perm-title': 'Zugriff benötigt',
+    'perm-text': 'MIRA benötigt Zugriff auf die <b>Bedienungshilfen</b>, um deine Apps zu steuern.<br><br>Systemeinstellungen wurden automatisch geöffnet.<br>Aktiviere <b>MIRA Agent</b> in<br>Datenschutz &amp; Sicherheit → Bedienungshilfen.',
+    'perm-btn': 'Ich habe es aktiviert ✓',
+    'perm-status-check': 'Prüfe…',
+    'perm-status-error': 'Noch nicht aktiviert — bitte in Systemeinstellungen → Bedienungshilfen freigeben.',
+    
+    // Welcome
+    'welcome-title': 'Hallo, ich bin MIRA.',
+    'welcome-text': 'Deine digitale Büroassistentin. Ich lerne deinen Job kennen — damit du dich auf das Wesentliche konzentrieren kannst.',
+    'start-btn': 'Los geht\'s',
+    
+    // Scan
+    'scan-title': 'Ich scanne dein System…',
+    'scan-status-start': 'Suche nach installierten Apps…',
+    'scan-status-complete': 'Scan abgeschlossen.',
+    'scan-status-found': '{count} Apps gefunden.',
+    'scan-next': 'Weiter',
+    
+    // Setup
+    'setup-title': 'Was machst du täglich?',
+    'setup-sub': 'Keine langen Einstellungen. Nur 2 Fragen.',
+    'industry-label': 'Branche',
+    'industry-retail': '🛒 Handel / E-Commerce',
+    'industry-gastro': '🍽 Gastronomie',
+    'industry-office': '🏢 Büro / Verwaltung',
+    'industry-it': '💻 IT / Freelancer',
+    'industry-craft': '🔧 Handwerk / Bau',
+    'industry-other': '✦ Sonstiges',
+    'tasks-label': 'Was machst du täglich? (mehrfach wählbar)',
+    'task-emails': 'E-Mails',
+    'task-invoices': 'Rechnungen',
+    'task-orders': 'Bestellungen',
+    'task-reports': 'Berichte',
+    'task-calendar': 'Termine',
+    'task-docs': 'Dokumente',
+    'task-accounting': 'Buchhaltung',
+    'task-support': 'Support',
+    'setup-btn': 'MIRA einrichten',
+    
+    // Generate
+    'gen-title': 'Ich lerne deinen Job…',
+    'gen-sub': 'Einen Moment. Ich richte alles ein.',
+    'gen-step-1': 'Analysiere gefundene Apps…',
+    'gen-step-2': 'Erkenne Arbeitsmuster…',
+    'gen-step-3': 'Aktiviere Standard-Trigger…',
+    'gen-step-4': 'Setze Autonomiegrenzen…',
+    'gen-step-5': 'Speichere Wissensbase…',
+    'gen-step-6': 'Fertig!',
+    
+    // Ready
+    'ready-title': 'Ich bin bereit.',
+    'ready-sub': 'Ich kenne deinen Job. Ich fange an.',
+    'rl-apps': 'Apps erkannt',
+    'rl-triggers': 'Trigger aktiviert',
+    'rl-limits': 'Grenzen gesetzt',
+    'rl-ready': 'Bereit für Aufgaben',
+    'finish-btn': 'Loslegen',
+  },
+  en: {
+    // Permission screen
+    'perm-title': 'Access Required',
+    'perm-text': 'MIRA needs access to <b>Accessibility Features</b> to control your apps.<br><br>System Settings were opened automatically.<br>Enable <b>MIRA Agent</b> in<br>Privacy & Security → Accessibility.',
+    'perm-btn': 'I have enabled it ✓',
+    'perm-status-check': 'Checking…',
+    'perm-status-error': 'Not enabled yet — please enable in System Settings → Accessibility.',
+    
+    // Welcome
+    'welcome-title': 'Hello, I am MIRA.',
+    'welcome-text': 'Your digital office assistant. I learn your job — so you can focus on what matters.',
+    'start-btn': 'Let\'s go',
+    
+    // Scan
+    'scan-title': 'Scanning your system…',
+    'scan-status-start': 'Searching for installed apps…',
+    'scan-status-complete': 'Scan complete.',
+    'scan-status-found': '{count} apps found.',
+    'scan-next': 'Next',
+    
+    // Setup
+    'setup-title': 'What do you do daily?',
+    'setup-sub': 'No long settings. Just 2 questions.',
+    'industry-label': 'Industry',
+    'industry-retail': '🛒 Retail / E-Commerce',
+    'industry-gastro': '🍽 Restaurant / Hospitality',
+    'industry-office': '🏢 Office / Admin',
+    'industry-it': '💻 IT / Freelancer',
+    'industry-craft': '🔧 Craft / Construction',
+    'industry-other': '✦ Other',
+    'tasks-label': 'What do you do daily? (multiple select)',
+    'task-emails': 'Emails',
+    'task-invoices': 'Invoices',
+    'task-orders': 'Orders',
+    'task-reports': 'Reports',
+    'task-calendar': 'Calendar',
+    'task-docs': 'Documents',
+    'task-accounting': 'Accounting',
+    'task-support': 'Support',
+    'setup-btn': 'Set up MIRA',
+    
+    // Generate
+    'gen-title': 'I\'m learning your job…',
+    'gen-sub': 'One moment. Setting everything up.',
+    'gen-step-1': 'Analyzing found apps…',
+    'gen-step-2': 'Recognizing work patterns…',
+    'gen-step-3': 'Activating default triggers…',
+    'gen-step-4': 'Setting autonomy limits…',
+    'gen-step-5': 'Saving knowledge base…',
+    'gen-step-6': 'Done!',
+    
+    // Ready
+    'ready-title': 'I am ready.',
+    'ready-sub': 'I know your job. Let\'s start.',
+    'rl-apps': 'Apps detected',
+    'rl-triggers': 'Triggers activated',
+    'rl-limits': 'Limits set',
+    'rl-ready': 'Ready for tasks',
+    'finish-btn': 'Get started',
+  }
+};
+
+let currentLang = localStorage.getItem('mira_language') || 'de';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'de' ? 'en' : 'de';
+  localStorage.setItem('mira_language', currentLang);
+  updateUILanguage();
+}
+
+function updateUILanguage() {
+  // Update toggle buttons
+  document.querySelectorAll('.lang-option').forEach(el => {
+    if (el.id === 'lang-de') {
+      el.style.background = currentLang === 'de' ? '#6c63ff' : 'transparent';
+      el.style.color = currentLang === 'de' ? 'white' : 'var(--text2)';
+    }
+    if (el.id === 'lang-en') {
+      el.style.background = currentLang === 'en' ? '#6c63ff' : 'transparent';
+      el.style.color = currentLang === 'en' ? 'white' : 'var(--text2)';
+    }
+  });
+
+  // Update all text elements
+  const elements = [
+    'perm-title', 'perm-btn', 'welcome-title', 'welcome-text', 'start-btn',
+    'scan-title', 'scan-next', 'setup-title', 'setup-sub', 'industry-label',
+    'industry-retail', 'industry-gastro', 'industry-office', 'industry-it',
+    'industry-craft', 'industry-other', 'tasks-label', 'task-emails',
+    'task-invoices', 'task-orders', 'task-reports', 'task-calendar',
+    'task-docs', 'task-accounting', 'task-support', 'setup-btn',
+    'gen-title', 'gen-sub', 'ready-title', 'ready-sub', 'rl-apps',
+    'rl-triggers', 'rl-limits', 'rl-ready', 'finish-btn'
+  ];
+
+  elements.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = i18n[currentLang][id];
+  });
+
+  // Update HTML content
+  document.getElementById('perm-text').innerHTML = i18n[currentLang]['perm-text'];
+  
+  // Update scan status if applicable
+  const scanStatus = document.getElementById('scan-status');
+  if (scanStatus && scanStatus.textContent !== i18n[currentLang]['scan-status-start']) {
+    // If it's showing a count, update that too
+    const match = scanStatus.textContent.match(/\d+/);
+    if (match) {
+      scanStatus.textContent = i18n[currentLang]['scan-status-found'].replace('{count}', match[0]);
+    }
+  }
+
+  // Update progress label if applicable
+  const progressLabel = document.getElementById('progress-label');
+  if (progressLabel && progressLabel.textContent) {
+    for (let i = 1; i <= 6; i++) {
+      if (progressLabel.textContent.includes(i18n['de'][`gen-step-${i}`])) {
+        progressLabel.textContent = i18n[currentLang][`gen-step-${i}`];
+        break;
+      }
+    }
+  }
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 let currentStep = 1;
@@ -353,16 +577,16 @@ async function startScan() {
   const ring     = document.getElementById('scan-ring');
   grid.innerHTML = '';
 
-  statusEl.textContent = 'Suche nach installierten Apps…';
+  statusEl.textContent = i18n[currentLang]['scan-status-start'];
   await sleep(600);
 
   const result = await ipcRenderer.invoke('onboarding-scan-apps');
   scannedApps = result.apps || [];
 
   if (scannedApps.length === 0) {
-    statusEl.textContent = 'Scan abgeschlossen.';
+    statusEl.textContent = i18n[currentLang]['scan-status-complete'];
   } else {
-    statusEl.textContent = `${scannedApps.length} Apps gefunden.`;
+    statusEl.textContent = i18n[currentLang]['scan-status-found'].replace('{count}', scannedApps.length);
   }
 
   // Animate chips in
@@ -416,12 +640,12 @@ async function runGenerate() {
   const label = document.getElementById('progress-label');
 
   const steps = [
-    [10,  'Analysiere gefundene Apps…'],
-    [30,  'Erkenne Arbeitsmuster…'],
-    [55,  'Aktiviere Standard-Trigger…'],
-    [75,  'Setze Autonomiegrenzen…'],
-    [90,  'Speichere Wissensbase…'],
-    [100, 'Fertig!'],
+    [10,  i18n[currentLang]['gen-step-1']],
+    [30,  i18n[currentLang]['gen-step-2']],
+    [55,  i18n[currentLang]['gen-step-3']],
+    [75,  i18n[currentLang]['gen-step-4']],
+    [90,  i18n[currentLang]['gen-step-5']],
+    [100, i18n[currentLang]['gen-step-6']],
   ];
 
   for (const [pct, msg] of steps) {
@@ -438,11 +662,13 @@ async function runGenerate() {
 
   // Populate ready screen summary
   document.getElementById('rl-apps').textContent =
-    `${scannedApps.length} App${scannedApps.length !== 1 ? 's' : ''} erkannt`;
+    i18n[currentLang]['rl-apps'].replace('Apps', scannedApps.length === 1 ? 'App' : 'Apps') + 
+    `: ${scannedApps.length}`;
   document.getElementById('rl-triggers').textContent =
-    `${result.triggerCount || 0} Trigger aktiviert`;
+    i18n[currentLang]['rl-triggers'] + `: ${result.triggerCount || 0}`;
   document.getElementById('rl-limits').textContent =
-    `${result.limitCount || 0} Autonomiegrenzen gesetzt`;
+    i18n[currentLang]['rl-limits'] + `: ${result.limitCount || 0}`;
+  document.getElementById('rl-ready').textContent = i18n[currentLang]['rl-ready'];
 
   await sleep(200);
   goTo(5);
@@ -467,6 +693,7 @@ function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
 // ── Boot ──────────────────────────────────────────────────────────────────
 
 async function checkAndStart() {
+  updateUILanguage();
   // On macOS: check AX permission first — if denied show blocking screen
   const { granted } = await ipcRenderer.invoke('check-ax-permission');
   if (!granted) {
@@ -478,7 +705,8 @@ async function checkAndStart() {
 }
 
 async function recheckPermission() {
-  document.getElementById('perm-status').textContent = 'Prüfe…';
+  const statusEl = document.getElementById('perm-status');
+  statusEl.textContent = i18n[currentLang]['perm-status-check'];
   document.getElementById('perm-check-btn').disabled = true;
   await sleep(600);
   const { granted } = await ipcRenderer.invoke('check-ax-permission');
@@ -489,7 +717,7 @@ async function recheckPermission() {
     currentStep = 0;
     setTimeout(() => goTo(1), 80);
   } else {
-    document.getElementById('perm-status').textContent = 'Noch nicht aktiviert — bitte in Systemeinstellungen → Bedienungshilfen freigeben.';
+    statusEl.textContent = i18n[currentLang]['perm-status-error'];
     document.getElementById('perm-check-btn').disabled = false;
   }
 }

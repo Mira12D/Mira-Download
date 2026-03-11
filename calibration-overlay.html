@@ -8,6 +8,35 @@
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'DM Sans', sans-serif; background: transparent; width: 100vw; height: 100vh; overflow: hidden; cursor: crosshair; -webkit-font-smoothing: antialiased; }
 
+    /* Language Toggle */
+    .lang-toggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 1000;
+      background: rgba(0,0,0,0.6);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 30px;
+      padding: 4px 8px;
+      display: flex;
+      gap: 4px;
+      cursor: pointer;
+      pointer-events: all;
+    }
+    .lang-option {
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      transition: all 0.15s;
+      color: rgba(255,255,255,0.5);
+    }
+    .lang-option.active {
+      background: #00e676;
+      color: #000;
+    }
+
     /* KALIBRIERUNG */
     #mode-calibrate { display: none; position: fixed; inset: 0; align-items: center; justify-content: center; background: rgba(0,0,0,0.35); backdrop-filter: blur(4px); }
     #mode-calibrate.active { display: flex; }
@@ -97,11 +126,17 @@
 </head>
 <body>
 
+<!-- Language Toggle -->
+<div class="lang-toggle" onclick="toggleLanguage()">
+  <span class="lang-option" id="lang-de" style="background:#00e676;color:#000">DE</span>
+  <span class="lang-option" id="lang-en">EN</span>
+</div>
+
 <!-- KALIBRIERUNG (alter flow) -->
 <div id="mode-calibrate">
   <div style="text-align:center;pointer-events:none">
     <div class="cal-title" id="cal-element-name">Klicke auf das Element</div>
-    <div style="font-size:17px;color:rgba(255,255,255,0.5);margin-top:10px;text-shadow:0 2px 10px rgba(0,0,0,0.8)">Klicke auf das Element</div>
+    <div style="font-size:17px;color:rgba(255,255,255,0.5);margin-top:10px;text-shadow:0 2px 10px rgba(0,0,0,0.8)" id="cal-instruction">Klicke auf das Element</div>
   </div>
 </div>
 
@@ -112,10 +147,10 @@
   <div class="rec-bar">
     <div class="rec-left">
       <div class="rec-dot"></div>
-      <div class="rec-label">MIRA · Aufnahme</div>
+      <div class="rec-label" id="rec-label">MIRA · Aufnahme</div>
       <div class="rec-name" id="rec-route-name">—</div>
     </div>
-    <div class="rec-esc">ESC = Abbrechen</div>
+    <div class="rec-esc" id="rec-esc">ESC = Abbrechen</div>
   </div>
 
   <div class="instr-card">
@@ -127,7 +162,7 @@
   <div id="cmd-panel">
     <div class="cmd-card">
       <div class="cmd-header">
-        <div class="cmd-title">Was soll MIRA hier tun?</div>
+        <div class="cmd-title" id="cmd-title">Was soll MIRA hier tun?</div>
         <div class="cmd-step-badge" id="cmd-step-num">Step 1</div>
       </div>
 
@@ -146,8 +181,8 @@
       <div class="cmd-hint" id="cmd-hint"><strong>Nur Klick:</strong> MIRA klickt auf diese Koordinate.</div>
 
       <div class="cmd-btns">
-        <button class="cmd-btn cmd-btn-skip" onclick="skipCommand()">Überspringen</button>
-        <button class="cmd-btn cmd-btn-save" onclick="saveCommand()">✓ Speichern</button>
+        <button class="cmd-btn cmd-btn-skip" onclick="skipCommand()" id="cmd-skip">Überspringen</button>
+        <button class="cmd-btn cmd-btn-save" onclick="saveCommand()" id="cmd-save">✓ Speichern</button>
       </div>
     </div>
   </div>
@@ -183,6 +218,191 @@
 <script>
   const { ipcRenderer } = require('electron');
 
+  // ====================================
+  // INTERNATIONALIZATION (DE/EN)
+  // ====================================
+  
+  const i18n = {
+    de: {
+      // Calibration
+      'cal-instruction': 'Klicke auf das Element',
+      
+      // Recording
+      'rec-label': 'MIRA · Aufnahme',
+      'rec-esc': 'ESC = Abbrechen',
+      
+      // Instructions
+      'instr-0-main': 'Gehe auf den Desktop',
+      'instr-0-sub': 'Minimiere alle Fenster → drücke <span class="instr-key">0</span>',
+      'instr-1-main': 'Gehe zu Step 1',
+      'instr-1-sub': 'Maus auf erstes Element → drücke <span class="instr-key">1</span>',
+      'instr-2-main': 'Gehe zu Step 2',
+      'instr-2-sub': 'Maus auf nächstes Element → drücke <span class="instr-key">2</span>',
+      'instr-3-main': 'Gehe zu Step 3',
+      'instr-3-sub': 'Maus auf nächstes Element → drücke <span class="instr-key">3</span>',
+      'instr-4-main': 'Gehe zu Step 4',
+      'instr-4-sub': 'Maus auf nächstes Element → drücke <span class="instr-key">4</span>',
+      'instr-5-main': 'Gehe zu Step 5',
+      'instr-5-sub': 'Maus auf nächstes Element → drücke <span class="instr-key">5</span>',
+      'instr-6-main': 'Gehe zu Step 6',
+      'instr-6-sub': 'Maus auf nächstes Element → drücke <span class="instr-key">6</span>',
+      'instr-7-main': 'Gehe zu Step 7',
+      'instr-7-sub': 'Maus auf nächstes Element → drücke <span class="instr-key">7</span>',
+      'instr-8-main': 'Letzter Step (8)',
+      'instr-8-sub': 'Maus drauf → <span class="instr-key">8</span> → dann <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> speichern',
+      'instr-done-main': 'Route fertig!',
+      'instr-done-sub': 'Drücke <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> um zu speichern',
+      
+      // Command Panel
+      'cmd-title': 'Was soll MIRA hier tun?',
+      'cmd-coord': '📍 Position:',
+      'type-click': '🖱 Klicken',
+      'type-type': '⌨️ Tippen',
+      'type-extract': '🔍 Extrahieren',
+      'type-url': '🌐 URL',
+      'cmd-input-label': 'Befehl (optional)',
+      'cmd-input-placeholder': 'z.B. klicke auf Gmail Suchfeld',
+      'hint-click': '<strong>Nur Klick:</strong> MIRA klickt auf diese Koordinate. Beschreibung ist optional.',
+      'hint-type': '<strong>Tippen:</strong> MIRA tippt diesen Text. Schreib einen Platzhalter wenn der Wert beim Ausführen vom User kommt.',
+      'hint-extract': '<strong>Extrahieren:</strong> GPT-4o Mini liest Screenshot und extrahiert die Felder. Werte werden in späteren Steps genutzt.',
+      'hint-url': '<strong>URL:</strong> MIRA öffnet diese URL direkt im Browser.',
+      'cmd-skip': 'Überspringen',
+      'cmd-save': '✓ Speichern',
+      
+      // Done Screen
+      'done-title': 'Route gespeichert!',
+      'done-sub': 'Fenster schließt...',
+    },
+    en: {
+      // Calibration
+      'cal-instruction': 'Click on the element',
+      
+      // Recording
+      'rec-label': 'MIRA · Recording',
+      'rec-esc': 'ESC = Cancel',
+      
+      // Instructions
+      'instr-0-main': 'Go to Desktop',
+      'instr-0-sub': 'Minimize all windows → press <span class="instr-key">0</span>',
+      'instr-1-main': 'Go to Step 1',
+      'instr-1-sub': 'Mouse on first element → press <span class="instr-key">1</span>',
+      'instr-2-main': 'Go to Step 2',
+      'instr-2-sub': 'Mouse on next element → press <span class="instr-key">2</span>',
+      'instr-3-main': 'Go to Step 3',
+      'instr-3-sub': 'Mouse on next element → press <span class="instr-key">3</span>',
+      'instr-4-main': 'Go to Step 4',
+      'instr-4-sub': 'Mouse on next element → press <span class="instr-key">4</span>',
+      'instr-5-main': 'Go to Step 5',
+      'instr-5-sub': 'Mouse on next element → press <span class="instr-key">5</span>',
+      'instr-6-main': 'Go to Step 6',
+      'instr-6-sub': 'Mouse on next element → press <span class="instr-key">6</span>',
+      'instr-7-main': 'Go to Step 7',
+      'instr-7-sub': 'Mouse on next element → press <span class="instr-key">7</span>',
+      'instr-8-main': 'Last Step (8)',
+      'instr-8-sub': 'Mouse on it → <span class="instr-key">8</span> → then press <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> to save',
+      'instr-done-main': 'Route complete!',
+      'instr-done-sub': 'Press <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> to save',
+      
+      // Command Panel
+      'cmd-title': 'What should MIRA do here?',
+      'cmd-coord': '📍 Position:',
+      'type-click': '🖱 Click',
+      'type-type': '⌨️ Type',
+      'type-extract': '🔍 Extract',
+      'type-url': '🌐 URL',
+      'cmd-input-label': 'Command (optional)',
+      'cmd-input-placeholder': 'e.g. click on Gmail search field',
+      'hint-click': '<strong>Click only:</strong> MIRA clicks on this coordinate. Description is optional.',
+      'hint-type': '<strong>Type:</strong> MIRA types this text. Write a placeholder if the value comes from user at runtime.',
+      'hint-extract': '<strong>Extract:</strong> GPT-4o Mini reads screenshot and extracts fields. Values are used in later steps.',
+      'hint-url': '<strong>URL:</strong> MIRA opens this URL directly in browser.',
+      'cmd-skip': 'Skip',
+      'cmd-save': '✓ Save',
+      
+      // Done Screen
+      'done-title': 'Route saved!',
+      'done-sub': 'Window closing...',
+    }
+  };
+
+  let currentLang = localStorage.getItem('mira_language') || 'de';
+
+  function toggleLanguage() {
+    currentLang = currentLang === 'de' ? 'en' : 'de';
+    localStorage.setItem('mira_language', currentLang);
+    updateUILanguage();
+  }
+
+  function updateUILanguage() {
+    // Update toggle buttons
+    document.querySelectorAll('.lang-option').forEach(el => {
+      if (el.id === 'lang-de' || el.id === 'lang-de2') {
+        el.style.background = currentLang === 'de' ? '#00e676' : 'transparent';
+        el.style.color = currentLang === 'de' ? '#000' : 'rgba(255,255,255,0.5)';
+      }
+      if (el.id === 'lang-en' || el.id === 'lang-en2') {
+        el.style.background = currentLang === 'en' ? '#00e676' : 'transparent';
+        el.style.color = currentLang === 'en' ? '#000' : 'rgba(255,255,255,0.5)';
+      }
+    });
+
+    // Update static texts
+    const elements = {
+      'cal-instruction': 'cal-instruction',
+      'rec-label': 'rec-label',
+      'rec-esc': 'rec-esc',
+      'cmd-title': 'cmd-title',
+      'cmd-input-label': 'cmd-input-label',
+      'cmd-skip': 'cmd-skip',
+      'cmd-save': 'cmd-save',
+      'done-title': 'done-title',
+      'done-sub': 'done-sub',
+      'type-click': 'type-click',
+      'type-type': 'type-type',
+      'type-extract': 'type-extract',
+      'type-url': 'type-url'
+    };
+
+    for (let [id, key] of Object.entries(elements)) {
+      const el = document.getElementById(id);
+      if (el) el.textContent = i18n[currentLang][key];
+    }
+
+    // Update placeholder
+    const cmdInput = document.getElementById('cmd-input');
+    if (cmdInput) cmdInput.placeholder = i18n[currentLang]['cmd-input-placeholder'];
+
+    // Update current instruction based on active step
+    const activeStep = document.querySelector('.step-key.active-now');
+    if (activeStep) {
+      const stepNum = activeStep.id.replace('stepkey-', '');
+      updateInstructions(parseInt(stepNum));
+    }
+
+    // Update hint based on selected type
+    if (selectedType) {
+      const hintEl = document.getElementById('cmd-hint');
+      if (hintEl) hintEl.innerHTML = i18n[currentLang][`hint-${selectedType}`];
+    }
+  }
+
+  function updateInstructions(stepNum) {
+    const mainEl = document.getElementById('instr-main');
+    const subEl = document.getElementById('instr-sub');
+    
+    if (stepNum >= 0 && stepNum <= 8) {
+      mainEl.textContent = i18n[currentLang][`instr-${stepNum}-main`];
+      subEl.innerHTML = i18n[currentLang][`instr-${stepNum}-sub`];
+    } else if (stepNum === 9 || stepNum === 'done') {
+      mainEl.textContent = i18n[currentLang]['instr-done-main'];
+      subEl.innerHTML = i18n[currentLang]['instr-done-sub'];
+    }
+  }
+
+  // ====================================
+  // EXISTING CODE (with modifications for i18n)
+  // ====================================
+
   const crosshair = document.getElementById('crosshair');
   const coords = document.getElementById('coords');
 
@@ -191,30 +411,17 @@
   let currentCoordinate = null;
 
   const TYPE_CONFIG = {
-    click:   { label: 'Beschreibung (optional)',      placeholder: 'z.B. klicke auf Gmail Suchfeld',                hint: '<strong>Klick:</strong> MIRA klickt auf diese Koordinate. Beschreibung ist optional.' },
-    type:    { label: 'Was soll MIRA tippen?',         placeholder: 'z.B. "gib Suchbegriff ein" oder "youtube.de"',  hint: '<strong>Tippen:</strong> MIRA tippt diesen Text. Schreib einen Platzhalter wenn der Wert beim Ausführen vom User kommt.' },
-    extract: { label: 'Was soll extrahiert werden?',   placeholder: 'z.B. extrahiere Rechnungsnummer, Summe, IBAN',  hint: '<strong>Extrahieren:</strong> GPT-4o Mini liest Screenshot und extrahiert die Felder. Werte werden in späteren Steps genutzt.' },
-    url:     { label: 'Welche URL öffnen?',            placeholder: 'z.B. https://gmail.com',                        hint: '<strong>URL:</strong> MIRA öffnet diese URL direkt im Browser.' }
-  };
-
-  const INSTRS = {
-    0:    { main: 'Gehe auf den Desktop',  sub: 'Minimiere alle Fenster → drücke <span class="instr-key">0</span>' },
-    1:    { main: 'Gehe zu Step 1',        sub: 'Maus auf erstes Element → drücke <span class="instr-key">1</span>' },
-    2:    { main: 'Gehe zu Step 2',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">2</span>' },
-    3:    { main: 'Gehe zu Step 3',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">3</span>' },
-    4:    { main: 'Gehe zu Step 4',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">4</span>' },
-    5:    { main: 'Gehe zu Step 5',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">5</span>' },
-    6:    { main: 'Gehe zu Step 6',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">6</span>' },
-    7:    { main: 'Gehe zu Step 7',        sub: 'Maus auf nächstes Element → drücke <span class="instr-key">7</span>' },
-    8:    { main: 'Letzter Step (8)',       sub: 'Maus drauf → <span class="instr-key">8</span> → dann <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> speichern' },
-    done: { main: 'Route fertig!',         sub: 'Drücke <span class="instr-key" style="color:#ff5252;border-color:rgba(255,82,82,0.3);background:rgba(255,82,82,0.1)">9</span> um zu speichern' }
+    click:   { label: 'cmd-input-label', placeholder: 'cmd-input-placeholder', hint: 'hint-click' },
+    type:    { label: 'cmd-input-label', placeholder: 'cmd-input-placeholder', hint: 'hint-type' },
+    extract: { label: 'cmd-input-label', placeholder: 'cmd-input-placeholder', hint: 'hint-extract' },
+    url:     { label: 'cmd-input-label', placeholder: 'cmd-input-placeholder', hint: 'hint-url' }
   };
 
   // ── IPC ──
   ipcRenderer.on('show-prompt', (event, elementName) => {
     document.getElementById('mode-calibrate').classList.add('active');
     document.getElementById('mode-recording').classList.remove('active');
-    document.getElementById('cal-element-name').textContent = `Klicke auf: ${elementName}`;
+    document.getElementById('cal-element-name').textContent = `${i18n[currentLang]['cal-instruction']}: ${elementName}`;
   });
 
   ipcRenderer.on('start-recording-overlay', (event, { name }) => {
@@ -224,7 +431,7 @@
     document.getElementById('cmd-panel').classList.remove('active');
     document.getElementById('rec-route-name').textContent = `"${name}"`;
     resetGrid();
-    setInstr(0);
+    updateInstructions(0);
   });
 
   // main.js sagt: Taste X gedrückt, zeig Command Panel
@@ -232,7 +439,7 @@
     pendingStepNum = stepNum;
     currentCoordinate = coordinate;
     document.getElementById('cmd-step-num').textContent = `Step ${stepNum}`;
-    document.getElementById('cmd-coord-display').textContent = `📍 Position: [${coordinate[0]}, ${coordinate[1]}]`;
+    document.getElementById('cmd-coord-display').textContent = `${i18n[currentLang]['cmd-coord']} [${coordinate[0]}, ${coordinate[1]}]`;
     document.getElementById('cmd-input').value = '';
     selectType('click');
     document.getElementById('cmd-panel').classList.add('active');
@@ -243,15 +450,17 @@
     document.getElementById('cmd-panel').classList.remove('active');
     flash();
     const next = stepNum + 1;
-    if (next <= 8) { setActive(next); setInstr(next); }
-    else setInstr('done');
+    if (next <= 8) { 
+      setActive(next); 
+      updateInstructions(next);
+    } else updateInstructions('done');
   });
 
   ipcRenderer.on('route-record-done', (event, { name, steps }) => {
     document.getElementById('mode-recording').classList.remove('active');
     document.getElementById('done-screen').classList.add('active');
-    document.getElementById('done-title').textContent = `"${name}" gespeichert!`;
-    document.getElementById('done-sub').textContent = `${steps} Steps aufgenommen`;
+    document.getElementById('done-title').textContent = `"${name}" ${i18n[currentLang]['done-title']}`;
+    document.getElementById('done-sub').textContent = `${steps} ${i18n[currentLang]['done-sub']}`;
     setTimeout(() => document.getElementById('done-screen').classList.remove('active'), 2500);
   });
 
@@ -262,10 +471,10 @@
       document.getElementById(`type-${t}`).className = 'type-btn';
     });
     document.getElementById(`type-${type}`).className = `type-btn sel-${type}`;
-    const cfg = TYPE_CONFIG[type];
-    document.getElementById('cmd-input-label').textContent = cfg.label;
-    document.getElementById('cmd-input').placeholder = cfg.placeholder;
-    document.getElementById('cmd-hint').innerHTML = cfg.hint;
+    
+    // Update hint
+    const hintEl = document.getElementById('cmd-hint');
+    if (hintEl) hintEl.innerHTML = i18n[currentLang][`hint-${type}`];
   }
 
   function saveCommand() {
@@ -315,9 +524,7 @@
   }
 
   function setInstr(key) {
-    const i = INSTRS[key] || INSTRS[0];
-    document.getElementById('instr-main').textContent = i.main;
-    document.getElementById('instr-sub').innerHTML = i.sub;
+    updateInstructions(key);
   }
 
   function flash() {
@@ -345,6 +552,9 @@
       saveCommand();
     }
   });
+
+  // Initialize language
+  updateUILanguage();
 </script>
 </body>
 </html>

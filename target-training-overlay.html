@@ -16,6 +16,33 @@
       user-select: none;
     }
 
+    /* Language Toggle */
+    .lang-toggle {
+      position: fixed;
+      top: 16px; right: 16px;
+      background: rgba(255,255,255,0.07);
+      border: 1px solid rgba(255,255,255,0.11);
+      border-radius: 30px;
+      padding: 4px 8px;
+      display: flex;
+      gap: 4px;
+      cursor: pointer;
+      z-index: 250;
+      backdrop-filter: blur(8px);
+    }
+    .lang-option {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s;
+      color: rgba(255,255,255,0.5);
+    }
+    .lang-option.active {
+      background: #34c759;
+      color: #000;
+    }
+
     /* Close button */
     .close-btn {
       position: fixed;
@@ -36,7 +63,7 @@
     /* HUD top-right */
     .hud {
       position: fixed;
-      top: 20px; right: 24px;
+      top: 20px; right: 100px;
       text-align: right;
       z-index: 200;
       pointer-events: none;
@@ -217,10 +244,16 @@
 </head>
 <body>
 
+  <!-- Language Toggle -->
+  <div class="lang-toggle" onclick="toggleLanguage()">
+    <span class="lang-option" id="lang-de" style="background:#34c759;color:#000">DE</span>
+    <span class="lang-option" id="lang-en">EN</span>
+  </div>
+
   <button class="close-btn" onclick="closeWindow()">×</button>
 
   <div class="hud">
-    <div class="hud-round">Runde <span id="hud-round">0</span>/10</div>
+    <div class="hud-round" id="hud-round-label">Runde <span id="hud-round">0</span>/10</div>
     <div class="hud-offset" id="hud-offset">Fehler: X±0  Y±0 px</div>
   </div>
 
@@ -238,13 +271,13 @@
       <line x1="32" y1="2"  x2="32" y2="20" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
       <line x1="32" y1="44" x2="32" y2="62" stroke="rgba(255,255,255,0.3)" stroke-width="1.5"/>
     </svg>
-    <div class="start-title">Klick-Kalibrierung</div>
-    <div class="start-sub">
+    <div class="start-title" id="start-title">Klick-Kalibrierung</div>
+    <div class="start-sub" id="start-sub">
       MIRA schießt 10 Mal auf Zielscheiben.<br>
       Die gemessenen Abweichungen korrigieren<br>
       den Koordinaten-Offset automatisch.
     </div>
-    <button class="start-btn" onclick="startTraining()">Kalibrierung starten</button>
+    <button class="start-btn" onclick="startTraining()" id="start-btn">Kalibrierung starten</button>
   </div>
 
   <!-- Countdown -->
@@ -254,29 +287,29 @@
 
   <!-- Result Screen -->
   <div id="result-screen">
-    <div class="result-title">Kalibrierung abgeschlossen</div>
-    <div class="result-sub">10 Schüsse analysiert</div>
+    <div class="result-title" id="result-title">Kalibrierung abgeschlossen</div>
+    <div class="result-sub" id="result-sub">10 Schüsse analysiert</div>
     <div class="result-stats">
       <div class="stat-row">
-        <span class="stat-label">Durchschnittlicher X-Fehler</span>
+        <span class="stat-label" id="stat-ex-label">Durchschnittlicher X-Fehler</span>
         <span class="stat-value" id="res-ex">–</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Durchschnittlicher Y-Fehler</span>
+        <span class="stat-label" id="stat-ey-label">Durchschnittlicher Y-Fehler</span>
         <span class="stat-value" id="res-ey">–</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Treffer (Abweichung ≤ 50 px)</span>
+        <span class="stat-label" id="stat-hits-label">Treffer (Abweichung ≤ 50 px)</span>
         <span class="stat-value" id="res-hits">–</span>
       </div>
       <div class="stat-row">
-        <span class="stat-label">Genauigkeit</span>
+        <span class="stat-label" id="stat-acc-label">Genauigkeit</span>
         <span class="stat-value" id="res-acc">–</span>
       </div>
     </div>
     <div class="result-btns">
-      <button class="result-save-btn" id="save-btn" onclick="saveCalibration()">Kalibrierung anpassen</button>
-      <button class="result-close-btn" onclick="closeWindow()">Schließen</button>
+      <button class="result-save-btn" id="save-btn" onclick="saveCalibration()"><span id="save-btn-text">Kalibrierung anpassen</span></button>
+      <button class="result-close-btn" onclick="closeWindow()"><span id="close-btn-text">Schließen</span></button>
     </div>
   </div>
 
@@ -284,6 +317,102 @@
 
   <script>
     const { ipcRenderer } = require('electron');
+
+    // ====================================
+    // INTERNATIONALIZATION (DE/EN)
+    // ====================================
+
+    const i18n = {
+      de: {
+        'hud-round-label': 'Runde <span id="hud-round">0</span>/10',
+        'hud-offset': 'Fehler: X±0  Y±0 px',
+        'start-title': 'Klick-Kalibrierung',
+        'start-sub': 'MIRA schießt 10 Mal auf Zielscheiben.\nDie gemessenen Abweichungen korrigieren\nden Koordinaten-Offset automatisch.',
+        'start-btn': 'Kalibrierung starten',
+        'result-title': 'Kalibrierung abgeschlossen',
+        'result-sub': '10 Schüsse analysiert',
+        'stat-ex-label': 'Durchschnittlicher X-Fehler',
+        'stat-ey-label': 'Durchschnittlicher Y-Fehler',
+        'stat-hits-label': 'Treffer (Abweichung ≤ 50 px)',
+        'stat-acc-label': 'Genauigkeit',
+        'save-btn-text': 'Kalibrierung anpassen',
+        'close-btn-text': 'Schließen',
+        'perfect-title': 'Perfekt kalibriert',
+        'toast-saved': 'Offset korrigiert: X{signX}{avgX}  Y{signY}{avgY} px',
+        'toast-error': 'Fehler: ',
+        'countdown-fire': 'FEUER!',
+      },
+      en: {
+        'hud-round-label': 'Round <span id="hud-round">0</span>/10',
+        'hud-offset': 'Error: X±0  Y±0 px',
+        'start-title': 'Click Calibration',
+        'start-sub': 'MIRA shoots 10 times at targets.\nThe measured deviations automatically\ncorrect the coordinate offset.',
+        'start-btn': 'Start calibration',
+        'result-title': 'Calibration complete',
+        'result-sub': '10 shots analyzed',
+        'stat-ex-label': 'Average X error',
+        'stat-ey-label': 'Average Y error',
+        'stat-hits-label': 'Hits (deviation ≤ 50 px)',
+        'stat-acc-label': 'Accuracy',
+        'save-btn-text': 'Adjust calibration',
+        'close-btn-text': 'Close',
+        'perfect-title': 'Perfectly calibrated',
+        'toast-saved': 'Offset corrected: X{signX}{avgX}  Y{signY}{avgY} px',
+        'toast-error': 'Error: ',
+        'countdown-fire': 'FIRE!',
+      }
+    };
+
+    let currentLang = localStorage.getItem('mira_language') || 'de';
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'de' ? 'en' : 'de';
+      localStorage.setItem('mira_language', currentLang);
+      updateUILanguage();
+    }
+
+    function updateUILanguage() {
+      // Update toggle buttons
+      document.querySelectorAll('.lang-option').forEach(el => {
+        if (el.id === 'lang-de') {
+          el.style.background = currentLang === 'de' ? '#34c759' : 'transparent';
+          el.style.color = currentLang === 'de' ? '#000' : 'rgba(255,255,255,0.5)';
+        }
+        if (el.id === 'lang-en') {
+          el.style.background = currentLang === 'en' ? '#34c759' : 'transparent';
+          el.style.color = currentLang === 'en' ? '#000' : 'rgba(255,255,255,0.5)';
+        }
+      });
+
+      // Update all text elements
+      const elements = [
+        'hud-round-label', 'start-title', 'start-sub', 'start-btn',
+        'result-title', 'result-sub', 'stat-ex-label', 'stat-ey-label',
+        'stat-hits-label', 'stat-acc-label', 'save-btn-text', 'close-btn-text'
+      ];
+
+      elements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (id === 'hud-round-label') {
+            el.innerHTML = i18n[currentLang][id].replace('<span id="hud-round">0</span>', `<span id="hud-round">${round}</span>`);
+          } else {
+            el.textContent = i18n[currentLang][id];
+          }
+        }
+      });
+
+      // Update hud-offset separately (it's dynamic)
+      updateHud();
+
+      // Update result screen if visible
+      if (document.getElementById('result-screen').style.display === 'flex') {
+        const needsCorrection = Math.abs(window._avgErrorX || 0) > 3 || Math.abs(window._avgErrorY || 0) > 3;
+        if (!needsCorrection) {
+          document.getElementById('result-title').textContent = i18n[currentLang]['perfect-title'];
+        }
+      }
+    }
 
     const canvas = document.getElementById('canvas');
     const ctx    = canvas.getContext('2d');
@@ -433,13 +562,17 @@
     function updateHud() {
       document.getElementById('hud-round').textContent = round;
       if (results.length === 0) {
-        document.getElementById('hud-offset').textContent = 'Fehler: X±0  Y±0 px';
+        document.getElementById('hud-offset').textContent = i18n[currentLang]['hud-offset'];
         return;
       }
       const avgX = Math.round(results.reduce((s, r) => s + r.errorX, 0) / results.length);
       const avgY = Math.round(results.reduce((s, r) => s + r.errorY, 0) / results.length);
       const sign = v => (v >= 0 ? '+' : '') + v;
-      document.getElementById('hud-offset').textContent = `Fehler: X${sign(avgX)}  Y${sign(avgY)} px`;
+      
+      const offsetText = currentLang === 'de' 
+        ? `Fehler: X${sign(avgX)}  Y${sign(avgY)} px`
+        : `Error: X${sign(avgX)}  Y${sign(avgY)} px`;
+      document.getElementById('hud-offset').textContent = offsetText;
     }
 
     // ── Toast ──
@@ -459,7 +592,7 @@
         let n = 3;
 
         const tick = () => {
-          el.textContent = n > 0 ? n : 'FEUER!';
+          el.textContent = n > 0 ? n : i18n[currentLang]['countdown-fire'];
           el.style.color  = n > 0 ? '#34c759' : '#ff453a';
           el.style.opacity = 1;
           setTimeout(() => {
@@ -502,7 +635,7 @@
       });
 
       if (result.error) {
-        showToast('Fehler: ' + result.error);
+        showToast(i18n[currentLang]['toast-error'] + result.error);
         return;
       }
 
@@ -573,7 +706,7 @@
       const needsCorrection = Math.abs(avgEX) > 3 || Math.abs(avgEY) > 3;
       document.getElementById('save-btn').style.display = needsCorrection ? 'block' : 'none';
       if (!needsCorrection) {
-        document.getElementById('result-title').textContent = 'Perfekt kalibriert';
+        document.getElementById('result-title').textContent = i18n[currentLang]['perfect-title'];
       }
 
       window._avgErrorX = Math.round(avgEX);
@@ -585,8 +718,9 @@
     // ── Save calibration correction ──
     async function saveCalibration() {
       const btn = document.getElementById('save-btn');
+      const btnText = document.getElementById('save-btn-text');
       btn.disabled = true;
-      btn.textContent = 'Speichern...';
+      btnText.textContent = currentLang === 'de' ? 'Speichern...' : 'Saving...';
 
       const result = await ipcRenderer.invoke('target-training-save-calibration', {
         avgErrorX: window._avgErrorX || 0,
@@ -595,15 +729,23 @@
 
       if (result.success) {
         const sign = v => (v >= 0 ? '+' : '') + v;
-        showToast(`Offset korrigiert: X${sign(result.offsetX)}  Y${sign(result.offsetY)} px`);
-        btn.textContent = 'Gespeichert';
+        const toastMsg = i18n[currentLang]['toast-saved']
+          .replace('{signX}', sign(result.offsetX).charAt(0))
+          .replace('{avgX}', Math.abs(result.offsetX))
+          .replace('{signY}', sign(result.offsetY).charAt(0))
+          .replace('{avgY}', Math.abs(result.offsetY));
+        showToast(toastMsg);
+        btnText.textContent = currentLang === 'de' ? 'Gespeichert' : 'Saved';
         setTimeout(() => closeWindow(), 2200);
       } else {
-        showToast('Fehler: ' + result.error);
+        showToast(i18n[currentLang]['toast-error'] + result.error);
         btn.disabled = false;
-        btn.textContent = 'Kalibrierung anpassen';
+        btnText.textContent = i18n[currentLang]['save-btn-text'];
       }
     }
+
+    // Initialize language
+    updateUILanguage();
   </script>
 </body>
 </html>

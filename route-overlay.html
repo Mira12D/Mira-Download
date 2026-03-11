@@ -9,7 +9,44 @@
     body { font-family: 'DM Sans', sans-serif; background: rgba(0,0,0,0.18); width: 100vw; height: 100vh; overflow: hidden; -webkit-font-smoothing: antialiased; pointer-events: none; }
     #panel { position: fixed; top: 24px; left: 24px; width: 290px; background: rgba(8,8,8,0.97); border: 1px solid rgba(255,255,255,0.1); cursor: default; border-radius: 18px; overflow: hidden; box-shadow: 0 24px 60px rgba(0,0,0,0.8), 0 0 0 1px rgba(255,255,255,0.04); pointer-events: all; }
 
-    .panel-header { padding: 13px 15px; background: rgba(255,255,255,0.02); border-bottom: 1px solid rgba(255,255,255,0.06); display: flex; align-items: center; gap: 9px; }
+    .panel-header { 
+      padding: 13px 15px; 
+      background: rgba(255,255,255,0.02); 
+      border-bottom: 1px solid rgba(255,255,255,0.06); 
+      display: flex; 
+      align-items: center; 
+      gap: 9px; 
+      cursor: grab;
+      user-select: none;
+    }
+    .panel-header:active { cursor: grabbing; }
+    
+    /* Language Toggle */
+    .lang-toggle {
+      display: flex;
+      align-items: center;
+      gap: 2px;
+      margin-left: 8px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 2px 4px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    .lang-option {
+      padding: 2px 6px;
+      border-radius: 16px;
+      font-size: 9px;
+      font-weight: 700;
+      transition: all 0.15s;
+      color: rgba(255,255,255,0.4);
+    }
+    .lang-option.active {
+      background: #34c759;
+      color: #000;
+    }
+
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.15} }
     .rec-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff453a; animation: pulse 1.1s infinite; flex-shrink: 0; }
     .header-info { flex: 1; min-width: 0; }
@@ -84,8 +121,13 @@
   <div class="panel-header">
     <div class="rec-dot"></div>
     <div class="header-info">
-      <div class="header-title">MIRA · Aufnahme</div>
+      <div class="header-title" id="header-title">MIRA · Aufnahme</div>
       <div class="header-name" id="route-name">—</div>
+    </div>
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage(event)">
+      <span class="lang-option" id="lang-de" style="background:#34c759;color:#000">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
     </div>
   </div>
   <div class="dots-row" id="dots-row">
@@ -105,30 +147,30 @@
     <div class="instr-main" id="instr-main">Gehe auf den Desktop</div>
     <div class="instr-sub"  id="instr-sub">Minimiere alle Fenster → <span class="kb y">0</span></div>
   </div>
-  <button id="btn-weiter" onclick="weiterSteps()">➕ Weitere Steps aufnehmen (1-8 nochmal)</button>
+  <button id="btn-weiter" onclick="weiterSteps()"><span id="more-steps">➕ Weitere Steps aufnehmen (1-8 nochmal)</span></button>
   <div id="cmd-panel">
-    <div class="cmd-lbl">Was soll MIRA hier tun?</div>
+    <div class="cmd-lbl" id="cmd-title">Was soll MIRA hier tun?</div>
     <div class="type-grid">
-      <button class="type-btn t-click"  id="type-click"   onclick="selType('click')">🖱 Klicken</button>
-      <button class="type-btn"          id="type-type"    onclick="selType('type')">⌨️ Tippen</button>
-      <button class="type-btn"          id="type-extract" onclick="selType('extract')">🔍 Extrahieren</button>
-      <button class="type-btn"          id="type-url"     onclick="selType('url')">🌐 URL</button>
-      <button class="type-btn"          id="type-key"     onclick="selType('key')">↵ Taste</button>
-      <button class="type-btn"          id="type-mark"    onclick="selType('mark')">⬚ Markieren</button>
+      <button class="type-btn t-click"  id="type-click"   onclick="selType('click')"><span id="type-click-text">🖱 Klicken</span></button>
+      <button class="type-btn"          id="type-type"    onclick="selType('type')"><span id="type-type-text">⌨️ Tippen</span></button>
+      <button class="type-btn"          id="type-extract" onclick="selType('extract')"><span id="type-extract-text">🔍 Extrahieren</span></button>
+      <button class="type-btn"          id="type-url"     onclick="selType('url')"><span id="type-url-text">🌐 URL</span></button>
+      <button class="type-btn"          id="type-key"     onclick="selType('key')"><span id="type-key-text">↵ Taste</span></button>
+      <button class="type-btn"          id="type-mark"    onclick="selType('mark')"><span id="type-mark-text">⬚ Markieren</span></button>
     </div>
     <textarea class="cmd-input" id="cmd-input" rows="2" placeholder="Optional: was MIRA hier tun soll..."></textarea>
     <div class="key-grid" id="key-grid" style="display:none">
-      <button class="key-btn" onclick="selKey('enter', event)">↵ Enter</button>
-      <button class="key-btn" onclick="selKey('tab', event)">⇥ Tab</button>
-      <button class="key-btn" onclick="selKey('escape', event)">⎋ Escape</button>
-      <button class="key-btn" onclick="selKey('backspace', event)">⌫ Backspace</button>
+      <button class="key-btn" onclick="selKey('enter', event)"><span id="key-enter">↵ Enter</span></button>
+      <button class="key-btn" onclick="selKey('tab', event)"><span id="key-tab">⇥ Tab</span></button>
+      <button class="key-btn" onclick="selKey('escape', event)"><span id="key-escape">⎋ Escape</span></button>
+      <button class="key-btn" onclick="selKey('backspace', event)"><span id="key-backspace">⌫ Backspace</span></button>
     </div>
-    <div class="mark-hint" id="mark-hint">Ziehe ein Rechteck über den Bereich den MIRA lesen soll.</div>
-    <button id="mark-start-btn" onclick="startMarking()">⬚ Bereich markieren</button>
+    <div class="mark-hint" id="mark-hint"><span id="mark-hint-text">Ziehe ein Rechteck über den Bereich den MIRA lesen soll.</span></div>
+    <button id="mark-start-btn" onclick="startMarking()"><span id="mark-btn">⬚ Bereich markieren</span></button>
     <div class="cmd-hint" id="cmd-hint">MIRA klickt auf diese Position.</div>
     <div class="cmd-row">
-      <button class="cmd-btn btn-skip" onclick="skipCmd()">Überspringen</button>
-      <button class="cmd-btn btn-save" onclick="saveCmd()">✓ Speichern</button>
+      <button class="cmd-btn btn-skip" onclick="skipCmd()"><span id="skip-btn">Überspringen</span></button>
+      <button class="cmd-btn btn-save" onclick="saveCmd()">✓ <span id="save-btn">Speichern</span></button>
     </div>
   </div>
   <div id="done-block">
@@ -137,8 +179,8 @@
     <div class="done-sub"   id="done-sub">Schließt...</div>
   </div>
   <div class="bottom-row" id="bottom-row">
-    <button class="bot-btn bot-save"   onclick="earlySave()">✓ Jetzt speichern</button>
-    <button class="bot-btn bot-cancel" onclick="cancelRec()">✕ Abbrechen</button>
+    <button class="bot-btn bot-save"   onclick="earlySave()">✓ <span id="save-now">Jetzt speichern</span></button>
+    <button class="bot-btn bot-cancel" onclick="cancelRec()">✕ <span id="cancel-btn">Abbrechen</span></button>
   </div>
 </div>
 
@@ -146,11 +188,186 @@
 <div id="mark-overlay"></div>
 <div id="mark-rect"></div>
 
-
-
-
 <script>
   const { ipcRenderer } = require('electron');
+
+  // ====================================
+  // INTERNATIONALIZATION (DE/EN)
+  // ====================================
+
+  const i18n = {
+    de: {
+      'header-title': 'MIRA · Aufnahme',
+      'more-steps': '➕ Weitere Steps aufnehmen (1-8 nochmal)',
+      'cmd-title': 'Was soll MIRA hier tun?',
+      'type-click-text': '🖱 Klicken',
+      'type-type-text': '⌨️ Tippen',
+      'type-extract-text': '🔍 Extrahieren',
+      'type-url-text': '🌐 URL',
+      'type-key-text': '↵ Taste',
+      'type-mark-text': '⬚ Markieren',
+      'key-enter': '↵ Enter',
+      'key-tab': '⇥ Tab',
+      'key-escape': '⎋ Escape',
+      'key-backspace': '⌫ Backspace',
+      'mark-hint-text': 'Ziehe ein Rechteck über den Bereich den MIRA lesen soll.',
+      'mark-btn': '⬚ Bereich markieren',
+      'skip-btn': 'Überspringen',
+      'save-btn': 'Speichern',
+      'save-now': 'Jetzt speichern',
+      'cancel-btn': 'Abbrechen',
+      'done-title': 'Gespeichert!',
+      'done-sub': 'Schließt...',
+      
+      // Instructions
+      'instr-start-step': 'START',
+      'instr-start-main': 'Gehe auf den Desktop',
+      'instr-start-sub': 'Minimiere alle Fenster → <span class="kb y">0</span>',
+      'instr-step': 'STEP {num}',
+      'instr-main': 'Schritt {num} aufnehmen',
+      'instr-sub': 'Maus auf Element → <span class="kb g">{local}</span>',
+      'instr-sub-round': 'Maus auf Element → <span class="kb g">{local}</span> <span style="color:rgba(255,255,255,0.2)">(Runde {round})</span>',
+      'instr-done-step': 'FERTIG',
+      'instr-done-main': 'Alle Steps aufgenommen!',
+      'instr-done-sub': 'Klicke <b style="color:#34c759">✓ Jetzt speichern</b>',
+      
+      // Hints
+      'hint-click': 'MIRA klickt auf diese Position.',
+      'hint-type': 'Was soll MIRA tippen?',
+      'hint-extract': 'z.B. "extrahiere Rechnungsnummer, Summe, IBAN"',
+      'hint-url': 'Welche URL öffnen? z.B. https://gmail.com',
+      'hint-key': 'Welche Taste? Wähle unten aus.',
+      'hint-mark': 'Markiere den Bereich den MIRA lesen soll.',
+      
+      // Placeholders
+      'placeholder-click': 'Optional: z.B. klicke auf Suchfeld',
+      'placeholder-type': 'z.B. https://youtube.com',
+      'placeholder-extract': 'z.B. extrahiere Betrag, Datum, Rechnungsnummer',
+      'placeholder-url': 'z.B. https://gmail.com',
+      'placeholder-key': '',
+      'placeholder-mark': 'z.B. extrahiere Betrag, Datum, Rechnungsnummer',
+      
+      // Mark hint
+      'mark-live-hint': 'Ziehe Rechteck · Mausrad = Scrollen während Ziehen · ESC = Abbrechen',
+      'mark-success': '✅ {w}×{h}px — Befehl eingeben & Speichern!',
+    },
+    en: {
+      'header-title': 'MIRA · Recording',
+      'more-steps': '➕ Add more steps (1-8 again)',
+      'cmd-title': 'What should MIRA do here?',
+      'type-click-text': '🖱 Click',
+      'type-type-text': '⌨️ Type',
+      'type-extract-text': '🔍 Extract',
+      'type-url-text': '🌐 URL',
+      'type-key-text': '↵ Key',
+      'type-mark-text': '⬚ Mark',
+      'key-enter': '↵ Enter',
+      'key-tab': '⇥ Tab',
+      'key-escape': '⎋ Escape',
+      'key-backspace': '⌫ Backspace',
+      'mark-hint-text': 'Drag a rectangle over the area MIRA should read.',
+      'mark-btn': '⬚ Mark area',
+      'skip-btn': 'Skip',
+      'save-btn': 'Save',
+      'save-now': 'Save now',
+      'cancel-btn': 'Cancel',
+      'done-title': 'Saved!',
+      'done-sub': 'Closing...',
+      
+      // Instructions
+      'instr-start-step': 'START',
+      'instr-start-main': 'Go to desktop',
+      'instr-start-sub': 'Minimize all windows → <span class="kb y">0</span>',
+      'instr-step': 'STEP {num}',
+      'instr-main': 'Record step {num}',
+      'instr-sub': 'Mouse on element → <span class="kb g">{local}</span>',
+      'instr-sub-round': 'Mouse on element → <span class="kb g">{local}</span> <span style="color:rgba(255,255,255,0.2)">(Round {round})</span>',
+      'instr-done-step': 'DONE',
+      'instr-done-main': 'All steps recorded!',
+      'instr-done-sub': 'Click <b style="color:#34c759">✓ Save now</b>',
+      
+      // Hints
+      'hint-click': 'MIRA clicks on this position.',
+      'hint-type': 'What should MIRA type?',
+      'hint-extract': 'e.g. "extract invoice number, amount, IBAN"',
+      'hint-url': 'Which URL to open? e.g. https://gmail.com',
+      'hint-key': 'Which key? Select below.',
+      'hint-mark': 'Mark the area MIRA should read.',
+      
+      // Placeholders
+      'placeholder-click': 'Optional: e.g. click on search field',
+      'placeholder-type': 'e.g. https://youtube.com',
+      'placeholder-extract': 'e.g. extract amount, date, invoice number',
+      'placeholder-url': 'e.g. https://gmail.com',
+      'placeholder-key': '',
+      'placeholder-mark': 'e.g. extract amount, date, invoice number',
+      
+      // Mark hint
+      'mark-live-hint': 'Drag rectangle · Mouse wheel = scroll while dragging · ESC = Cancel',
+      'mark-success': '✅ {w}×{h}px — Enter command & Save!',
+    }
+  };
+
+  let currentLang = localStorage.getItem('mira_language') || 'de';
+
+  function toggleLanguage(event) {
+    if (event) event.stopPropagation();
+    currentLang = currentLang === 'de' ? 'en' : 'de';
+    localStorage.setItem('mira_language', currentLang);
+    updateUILanguage();
+    // Update current instruction with new language
+    if (typeof currentStepNum !== 'undefined') {
+      if (currentStepNum === 'done') {
+        updateInstrDone();
+      } else {
+        updateInstrStep(currentStepNum);
+      }
+    }
+    // Update cmd panel if open
+    if (selType_) {
+      updateCmdUIText();
+    }
+  }
+
+  function updateUILanguage() {
+    // Update toggle buttons
+    document.querySelectorAll('.lang-option').forEach(el => {
+      if (el.id === 'lang-de') {
+        el.style.background = currentLang === 'de' ? '#34c759' : 'transparent';
+        el.style.color = currentLang === 'de' ? '#000' : 'rgba(255,255,255,0.4)';
+      }
+      if (el.id === 'lang-en') {
+        el.style.background = currentLang === 'en' ? '#34c759' : 'transparent';
+        el.style.color = currentLang === 'en' ? '#000' : 'rgba(255,255,255,0.4)';
+      }
+    });
+
+    // Update all static text elements
+    const elements = [
+      'header-title', 'more-steps', 'cmd-title', 'type-click-text',
+      'type-type-text', 'type-extract-text', 'type-url-text', 'type-key-text',
+      'type-mark-text', 'key-enter', 'key-tab', 'key-escape', 'key-backspace',
+      'mark-hint-text', 'mark-btn', 'skip-btn', 'save-btn', 'save-now',
+      'cancel-btn', 'done-title', 'done-sub'
+    ];
+
+    elements.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.textContent = i18n[currentLang][id];
+    });
+
+    // Update placeholders
+    updateCmdUIText();
+  }
+
+  function updateCmdUIText() {
+    const input = document.getElementById('cmd-input');
+    const hint = document.getElementById('cmd-hint');
+    if (selType_) {
+      hint.textContent = i18n[currentLang][`hint-${selType_}`] || '';
+      input.placeholder = i18n[currentLang][`placeholder-${selType_}`] || '';
+    }
+  }
 
   let selType_    = 'click';
   let pendingStep = null;
@@ -160,38 +377,68 @@
   let markStart    = null;
   let markRegion   = null;
   let stepOffset   = 0;
+  let currentStepNum = 0;
 
   const HINTS = {
-    click:   'MIRA klickt auf diese Position.',
-    type:    'Was soll MIRA tippen?',
-    extract: 'z.B. "extrahiere Rechnungsnummer, Summe, IBAN"',
-    url:     'Welche URL öffnen? z.B. https://gmail.com',
-    key:     'Welche Taste? Wähle unten aus.',
-    mark:    'Markiere den Bereich den MIRA lesen soll.'
+    click:   'hint-click',
+    type:    'hint-type',
+    extract: 'hint-extract',
+    url:     'hint-url',
+    key:     'hint-key',
+    mark:    'hint-mark'
   };
   const PLACEHOLDERS = {
-    click:   'Optional: z.B. klicke auf Suchfeld',
-    type:    'z.B. https://youtube.com',
-    extract: 'z.B. extrahiere Betrag, Datum, Rechnungsnummer',
-    url:     'z.B. https://gmail.com',
-    key:     '',
-    mark:    'z.B. extrahiere Betrag, Datum, Rechnungsnummer'
+    click:   'placeholder-click',
+    type:    'placeholder-type',
+    extract: 'placeholder-extract',
+    url:     'placeholder-url',
+    key:     'placeholder-key',
+    mark:    'placeholder-mark'
   };
 
   function instrText(stepNum) {
-    if (stepNum === 0) return { s:'START', m:'Gehe auf den Desktop', sub:'Minimiere alle Fenster → <span class="kb y">0</span>' };
+    if (stepNum === 0) return { 
+      s: i18n[currentLang]['instr-start-step'], 
+      m: i18n[currentLang]['instr-start-main'], 
+      sub: i18n[currentLang]['instr-start-sub'] 
+    };
     const round = Math.floor((stepNum - 1) / 8) + 1;
     const local = ((stepNum - 1) % 8) + 1;
-    return { s:`STEP ${stepNum}`, m:`Schritt ${stepNum} aufnehmen`, sub:`Maus auf Element → <span class="kb g">${local}</span>${round > 1 ? ` <span style="color:rgba(255,255,255,0.2)">(Runde ${round})</span>` : ''}` };
+    if (round > 1) {
+      return { 
+        s: i18n[currentLang]['instr-step'].replace('{num}', stepNum), 
+        m: i18n[currentLang]['instr-main'].replace('{num}', stepNum), 
+        sub: i18n[currentLang]['instr-sub-round'].replace('{local}', local).replace('{round}', round)
+      };
+    }
+    return { 
+      s: i18n[currentLang]['instr-step'].replace('{num}', stepNum), 
+      m: i18n[currentLang]['instr-main'].replace('{num}', stepNum), 
+      sub: i18n[currentLang]['instr-sub'].replace('{local}', local)
+    };
   }
 
-  function setInstr(stepNum) {
-    const i = stepNum === 'done'
-      ? { s:'FERTIG', m:'Alle Steps aufgenommen!', sub:'Klicke <b style="color:#34c759">✓ Jetzt speichern</b>' }
-      : instrText(stepNum);
+  function updateInstrStep(stepNum) {
+    currentStepNum = stepNum;
+    const i = instrText(stepNum);
     document.getElementById('instr-step').textContent = i.s;
     document.getElementById('instr-main').textContent = i.m;
     document.getElementById('instr-sub').innerHTML    = i.sub;
+  }
+
+  function updateInstrDone() {
+    currentStepNum = 'done';
+    document.getElementById('instr-step').textContent = i18n[currentLang]['instr-done-step'];
+    document.getElementById('instr-main').textContent = i18n[currentLang]['instr-done-main'];
+    document.getElementById('instr-sub').innerHTML    = i18n[currentLang]['instr-done-sub'];
+  }
+
+  function setInstr(stepNum) {
+    if (stepNum === 'done') {
+      updateInstrDone();
+    } else {
+      updateInstrStep(stepNum);
+    }
   }
 
   function setDot(id, cls) {
@@ -248,8 +495,8 @@
     document.getElementById('bottom-row').style.display   = 'none';
     document.getElementById('btn-weiter').style.display   = 'none';
     document.getElementById('done-block').classList.add('show');
-    document.getElementById('done-title').textContent = `"${name}" gespeichert!`;
-    document.getElementById('done-sub').textContent   = `${steps} Steps · Schließt...`;
+    document.getElementById('done-title').textContent = `"${name}" ${i18n[currentLang]['done-title']}`;
+    document.getElementById('done-sub').textContent   = `${steps} Steps · ${i18n[currentLang]['done-sub']}`;
     setTimeout(() => ipcRenderer.send('recording-cancelled'), 2200);
   });
 
@@ -282,8 +529,7 @@
       const el = document.getElementById(`type-${t}`);
       if (el) el.className = `type-btn${t === type ? ' t-' + t : ''}`;
     });
-    document.getElementById('cmd-hint').textContent          = HINTS[type] || '';
-    document.getElementById('cmd-input').placeholder         = PLACEHOLDERS[type] || '';
+    updateCmdUIText();
     document.getElementById('key-grid').style.display        = type === 'key'  ? 'grid'  : 'none';
     document.getElementById('cmd-input').style.display       = type === 'key'  ? 'none'  : 'block';
     document.getElementById('mark-hint').style.display       = type === 'mark' ? 'block' : 'none';
@@ -303,7 +549,7 @@
       cmd  = selectedKey;
     } else if (selType_ === 'mark') {
       type = 'extract';
-      cmd  = document.getElementById('cmd-input').value.trim() || 'extrahiere alle sichtbaren Daten';
+      cmd  = document.getElementById('cmd-input').value.trim() || (currentLang === 'de' ? 'extrahiere alle sichtbaren Daten' : 'extract all visible data');
       ipcRenderer.send('cmd-panel-result', {
         stepNum: pendingStep, coordinate: pendingCoord,
         type, command: cmd, mark_region: markRegion || null
@@ -360,7 +606,7 @@
     const hint = document.createElement('div');
     hint.id = 'mark-live-hint';
     hint.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.85);color:#ff375f;padding:8px 18px;border-radius:20px;font-size:13px;font-weight:700;z-index:99999;pointer-events:none;font-family:DM Sans,sans-serif;';
-    hint.textContent = 'Ziehe Rechteck · Mausrad = Scrollen während Ziehen · ESC = Abbrechen';
+    hint.textContent = i18n[currentLang]['mark-live-hint'];
     document.body.appendChild(hint);
 
     ipcRenderer.send('overlay-release-mouse');
@@ -424,7 +670,9 @@
       markRegion = { x, y: markStart.y, width: w, height: h, scroll_offset: scrollOffset };
       scrollOffset = 0;
       stopMarking();
-      document.getElementById('mark-hint').textContent = `✅ ${Math.round(w)}×${Math.round(h)}px — Befehl eingeben & Speichern!`;
+      document.getElementById('mark-hint').textContent = i18n[currentLang]['mark-success']
+        .replace('{w}', Math.round(w))
+        .replace('{h}', Math.round(h));
     };
   }
 
@@ -480,6 +728,9 @@ document.addEventListener('mouseup', () => {
   dragging = false;
   header.style.cursor = 'grab';
 });
+
+// Initialize language
+updateUILanguage();
 
 </script>
 </body>

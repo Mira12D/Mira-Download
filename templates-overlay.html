@@ -58,6 +58,32 @@
     .header h1 { font-size: 15px; font-weight: 700; }
     .header-sub { font-size: 11px; color: var(--text3); margin-top: 1px; }
 
+    /* Language Toggle */
+    .lang-toggle {
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      background: var(--surface);
+      border: 1px solid var(--border2);
+      border-radius: 30px;
+      padding: 4px 8px;
+      cursor: pointer;
+      -webkit-app-region: no-drag;
+    }
+    .lang-option {
+      padding: 4px 12px;
+      border-radius: 20px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: all 0.15s;
+      color: var(--text2);
+    }
+    .lang-option.active {
+      background: var(--blue);
+      color: #fff;
+    }
+
     /* ── Filter bar ── */
     .filter-bar {
       padding: 16px 24px 0;
@@ -226,20 +252,25 @@
   <div class="header">
     <div class="logo-mark">M</div>
     <div>
-      <div class="header h1" style="font-size:15px;font-weight:700">🌐 Template-Bibliothek</div>
-      <div class="header-sub">Geteilte Routen — funktionieren auf jedem Gerät</div>
+      <div class="header h1" style="font-size:15px;font-weight:700" id="header-title">🌐 Template-Bibliothek</div>
+      <div class="header-sub" id="header-sub">Geteilte Routen — funktionieren auf jedem Gerät</div>
+    </div>
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de" style="background:#0a84ff;color:#fff">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
     </div>
   </div>
 
   <!-- App filter -->
   <div class="filter-bar" id="filterBar">
-    <button class="filter-btn active" data-app="" onclick="applyFilter(this)">Alle</button>
-    <button class="filter-btn" data-app="DATEV" onclick="applyFilter(this)">DATEV</button>
-    <button class="filter-btn" data-app="Excel" onclick="applyFilter(this)">Excel</button>
-    <button class="filter-btn" data-app="Outlook" onclick="applyFilter(this)">Outlook</button>
-    <button class="filter-btn" data-app="Safari" onclick="applyFilter(this)">Safari</button>
-    <button class="filter-btn" data-app="Word" onclick="applyFilter(this)">Word</button>
-    <button class="filter-btn" data-app="Sonstige" onclick="applyFilter(this)">Sonstige</button>
+    <button class="filter-btn active" data-app="" onclick="applyFilter(this)" id="filter-all">Alle</button>
+    <button class="filter-btn" data-app="DATEV" onclick="applyFilter(this)" id="filter-datev">DATEV</button>
+    <button class="filter-btn" data-app="Excel" onclick="applyFilter(this)" id="filter-excel">Excel</button>
+    <button class="filter-btn" data-app="Outlook" onclick="applyFilter(this)" id="filter-outlook">Outlook</button>
+    <button class="filter-btn" data-app="Safari" onclick="applyFilter(this)" id="filter-safari">Safari</button>
+    <button class="filter-btn" data-app="Word" onclick="applyFilter(this)" id="filter-word">Word</button>
+    <button class="filter-btn" data-app="Sonstige" onclick="applyFilter(this)" id="filter-other">Sonstige</button>
   </div>
 
   <div class="divider"></div>
@@ -248,32 +279,153 @@
   <div class="list-wrap" id="listWrap">
     <div class="empty-state">
       <div class="empty-icon">⏳</div>
-      <div>Lade Templates…</div>
+      <div id="loading-text">Lade Templates…</div>
     </div>
   </div>
 
   <!-- Publish bar -->
   <div class="publish-bar">
     <select id="publishRoute">
-      <option value="">Route auswählen…</option>
+      <option value="" id="select-route">Route auswählen…</option>
     </select>
     <select id="publishApp">
-      <option value="">App (optional)</option>
-      <option value="DATEV">DATEV</option>
-      <option value="Excel">Excel</option>
-      <option value="Outlook">Outlook</option>
-      <option value="Safari">Safari</option>
-      <option value="Word">Word</option>
-      <option value="Sonstige">Sonstige</option>
+      <option value="" id="select-app">App (optional)</option>
+      <option value="DATEV" id="app-datev">DATEV</option>
+      <option value="Excel" id="app-excel">Excel</option>
+      <option value="Outlook" id="app-outlook">Outlook</option>
+      <option value="Safari" id="app-safari">Safari</option>
+      <option value="Word" id="app-word">Word</option>
+      <option value="Sonstige" id="app-other">Sonstige</option>
     </select>
-    <input id="publishDesc" type="text" placeholder="Beschreibung (optional)">
-    <button class="btn-publish" onclick="publishRoute()">🌐 Teilen</button>
+    <input id="publishDesc" type="text" placeholder="" id="desc-placeholder">
+    <button class="btn-publish" onclick="publishRoute()" id="publish-btn">🌐 Teilen</button>
   </div>
 
   <div class="toast" id="toast"></div>
 
   <script>
     const { ipcRenderer } = require('electron');
+
+    // ====================================
+    // INTERNATIONALIZATION (DE/EN)
+    // ====================================
+
+    const i18n = {
+      de: {
+        'header-title': '🌐 Template-Bibliothek',
+        'header-sub': 'Geteilte Routen — funktionieren auf jedem Gerät',
+        'filter-all': 'Alle',
+        'filter-datev': 'DATEV',
+        'filter-excel': 'Excel',
+        'filter-outlook': 'Outlook',
+        'filter-safari': 'Safari',
+        'filter-word': 'Word',
+        'filter-other': 'Sonstige',
+        'loading-text': 'Lade Templates…',
+        'select-route': 'Route auswählen…',
+        'select-app': 'App (optional)',
+        'app-datev': 'DATEV',
+        'app-excel': 'Excel',
+        'app-outlook': 'Outlook',
+        'app-safari': 'Safari',
+        'app-word': 'Word',
+        'app-other': 'Sonstige',
+        'desc-placeholder': 'Beschreibung (optional)',
+        'publish-btn': '🌐 Teilen',
+        'empty-templates': 'Noch keine Templates — teile die erste Route!',
+        'toast-queued': 'Template in Warteschlange eingereiht',
+        'toast-error': 'Fehler',
+        'toast-published': 'Template geteilt ({steps} Steps)',
+        'toast-select-route': 'Bitte Route auswählen',
+        'btn-run': '▶ Starten',
+        'btn-run-dots': '…',
+        'btn-publish-dots': '…',
+        'meta-verified': '✓ Verifiziert',
+        'meta-executed': '× ausgeführt · {steps} Steps',
+      },
+      en: {
+        'header-title': '🌐 Template Library',
+        'header-sub': 'Shared routes — work on every device',
+        'filter-all': 'All',
+        'filter-datev': 'DATEV',
+        'filter-excel': 'Excel',
+        'filter-outlook': 'Outlook',
+        'filter-safari': 'Safari',
+        'filter-word': 'Word',
+        'filter-other': 'Other',
+        'loading-text': 'Loading templates…',
+        'select-route': 'Select route…',
+        'select-app': 'App (optional)',
+        'app-datev': 'DATEV',
+        'app-excel': 'Excel',
+        'app-outlook': 'Outlook',
+        'app-safari': 'Safari',
+        'app-word': 'Word',
+        'app-other': 'Other',
+        'desc-placeholder': 'Description (optional)',
+        'publish-btn': '🌐 Share',
+        'empty-templates': 'No templates yet — share your first route!',
+        'toast-queued': 'Template queued successfully',
+        'toast-error': 'Error',
+        'toast-published': 'Template shared ({steps} steps)',
+        'toast-select-route': 'Please select a route',
+        'btn-run': '▶ Start',
+        'btn-run-dots': '…',
+        'btn-publish-dots': '…',
+        'meta-verified': '✓ Verified',
+        'meta-executed': '× executed · {steps} steps',
+      }
+    };
+
+    let currentLang = localStorage.getItem('mira_language') || 'de';
+
+    function toggleLanguage() {
+      currentLang = currentLang === 'de' ? 'en' : 'de';
+      localStorage.setItem('mira_language', currentLang);
+      updateUILanguage();
+    }
+
+    function updateUILanguage() {
+      // Update toggle buttons
+      document.querySelectorAll('.lang-option').forEach(el => {
+        if (el.id === 'lang-de') {
+          el.style.background = currentLang === 'de' ? '#0a84ff' : 'transparent';
+          el.style.color = currentLang === 'de' ? '#fff' : 'var(--text2)';
+        }
+        if (el.id === 'lang-en') {
+          el.style.background = currentLang === 'en' ? '#0a84ff' : 'transparent';
+          el.style.color = currentLang === 'en' ? '#fff' : 'var(--text2)';
+        }
+      });
+
+      // Update all static text elements
+      const elements = [
+        'header-title', 'header-sub', 'filter-all', 'filter-datev', 'filter-excel',
+        'filter-outlook', 'filter-safari', 'filter-word', 'filter-other',
+        'loading-text', 'select-route', 'select-app', 'app-datev', 'app-excel',
+        'app-outlook', 'app-safari', 'app-word', 'app-other', 'desc-placeholder',
+        'publish-btn'
+      ];
+
+      elements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          if (el.tagName === 'INPUT') {
+            el.placeholder = i18n[currentLang][id];
+          } else {
+            el.textContent = i18n[currentLang][id];
+          }
+        }
+      });
+
+      // Re-render list if templates exist
+      if (allTemplates.length > 0) {
+        const filtered = currentAppFilter
+          ? allTemplates.filter(t => t.app_name === currentAppFilter)
+          : allTemplates;
+        renderList(filtered);
+      }
+    }
 
     let allTemplates    = [];
     let currentAppFilter = '';
@@ -282,12 +434,16 @@
     // ── Init ──────────────────────────────────────────────────────────────
 
     async function init() {
+      updateUILanguage();
       await Promise.all([loadTemplates(), loadDeviceRoutes()]);
     }
 
     async function loadTemplates() {
       allTemplates = await ipcRenderer.invoke('templates-list', null);
-      renderList(allTemplates);
+      const filtered = currentAppFilter
+        ? allTemplates.filter(t => t.app_name === currentAppFilter)
+        : allTemplates;
+      renderList(filtered);
     }
 
     async function loadDeviceRoutes() {
@@ -295,7 +451,7 @@
         const routes = await ipcRenderer.invoke('routes-list');
         deviceRoutes = routes || [];
         const sel = document.getElementById('publishRoute');
-        sel.innerHTML = '<option value="">Route auswählen…</option>';
+        sel.innerHTML = `<option value="">${i18n[currentLang]['select-route']}</option>`;
         for (const r of deviceRoutes) {
           const opt = document.createElement('option');
           opt.value = r.id;
@@ -333,11 +489,14 @@
         wrap.innerHTML = `
           <div class="empty-state">
             <div class="empty-icon">🌐</div>
-            <div>Noch keine Templates — teile die erste Route!</div>
+            <div>${i18n[currentLang]['empty-templates']}</div>
           </div>`;
         return;
       }
-      wrap.innerHTML = templates.map(t => `
+      wrap.innerHTML = templates.map(t => {
+        const stepsText = i18n[currentLang]['meta-executed']
+          .replace('{steps}', t.steps?.length || 0);
+        return `
         <div class="template-card">
           <div class="card-icon">${appIcon(t.app_name)}</div>
           <div class="card-body">
@@ -345,26 +504,26 @@
             <div class="card-desc">${esc(t.description || t.app_name || '—')}</div>
             <div class="card-meta">
               ${t.app_name ? `<span class="meta-tag app">${esc(t.app_name)}</span>` : ''}
-              ${t.verified  ? `<span class="meta-tag verified">✓ Verifiziert</span>` : ''}
-              <span class="meta-count">${t.use_count}× ausgeführt · ${t.steps?.length || 0} Steps</span>
+              ${t.verified  ? `<span class="meta-tag verified">${i18n[currentLang]['meta-verified']}</span>` : ''}
+              <span class="meta-count">${t.use_count}${stepsText}</span>
             </div>
           </div>
           <div class="card-actions">
-            <button class="btn-run" onclick="runTemplate('${t.id}', this)">▶ Starten</button>
+            <button class="btn-run" onclick="runTemplate('${t.id}', this)">${i18n[currentLang]['btn-run']}</button>
           </div>
         </div>
-      `).join('');
+      `}).join('');
     }
 
     // ── Run ───────────────────────────────────────────────────────────────
 
     async function runTemplate(templateId, btn) {
       btn.disabled  = true;
-      btn.textContent = '…';
+      btn.textContent = i18n[currentLang]['btn-run-dots'];
       try {
         const res = await ipcRenderer.invoke('run-template', templateId);
         if (res?.success) {
-          toast('Template in Warteschlange eingereiht', 'ok');
+          toast(i18n[currentLang]['toast-queued'], 'ok');
           // Refresh use_count in list
           await loadTemplates();
           if (currentAppFilter) {
@@ -372,13 +531,13 @@
             renderList(filtered);
           }
         } else {
-          toast(res?.error || 'Fehler', 'err');
+          toast(`${i18n[currentLang]['toast-error']}: ${res?.error || ''}`, 'err');
         }
       } catch(e) {
-        toast(e.message, 'err');
+        toast(`${i18n[currentLang]['toast-error']}: ${e.message}`, 'err');
       }
       btn.disabled    = false;
-      btn.textContent = '▶ Starten';
+      btn.textContent = i18n[currentLang]['btn-run'];
     }
 
     // ── Publish ───────────────────────────────────────────────────────────
@@ -388,27 +547,32 @@
       const appName = document.getElementById('publishApp').value || null;
       const desc    = document.getElementById('publishDesc').value.trim() || null;
 
-      if (!routeId) { toast('Bitte Route auswählen', 'err'); return; }
+      if (!routeId) { 
+        toast(i18n[currentLang]['toast-select-route'], 'err'); 
+        return; 
+      }
 
       const btn = document.querySelector('.btn-publish');
-      btn.disabled = true; btn.textContent = '…';
+      btn.disabled = true; 
+      btn.textContent = i18n[currentLang]['btn-publish-dots'];
 
       try {
         const res = await ipcRenderer.invoke('template-publish', { routeId, appName, description: desc });
         if (res?.success) {
-          toast(`Template geteilt (${res.steps_count} Steps)`, 'ok');
+          toast(i18n[currentLang]['toast-published'].replace('{steps}', res.steps_count), 'ok');
           document.getElementById('publishRoute').value = '';
           document.getElementById('publishApp').value   = '';
           document.getElementById('publishDesc').value  = '';
           await loadTemplates();
           renderList(allTemplates);
         } else {
-          toast(res?.error || 'Fehler', 'err');
+          toast(`${i18n[currentLang]['toast-error']}: ${res?.error || ''}`, 'err');
         }
       } catch(e) {
-        toast(e.message, 'err');
+        toast(`${i18n[currentLang]['toast-error']}: ${e.message}`, 'err');
       }
-      btn.disabled = false; btn.textContent = '🌐 Teilen';
+      btn.disabled = false; 
+      btn.textContent = i18n[currentLang]['publish-btn'];
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────

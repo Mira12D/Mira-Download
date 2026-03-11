@@ -43,8 +43,35 @@
   .header-icon { font-size: 20px; }
   .header-title { font-size: 15px; font-weight: 700; letter-spacing: -.3px; }
   .header-sub   { font-size: 11px; color: var(--text2); }
-  .header-close {
+  .header-right {
     margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    -webkit-app-region: no-drag;
+  }
+  .lang-toggle {
+    background: var(--surface2);
+    border: 1px solid var(--border2);
+    border-radius: 20px;
+    padding: 2px 6px;
+    display: flex;
+    gap: 4px;
+    cursor: pointer;
+  }
+  .lang-option {
+    padding: 3px 8px;
+    border-radius: 16px;
+    font-size: 10px;
+    font-weight: 600;
+    transition: all 0.15s;
+    color: var(--text2);
+  }
+  .lang-option.active {
+    background: var(--accent);
+    color: white;
+  }
+  .header-close {
     background: none;
     border: none;
     color: var(--text2);
@@ -259,18 +286,25 @@
 <div class="header">
   <div class="header-icon">🧠</div>
   <div>
-    <div class="header-title">MIRA Wissensbase</div>
-    <div class="header-sub">MIRAs konfigurierbares Gehirn</div>
+    <div class="header-title" id="header-title">MIRA Wissensbase</div>
+    <div class="header-sub" id="header-sub">MIRAs konfigurierbares Gehirn</div>
   </div>
-  <button class="header-close" onclick="closeWindow()">✕</button>
+  <div class="header-right">
+    <!-- Language Toggle -->
+    <div class="lang-toggle" onclick="toggleLanguage()">
+      <span class="lang-option" id="lang-de" style="background:#6c63ff;color:white">DE</span>
+      <span class="lang-option" id="lang-en">EN</span>
+    </div>
+    <button class="header-close" onclick="closeWindow()">✕</button>
+  </div>
 </div>
 
 <!-- ── Tabs ── -->
 <div class="tabs">
-  <button class="tab active" onclick="switchTab('kontext')">⚙ Kontext</button>
-  <button class="tab"        onclick="switchTab('trigger')">⚡ Trigger</button>
-  <button class="tab"        onclick="switchTab('kontakte')">👥 Kontakte</button>
-  <button class="tab"        onclick="switchTab('grenzen')">🛡 Grenzen</button>
+  <button class="tab active" onclick="switchTab('kontext')" id="tab-context">⚙ Kontext</button>
+  <button class="tab"        onclick="switchTab('trigger')" id="tab-trigger">⚡ Trigger</button>
+  <button class="tab"        onclick="switchTab('kontakte')" id="tab-contacts">👥 Kontakte</button>
+  <button class="tab"        onclick="switchTab('grenzen')" id="tab-limits">🛡 Grenzen</button>
 </div>
 
 <!-- ── Content ── -->
@@ -278,19 +312,19 @@
 
   <!-- KONTEXT -->
   <div id="pane-kontext" class="pane active">
-    <div class="section-title">Unternehmen & Rolle</div>
+    <div class="section-title" id="context-title">Unternehmen & Rolle</div>
     <div class="form-grid">
       <div class="form-row">
-        <label>Unternehmensname</label>
+        <label id="label-company">Unternehmensname</label>
         <input id="ctx-company" type="text" placeholder="z. B. Müller GmbH">
       </div>
       <div class="form-row">
-        <label>MIRAs Rolle</label>
+        <label id="label-role">MIRAs Rolle</label>
         <input id="ctx-role" type="text" placeholder="z. B. Buchhaltungsassistentin">
       </div>
     </div>
     <div class="form-row">
-      <label>Sprache</label>
+      <label id="label-language">Sprache</label>
       <select id="ctx-lang">
         <option value="de">Deutsch</option>
         <option value="en">English</option>
@@ -299,38 +333,38 @@
       </select>
     </div>
     <div class="form-row">
-      <label>Zusätzliche Hinweise für MIRA</label>
+      <label id="label-notes">Zusätzliche Hinweise für MIRA</label>
       <textarea id="ctx-notes" rows="4" placeholder="z. B. Rechnungen immer in EUR. Lieferanten per E-Mail bestätigen. Keine Zahlungen über 5.000 € ohne Rückfrage."></textarea>
     </div>
   </div>
 
   <!-- TRIGGER -->
   <div id="pane-trigger" class="pane">
-    <div class="section-title">Events → Routen</div>
+    <div class="section-title" id="trigger-title">Events → Routen</div>
     <div id="trigger-list"></div>
-    <button class="btn-add" onclick="openTriggerModal()">+ Trigger hinzufügen</button>
+    <button class="btn-add" onclick="openTriggerModal()" id="trigger-add">+ Trigger hinzufügen</button>
   </div>
 
   <!-- KONTAKTE -->
   <div id="pane-kontakte" class="pane">
-    <div class="section-title">Personen & Unternehmen</div>
+    <div class="section-title" id="contacts-title">Personen & Unternehmen</div>
     <div id="contact-list"></div>
-    <button class="btn-add" onclick="openContactModal()">+ Kontakt hinzufügen</button>
+    <button class="btn-add" onclick="openContactModal()" id="contact-add">+ Kontakt hinzufügen</button>
   </div>
 
   <!-- GRENZEN -->
   <div id="pane-grenzen" class="pane">
-    <div class="section-title">Autonomiegrenzen</div>
+    <div class="section-title" id="limits-title">Autonomiegrenzen</div>
     <div id="limit-list"></div>
-    <button class="btn-add" onclick="openLimitModal()">+ Grenze hinzufügen</button>
+    <button class="btn-add" onclick="openLimitModal()" id="limit-add">+ Grenze hinzufügen</button>
   </div>
 
 </div>
 
 <!-- ── Footer ── -->
 <div class="footer">
-  <button class="btn btn-secondary" onclick="loadKB()">↺ Neu laden</button>
-  <button class="btn btn-primary"   onclick="saveKB()">💾 Speichern</button>
+  <button class="btn btn-secondary" onclick="loadKB()" id="btn-reload">↺ Neu laden</button>
+  <button class="btn btn-primary"   onclick="saveKB()" id="btn-save">💾 Speichern</button>
   <span id="status-msg" class="status"></span>
 </div>
 
@@ -344,46 +378,46 @@
     <div class="modal-title" id="trigger-modal-title">Trigger hinzufügen</div>
     <input type="hidden" id="trigger-edit-idx" value="">
     <div class="form-row">
-      <label>Event-Typ</label>
+      <label id="trigger-event-label">Event-Typ</label>
       <select id="t-event">
-        <option value="new_mail">Neue E-Mail</option>
-        <option value="new_invoice">Neue Rechnung</option>
-        <option value="new_order">Neue Bestellung</option>
-        <option value="schedule">Zeitplan (täglich/wöchentlich)</option>
-        <option value="file_created">Neue Datei</option>
-        <option value="custom">Benutzerdefiniert</option>
+        <option value="new_mail" id="event-new-mail">Neue E-Mail</option>
+        <option value="new_invoice" id="event-new-invoice">Neue Rechnung</option>
+        <option value="new_order" id="event-new-order">Neue Bestellung</option>
+        <option value="schedule" id="event-schedule">Zeitplan (täglich/wöchentlich)</option>
+        <option value="file_created" id="event-file">Neue Datei</option>
+        <option value="custom" id="event-custom">Benutzerdefiniert</option>
       </select>
     </div>
     <div class="form-row">
-      <label>Bedingung (Komma-getrennte Stichwörter, optional)</label>
+      <label id="trigger-condition-label">Bedingung (Komma-getrennte Stichwörter, optional)</label>
       <input id="t-condition" type="text" placeholder="z. B. rechnung, invoice, zahlung">
     </div>
     <div class="form-grid">
       <div class="form-row">
-        <label>Route-ID</label>
+        <label id="trigger-route-id-label">Route-ID</label>
         <input id="t-route-id" type="text" placeholder="route_abc123">
       </div>
       <div class="form-row">
-        <label>Route-Name (Anzeige)</label>
+        <label id="trigger-route-name-label">Route-Name (Anzeige)</label>
         <input id="t-route-name" type="text" placeholder="z. B. Rechnung buchen">
       </div>
     </div>
     <div class="form-grid">
       <div class="form-row">
-        <label>Priorität (1 = höchste)</label>
+        <label id="trigger-priority-label">Priorität (1 = höchste)</label>
         <input id="t-priority" type="number" min="1" max="99" value="10">
       </div>
       <div class="form-row">
-        <label>Ausführung</label>
+        <label id="trigger-auto-label">Ausführung</label>
         <select id="t-auto">
-          <option value="true">Autonom</option>
-          <option value="false">Erst fragen</option>
+          <option value="true" id="auto-autonomous">Autonom</option>
+          <option value="false" id="auto-ask">Erst fragen</option>
         </select>
       </div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModals()">Abbrechen</button>
-      <button class="btn btn-primary"   onclick="saveTrigger()">Speichern</button>
+      <button class="btn btn-secondary" onclick="closeModals()" id="modal-cancel">Abbrechen</button>
+      <button class="btn btn-primary"   onclick="saveTrigger()" id="modal-save">Speichern</button>
     </div>
   </div>
 </div>
@@ -395,37 +429,37 @@
     <input type="hidden" id="contact-edit-idx" value="">
     <div class="form-grid">
       <div class="form-row">
-        <label>Name</label>
+        <label id="contact-name-label">Name</label>
         <input id="c-name" type="text" placeholder="Max Mustermann">
       </div>
       <div class="form-row">
-        <label>Rolle</label>
+        <label id="contact-role-label">Rolle</label>
         <select id="c-role">
-          <option value="chef">Chef / Vorgesetzter</option>
-          <option value="lieferant">Lieferant</option>
-          <option value="kunde">Kunde</option>
-          <option value="kollege">Kollege</option>
-          <option value="sonstige">Sonstige</option>
+          <option value="chef" id="role-boss">Chef / Vorgesetzter</option>
+          <option value="lieferant" id="role-supplier">Lieferant</option>
+          <option value="kunde" id="role-customer">Kunde</option>
+          <option value="kollege" id="role-colleague">Kollege</option>
+          <option value="sonstige" id="role-other">Sonstige</option>
         </select>
       </div>
     </div>
     <div class="form-grid">
       <div class="form-row">
-        <label>E-Mail</label>
+        <label id="contact-email-label">E-Mail</label>
         <input id="c-email" type="email" placeholder="max@firma.de">
       </div>
       <div class="form-row">
-        <label>Telefon (optional)</label>
+        <label id="contact-phone-label">Telefon (optional)</label>
         <input id="c-phone" type="text" placeholder="+49 ...">
       </div>
     </div>
     <div class="form-row">
-      <label>Notizen</label>
+      <label id="contact-notes-label">Notizen</label>
       <textarea id="c-notes" rows="2" placeholder="z. B. Zahlung immer bis Ende des Monats"></textarea>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModals()">Abbrechen</button>
-      <button class="btn btn-primary"   onclick="saveContact()">Speichern</button>
+      <button class="btn btn-secondary" onclick="closeModals()" id="modal-cancel2">Abbrechen</button>
+      <button class="btn btn-primary"   onclick="saveContact()" id="modal-save2">Speichern</button>
     </div>
   </div>
 </div>
@@ -436,33 +470,33 @@
     <div class="modal-title" id="limit-modal-title">Grenze hinzufügen</div>
     <input type="hidden" id="limit-edit-idx" value="">
     <div class="form-row">
-      <label>Aktion</label>
+      <label id="limit-action-label">Aktion</label>
       <input id="l-action" type="text" placeholder="z. B. send_mail, approve_invoice, delete_file">
     </div>
     <div class="form-grid">
       <div class="form-row">
-        <label>Ausführung</label>
+        <label id="limit-auto-label">Ausführung</label>
         <select id="l-auto">
-          <option value="true">Autonom</option>
-          <option value="false">Eskalieren</option>
+          <option value="true" id="limit-autonomous">Autonom</option>
+          <option value="false" id="limit-escalate">Eskalieren</option>
         </select>
       </div>
       <div class="form-row">
-        <label>Grenzwert (optional, €)</label>
+        <label id="limit-threshold-label">Grenzwert (optional, €)</label>
         <input id="l-threshold" type="number" placeholder="z. B. 500">
       </div>
     </div>
     <div class="form-row">
-      <label>Eskalieren an (E-Mail oder Name)</label>
+      <label id="limit-escalate-label">Eskalieren an (E-Mail oder Name)</label>
       <input id="l-escalate" type="text" placeholder="chef@firma.de">
     </div>
     <div class="form-row">
-      <label>Notizen</label>
+      <label id="limit-notes-label">Notizen</label>
       <textarea id="l-notes" rows="2" placeholder="z. B. Rechnungen über 500 € immer bestätigen lassen"></textarea>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-secondary" onclick="closeModals()">Abbrechen</button>
-      <button class="btn btn-primary"   onclick="saveLimit()">Speichern</button>
+      <button class="btn btn-secondary" onclick="closeModals()" id="modal-cancel3">Abbrechen</button>
+      <button class="btn btn-primary"   onclick="saveLimit()" id="modal-save3">Speichern</button>
     </div>
   </div>
 </div>
@@ -470,6 +504,333 @@
 <!-- ═══════════════════════════════════════════════════════ -->
 <script>
 const { ipcRenderer } = require('electron');
+
+// ====================================
+// INTERNATIONALIZATION (DE/EN)
+// ====================================
+
+const i18n = {
+  de: {
+    // Header
+    'header-title': 'MIRA Wissensbase',
+    'header-sub': 'MIRAs konfigurierbares Gehirn',
+    
+    // Tabs
+    'tab-context': '⚙ Kontext',
+    'tab-trigger': '⚡ Trigger',
+    'tab-contacts': '👥 Kontakte',
+    'tab-limits': '🛡 Grenzen',
+    
+    // Context
+    'context-title': 'Unternehmen & Rolle',
+    'label-company': 'Unternehmensname',
+    'company-placeholder': 'z. B. Müller GmbH',
+    'label-role': 'MIRAs Rolle',
+    'role-placeholder': 'z. B. Buchhaltungsassistentin',
+    'label-language': 'Sprache',
+    'label-notes': 'Zusätzliche Hinweise für MIRA',
+    'notes-placeholder': 'z. B. Rechnungen immer in EUR. Lieferanten per E-Mail bestätigen. Keine Zahlungen über 5.000 € ohne Rückfrage.',
+    
+    // Triggers
+    'trigger-title': 'Events → Routen',
+    'trigger-add': '+ Trigger hinzufügen',
+    'trigger-modal-title': 'Trigger hinzufügen',
+    'trigger-event-label': 'Event-Typ',
+    'event-new-mail': 'Neue E-Mail',
+    'event-new-invoice': 'Neue Rechnung',
+    'event-new-order': 'Neue Bestellung',
+    'event-schedule': 'Zeitplan (täglich/wöchentlich)',
+    'event-file': 'Neue Datei',
+    'event-custom': 'Benutzerdefiniert',
+    'trigger-condition-label': 'Bedingung (Komma-getrennte Stichwörter, optional)',
+    'condition-placeholder': 'z. B. rechnung, invoice, zahlung',
+    'trigger-route-id-label': 'Route-ID',
+    'route-id-placeholder': 'route_abc123',
+    'trigger-route-name-label': 'Route-Name (Anzeige)',
+    'route-name-placeholder': 'z. B. Rechnung buchen',
+    'trigger-priority-label': 'Priorität (1 = höchste)',
+    'trigger-auto-label': 'Ausführung',
+    'auto-autonomous': 'Autonom',
+    'auto-ask': 'Erst fragen',
+    
+    // Contacts
+    'contacts-title': 'Personen & Unternehmen',
+    'contact-add': '+ Kontakt hinzufügen',
+    'contact-modal-title': 'Kontakt hinzufügen',
+    'contact-name-label': 'Name',
+    'name-placeholder': 'Max Mustermann',
+    'contact-role-label': 'Rolle',
+    'role-boss': 'Chef / Vorgesetzter',
+    'role-supplier': 'Lieferant',
+    'role-customer': 'Kunde',
+    'role-colleague': 'Kollege',
+    'role-other': 'Sonstige',
+    'contact-email-label': 'E-Mail',
+    'email-placeholder': 'max@firma.de',
+    'contact-phone-label': 'Telefon (optional)',
+    'phone-placeholder': '+49 ...',
+    'contact-notes-label': 'Notizen',
+    'notes-contact-placeholder': 'z. B. Zahlung immer bis Ende des Monats',
+    
+    // Limits
+    'limits-title': 'Autonomiegrenzen',
+    'limit-add': '+ Grenze hinzufügen',
+    'limit-modal-title': 'Grenze hinzufügen',
+    'limit-action-label': 'Aktion',
+    'action-placeholder': 'z. B. send_mail, approve_invoice, delete_file',
+    'limit-auto-label': 'Ausführung',
+    'limit-autonomous': 'Autonom',
+    'limit-escalate': 'Eskalieren',
+    'limit-threshold-label': 'Grenzwert (optional, €)',
+    'threshold-placeholder': 'z. B. 500',
+    'limit-escalate-label': 'Eskalieren an (E-Mail oder Name)',
+    'escalate-placeholder': 'chef@firma.de',
+    'limit-notes-label': 'Notizen',
+    'notes-limit-placeholder': 'z. B. Rechnungen über 500 € immer bestätigen lassen',
+    
+    // Footer
+    'btn-reload': '↺ Neu laden',
+    'btn-save': '💾 Speichern',
+    
+    // Modal
+    'modal-cancel': 'Abbrechen',
+    'modal-save': 'Speichern',
+    
+    // Status
+    'status-loading': 'Lädt…',
+    'status-loaded': 'Geladen',
+    'status-saving': 'Speichert…',
+    'status-saved': 'Gespeichert ✓',
+    'status-error': 'Fehler: ',
+    'status-connection-error': 'Verbindungsfehler',
+    
+    // Empty states
+    'empty-triggers': 'Keine Trigger konfiguriert.<br>Trigger verbinden Events mit MIRA-Routen.',
+    'empty-contacts': 'Keine Kontakte gespeichert.<br>MIRA nutzt Kontakte beim Klassifizieren von Mails.',
+    'empty-limits': 'Keine Grenzen definiert.<br>Grenzen bestimmen, wann MIRA eskaliert statt selbst handelt.',
+    
+    // Badges
+    'badge-autonomous': 'autonom',
+    'badge-ask': 'fragen',
+    'badge-escalate': 'eskalieren',
+    'badge-boss': 'Chef',
+    'badge-supplier': 'Lieferant',
+    'badge-customer': 'Kunde',
+    'badge-colleague': 'Kollege',
+    'badge-other': 'Sonstige',
+    
+    // Event labels
+    'event-new_mail': 'Neue E-Mail',
+    'event-new_invoice': 'Neue Rechnung',
+    'event-new_order': 'Neue Bestellung',
+    'event-schedule': 'Zeitplan',
+    'event-file_created': 'Neue Datei',
+    'event-custom': 'Benutzerdefiniert',
+    
+    // Alerts
+    'alert-route-id': 'Route-ID ist Pflicht',
+    'alert-name': 'Name ist Pflicht',
+    'alert-action': 'Aktion ist Pflicht',
+  },
+  en: {
+    // Header
+    'header-title': 'MIRA Knowledge Base',
+    'header-sub': "MIRA's configurable brain",
+    
+    // Tabs
+    'tab-context': '⚙ Context',
+    'tab-trigger': '⚡ Triggers',
+    'tab-contacts': '👥 Contacts',
+    'tab-limits': '🛡 Limits',
+    
+    // Context
+    'context-title': 'Company & Role',
+    'label-company': 'Company name',
+    'company-placeholder': 'e.g. Müller GmbH',
+    'label-role': "MIRA's role",
+    'role-placeholder': 'e.g. Accounting Assistant',
+    'label-language': 'Language',
+    'label-notes': 'Additional instructions for MIRA',
+    'notes-placeholder': 'e.g. Invoices always in EUR. Confirm suppliers via email. No payments over €5,000 without approval.',
+    
+    // Triggers
+    'trigger-title': 'Events → Routes',
+    'trigger-add': '+ Add trigger',
+    'trigger-modal-title': 'Add trigger',
+    'trigger-event-label': 'Event type',
+    'event-new-mail': 'New email',
+    'event-new-invoice': 'New invoice',
+    'event-new-order': 'New order',
+    'event-schedule': 'Schedule (daily/weekly)',
+    'event-file': 'New file',
+    'event-custom': 'Custom',
+    'trigger-condition-label': 'Condition (comma-separated keywords, optional)',
+    'condition-placeholder': 'e.g. invoice, payment',
+    'trigger-route-id-label': 'Route ID',
+    'route-id-placeholder': 'route_abc123',
+    'trigger-route-name-label': 'Route name (display)',
+    'route-name-placeholder': 'e.g. Book invoice',
+    'trigger-priority-label': 'Priority (1 = highest)',
+    'trigger-auto-label': 'Execution',
+    'auto-autonomous': 'Autonomous',
+    'auto-ask': 'Ask first',
+    
+    // Contacts
+    'contacts-title': 'People & Companies',
+    'contact-add': '+ Add contact',
+    'contact-modal-title': 'Add contact',
+    'contact-name-label': 'Name',
+    'name-placeholder': 'John Doe',
+    'contact-role-label': 'Role',
+    'role-boss': 'Boss / Supervisor',
+    'role-supplier': 'Supplier',
+    'role-customer': 'Customer',
+    'role-colleague': 'Colleague',
+    'role-other': 'Other',
+    'contact-email-label': 'Email',
+    'email-placeholder': 'john@company.com',
+    'contact-phone-label': 'Phone (optional)',
+    'phone-placeholder': '+49 ...',
+    'contact-notes-label': 'Notes',
+    'notes-contact-placeholder': 'e.g. Payment always by end of month',
+    
+    // Limits
+    'limits-title': 'Autonomy limits',
+    'limit-add': '+ Add limit',
+    'limit-modal-title': 'Add limit',
+    'limit-action-label': 'Action',
+    'action-placeholder': 'e.g. send_mail, approve_invoice, delete_file',
+    'limit-auto-label': 'Execution',
+    'limit-autonomous': 'Autonomous',
+    'limit-escalate': 'Escalate',
+    'limit-threshold-label': 'Threshold (optional, €)',
+    'threshold-placeholder': 'e.g. 500',
+    'limit-escalate-label': 'Escalate to (email or name)',
+    'escalate-placeholder': 'boss@company.com',
+    'limit-notes-label': 'Notes',
+    'notes-limit-placeholder': 'e.g. Invoices over €500 always need approval',
+    
+    // Footer
+    'btn-reload': '↺ Reload',
+    'btn-save': '💾 Save',
+    
+    // Modal
+    'modal-cancel': 'Cancel',
+    'modal-save': 'Save',
+    
+    // Status
+    'status-loading': 'Loading…',
+    'status-loaded': 'Loaded',
+    'status-saving': 'Saving…',
+    'status-saved': 'Saved ✓',
+    'status-error': 'Error: ',
+    'status-connection-error': 'Connection error',
+    
+    // Empty states
+    'empty-triggers': 'No triggers configured.<br>Triggers connect events with MIRA routes.',
+    'empty-contacts': 'No contacts saved.<br>MIRA uses contacts when classifying emails.',
+    'empty-limits': 'No limits defined.<br>Limits determine when MIRA escalates instead of acting autonomously.',
+    
+    // Badges
+    'badge-autonomous': 'autonomous',
+    'badge-ask': 'ask',
+    'badge-escalate': 'escalate',
+    'badge-boss': 'Boss',
+    'badge-supplier': 'Supplier',
+    'badge-customer': 'Customer',
+    'badge-colleague': 'Colleague',
+    'badge-other': 'Other',
+    
+    // Event labels
+    'event-new_mail': 'New email',
+    'event-new_invoice': 'New invoice',
+    'event-new_order': 'New order',
+    'event-schedule': 'Schedule',
+    'event-file_created': 'New file',
+    'event-custom': 'Custom',
+    
+    // Alerts
+    'alert-route-id': 'Route ID is required',
+    'alert-name': 'Name is required',
+    'alert-action': 'Action is required',
+  }
+};
+
+let currentLang = localStorage.getItem('mira_language') || 'de';
+
+function toggleLanguage() {
+  currentLang = currentLang === 'de' ? 'en' : 'de';
+  localStorage.setItem('mira_language', currentLang);
+  updateUILanguage();
+  renderAll(); // Re-render all dynamic content
+}
+
+function updateUILanguage() {
+  // Update toggle buttons
+  document.querySelectorAll('.lang-option').forEach(el => {
+    if (el.id === 'lang-de') {
+      el.style.background = currentLang === 'de' ? '#6c63ff' : 'transparent';
+      el.style.color = currentLang === 'de' ? 'white' : 'var(--text2)';
+    }
+    if (el.id === 'lang-en') {
+      el.style.background = currentLang === 'en' ? '#6c63ff' : 'transparent';
+      el.style.color = currentLang === 'en' ? 'white' : 'var(--text2)';
+    }
+  });
+
+  // Update all static elements with IDs
+  const elements = [
+    'header-title', 'header-sub', 'tab-context', 'tab-trigger', 'tab-contacts', 'tab-limits',
+    'context-title', 'label-company', 'label-role', 'label-language', 'label-notes',
+    'trigger-title', 'trigger-add', 'contacts-title', 'contact-add', 'limits-title', 'limit-add',
+    'btn-reload', 'btn-save', 'trigger-modal-title', 'contact-modal-title', 'limit-modal-title',
+    'trigger-event-label', 'trigger-condition-label', 'trigger-route-id-label', 'trigger-route-name-label',
+    'trigger-priority-label', 'trigger-auto-label', 'contact-name-label', 'contact-role-label',
+    'contact-email-label', 'contact-phone-label', 'contact-notes-label', 'limit-action-label',
+    'limit-auto-label', 'limit-threshold-label', 'limit-escalate-label', 'limit-notes-label',
+    'modal-cancel', 'modal-save', 'modal-cancel2', 'modal-save2', 'modal-cancel3', 'modal-save3'
+  ];
+
+  elements.forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = i18n[currentLang][id];
+  });
+
+  // Update placeholders
+  document.getElementById('ctx-company').placeholder = i18n[currentLang]['company-placeholder'];
+  document.getElementById('ctx-role').placeholder = i18n[currentLang]['role-placeholder'];
+  document.getElementById('ctx-notes').placeholder = i18n[currentLang]['notes-placeholder'];
+  document.getElementById('t-condition').placeholder = i18n[currentLang]['condition-placeholder'];
+  document.getElementById('t-route-id').placeholder = i18n[currentLang]['route-id-placeholder'];
+  document.getElementById('t-route-name').placeholder = i18n[currentLang]['route-name-placeholder'];
+  document.getElementById('c-name').placeholder = i18n[currentLang]['name-placeholder'];
+  document.getElementById('c-email').placeholder = i18n[currentLang]['email-placeholder'];
+  document.getElementById('c-phone').placeholder = i18n[currentLang]['phone-placeholder'];
+  document.getElementById('c-notes').placeholder = i18n[currentLang]['notes-contact-placeholder'];
+  document.getElementById('l-action').placeholder = i18n[currentLang]['action-placeholder'];
+  document.getElementById('l-threshold').placeholder = i18n[currentLang]['threshold-placeholder'];
+  document.getElementById('l-escalate').placeholder = i18n[currentLang]['escalate-placeholder'];
+  document.getElementById('l-notes').placeholder = i18n[currentLang]['notes-limit-placeholder'];
+
+  // Update select options
+  const eventOptions = ['new_mail', 'new_invoice', 'new_order', 'schedule', 'file_created', 'custom'];
+  eventOptions.forEach(opt => {
+    const el = document.getElementById(`event-${opt}`);
+    if (el) el.textContent = i18n[currentLang][`event-${opt}`];
+  });
+
+  const roleOptions = ['boss', 'supplier', 'customer', 'colleague', 'other'];
+  roleOptions.forEach(opt => {
+    const el = document.getElementById(`role-${opt}`);
+    if (el) el.textContent = i18n[currentLang][`role-${opt}`];
+  });
+
+  // Update auto options
+  document.getElementById('auto-autonomous').textContent = i18n[currentLang]['auto-autonomous'];
+  document.getElementById('auto-ask').textContent = i18n[currentLang]['auto-ask'];
+  document.getElementById('limit-autonomous').textContent = i18n[currentLang]['limit-autonomous'];
+  document.getElementById('limit-escalate').textContent = i18n[currentLang]['limit-escalate'];
+}
 
 // ── State ──────────────────────────────────────────────────────────────────
 
@@ -483,39 +844,40 @@ let kb = {
 // ── Init ───────────────────────────────────────────────────────────────────
 
 async function init() {
+  updateUILanguage();
   await loadKB();
 }
 
 // ── IPC ────────────────────────────────────────────────────────────────────
 
 async function loadKB() {
-  setStatus('Lädt…', '');
+  setStatus(i18n[currentLang]['status-loading'], '');
   try {
     const result = await ipcRenderer.invoke('kb-load');
     if (result.success) {
       kb = result.kb || kb;
       renderAll();
-      setStatus('Geladen', 'ok');
+      setStatus(i18n[currentLang]['status-loaded'], 'ok');
     } else {
-      setStatus('Fehler: ' + (result.error || '?'), 'err');
+      setStatus(i18n[currentLang]['status-error'] + (result.error || '?'), 'err');
     }
   } catch (e) {
-    setStatus('Verbindungsfehler', 'err');
+    setStatus(i18n[currentLang]['status-connection-error'], 'err');
   }
 }
 
 async function saveKB() {
   collectContext();
-  setStatus('Speichert…', '');
+  setStatus(i18n[currentLang]['status-saving'], '');
   try {
     const result = await ipcRenderer.invoke('kb-save', kb);
     if (result.success) {
-      setStatus('Gespeichert ✓', 'ok');
+      setStatus(i18n[currentLang]['status-saved'], 'ok');
     } else {
-      setStatus('Fehler: ' + (result.error || '?'), 'err');
+      setStatus(i18n[currentLang]['status-error'] + (result.error || '?'), 'err');
     }
   } catch (e) {
-    setStatus('Fehler: ' + e.message, 'err');
+    setStatus(i18n[currentLang]['status-error'] + e.message, 'err');
   }
 }
 
@@ -558,24 +920,24 @@ function collectContext() {
 function renderTriggers() {
   const el = document.getElementById('trigger-list');
   if (!kb.triggers.length) {
-    el.innerHTML = '<div class="empty-state">Keine Trigger konfiguriert.<br>Trigger verbinden Events mit MIRA-Routen.</div>';
+    el.innerHTML = `<div class="empty-state">${i18n[currentLang]['empty-triggers']}</div>`;
     return;
   }
   el.innerHTML = kb.triggers.map((t, i) => `
     <div class="card">
       <div class="card-header">
         <div class="card-title">${escHtml(t.route_name || t.route_id || '—')}</div>
-        <span class="badge ${t.auto !== false ? 'badge-auto' : 'badge-manual'}">${t.auto !== false ? 'autonom' : 'fragen'}</span>
+        <span class="badge ${t.auto !== false ? 'badge-auto' : 'badge-manual'}">${t.auto !== false ? i18n[currentLang]['badge-autonomous'] : i18n[currentLang]['badge-ask']}</span>
         <div class="card-actions">
           <button class="btn-icon" onclick="editTrigger(${i})">✎</button>
           <button class="btn-icon del" onclick="deleteTrigger(${i})">✕</button>
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">
-        <b>Event:</b> ${escHtml(eventLabel(t.event))}
-        ${t.condition ? `&nbsp;·&nbsp;<b>Wenn:</b> ${escHtml(t.condition)}` : ''}
-        &nbsp;·&nbsp;<b>Route:</b> <code style="font-size:11px">${escHtml(t.route_id || '—')}</code>
-        &nbsp;·&nbsp;<b>Priorität:</b> ${t.priority ?? 10}
+        <b>${i18n[currentLang]['trigger-event-label'].replace(':', '')}:</b> ${escHtml(eventLabel(t.event))}
+        ${t.condition ? `&nbsp;·&nbsp;<b>${i18n[currentLang]['trigger-condition-label'].replace(':', '')}:</b> ${escHtml(t.condition)}` : ''}
+        &nbsp;·&nbsp;<b>${i18n[currentLang]['trigger-route-id-label'].replace(':', '')}:</b> <code style="font-size:11px">${escHtml(t.route_id || '—')}</code>
+        &nbsp;·&nbsp;<b>${i18n[currentLang]['trigger-priority-label'].replace(':', '')}:</b> ${t.priority ?? 10}
       </div>
     </div>
   `).join('');
@@ -584,14 +946,14 @@ function renderTriggers() {
 function renderContacts() {
   const el = document.getElementById('contact-list');
   if (!kb.contacts.length) {
-    el.innerHTML = '<div class="empty-state">Keine Kontakte gespeichert.<br>MIRA nutzt Kontakte beim Klassifizieren von Mails.</div>';
+    el.innerHTML = `<div class="empty-state">${i18n[currentLang]['empty-contacts']}</div>`;
     return;
   }
   el.innerHTML = kb.contacts.map((c, i) => `
     <div class="card">
       <div class="card-header">
         <div class="card-title">${escHtml(c.name || '—')}</div>
-        <span class="badge badge-${c.role || 'sonstige'}">${escHtml(roldeLabel(c.role))}</span>
+        <span class="badge badge-${c.role || 'sonstige'}">${escHtml(roleLabel(c.role))}</span>
         <div class="card-actions">
           <button class="btn-icon" onclick="editContact(${i})">✎</button>
           <button class="btn-icon del" onclick="deleteContact(${i})">✕</button>
@@ -608,22 +970,22 @@ function renderContacts() {
 function renderLimits() {
   const el = document.getElementById('limit-list');
   if (!kb.limits.length) {
-    el.innerHTML = '<div class="empty-state">Keine Grenzen definiert.<br>Grenzen bestimmen, wann MIRA eskaliert statt selbst handelt.</div>';
+    el.innerHTML = `<div class="empty-state">${i18n[currentLang]['empty-limits']}</div>`;
     return;
   }
   el.innerHTML = kb.limits.map((l, i) => `
     <div class="card">
       <div class="card-header">
         <div class="card-title">${escHtml(l.action || '—')}</div>
-        <span class="badge ${l.autonomous !== false ? 'badge-auto' : 'badge-manual'}">${l.autonomous !== false ? 'autonom' : 'eskalieren'}</span>
+        <span class="badge ${l.autonomous !== false ? 'badge-auto' : 'badge-manual'}">${l.autonomous !== false ? i18n[currentLang]['badge-autonomous'] : i18n[currentLang]['badge-escalate']}</span>
         <div class="card-actions">
           <button class="btn-icon" onclick="editLimit(${i})">✎</button>
           <button class="btn-icon del" onclick="deleteLimit(${i})">✕</button>
         </div>
       </div>
       <div style="font-size:12px;color:var(--text2)">
-        ${l.threshold ? `Max. <b>${escHtml(String(l.threshold))} €</b>&nbsp;·&nbsp;` : ''}
-        ${l.escalate_to ? `Eskalieren an: ${escHtml(l.escalate_to)}&nbsp;·&nbsp;` : ''}
+        ${l.threshold ? `${i18n[currentLang]['limit-threshold-label'].replace(':', '')} <b>${escHtml(String(l.threshold))} €</b>&nbsp;·&nbsp;` : ''}
+        ${l.escalate_to ? `${i18n[currentLang]['limit-escalate-label'].replace(':', '')} ${escHtml(l.escalate_to)}&nbsp;·&nbsp;` : ''}
         ${l.notes ? escHtml(l.notes) : ''}
       </div>
     </div>
@@ -634,7 +996,9 @@ function renderLimits() {
 
 function openTriggerModal(idx) {
   const editing = idx !== undefined;
-  document.getElementById('trigger-modal-title').textContent = editing ? 'Trigger bearbeiten' : 'Trigger hinzufügen';
+  document.getElementById('trigger-modal-title').textContent = editing ? 
+    (currentLang === 'de' ? 'Trigger bearbeiten' : 'Edit trigger') : 
+    i18n[currentLang]['trigger-modal-title'];
   document.getElementById('trigger-edit-idx').value = editing ? String(idx) : '';
   const t = editing ? kb.triggers[idx] : {};
   document.getElementById('t-event').value      = t.event      || 'new_mail';
@@ -660,7 +1024,7 @@ function saveTrigger() {
     priority:   parseInt(document.getElementById('t-priority').value) || 10,
     auto:       document.getElementById('t-auto').value === 'true',
   };
-  if (!t.route_id) return alert('Route-ID ist Pflicht');
+  if (!t.route_id) return alert(i18n[currentLang]['alert-route-id']);
   if (idxStr !== '') kb.triggers[+idxStr] = t;
   else kb.triggers.push(t);
   closeModals();
@@ -671,7 +1035,9 @@ function saveTrigger() {
 
 function openContactModal(idx) {
   const editing = idx !== undefined;
-  document.getElementById('contact-modal-title').textContent = editing ? 'Kontakt bearbeiten' : 'Kontakt hinzufügen';
+  document.getElementById('contact-modal-title').textContent = editing ? 
+    (currentLang === 'de' ? 'Kontakt bearbeiten' : 'Edit contact') : 
+    i18n[currentLang]['contact-modal-title'];
   document.getElementById('contact-edit-idx').value = editing ? String(idx) : '';
   const c = editing ? kb.contacts[idx] : {};
   document.getElementById('c-name').value  = c.name  || '';
@@ -695,7 +1061,7 @@ function saveContact() {
     phone: document.getElementById('c-phone').value.trim(),
     notes: document.getElementById('c-notes').value.trim(),
   };
-  if (!c.name) return alert('Name ist Pflicht');
+  if (!c.name) return alert(i18n[currentLang]['alert-name']);
   if (idxStr !== '') kb.contacts[+idxStr] = c;
   else kb.contacts.push(c);
   closeModals();
@@ -706,7 +1072,9 @@ function saveContact() {
 
 function openLimitModal(idx) {
   const editing = idx !== undefined;
-  document.getElementById('limit-modal-title').textContent = editing ? 'Grenze bearbeiten' : 'Grenze hinzufügen';
+  document.getElementById('limit-modal-title').textContent = editing ? 
+    (currentLang === 'de' ? 'Grenze bearbeiten' : 'Edit limit') : 
+    i18n[currentLang]['limit-modal-title'];
   document.getElementById('limit-edit-idx').value = editing ? String(idx) : '';
   const l = editing ? kb.limits[idx] : {};
   document.getElementById('l-action').value    = l.action    || '';
@@ -730,7 +1098,7 @@ function saveLimit() {
     escalate_to: document.getElementById('l-escalate').value.trim(),
     notes:       document.getElementById('l-notes').value.trim(),
   };
-  if (!l.action) return alert('Aktion ist Pflicht');
+  if (!l.action) return alert(i18n[currentLang]['alert-action']);
   if (idxStr !== '') kb.limits[+idxStr] = l;
   else kb.limits.push(l);
   closeModals();
@@ -764,20 +1132,18 @@ function uid() {
 }
 
 function eventLabel(e) {
-  const map = {
-    new_mail:     'Neue E-Mail',
-    new_invoice:  'Neue Rechnung',
-    new_order:    'Neue Bestellung',
-    schedule:     'Zeitplan',
-    file_created: 'Neue Datei',
-    custom:       'Benutzerdefiniert',
-  };
-  return map[e] || e;
+  return i18n[currentLang][`event-${e}`] || e;
 }
 
-function roldeLabel(r) {
-  const map = { chef: 'Chef', lieferant: 'Lieferant', kunde: 'Kunde', kollege: 'Kollege', sonstige: 'Sonstige' };
-  return map[r] || r || 'Sonstige';
+function roleLabel(r) {
+  const map = {
+    chef: 'badge-boss',
+    lieferant: 'badge-supplier',
+    kunde: 'badge-customer',
+    kollege: 'badge-colleague',
+    sonstige: 'badge-other'
+  };
+  return i18n[currentLang][map[r] || 'badge-other'] || r || i18n[currentLang]['badge-other'];
 }
 
 // ── Boot ───────────────────────────────────────────────────────────────────

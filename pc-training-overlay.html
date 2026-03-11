@@ -53,6 +53,30 @@
     }
     .header:active { cursor: grabbing; }
     
+    /* Language Toggle */
+    .lang-toggle {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      margin-right: 8px;
+      background: #111;
+      border: 1px solid #222;
+      border-radius: 20px;
+      padding: 2px 6px;
+      cursor: pointer;
+    }
+    .lang-option {
+      padding: 2px 8px;
+      border-radius: 16px;
+      font-size: 9px;
+      font-weight: 600;
+      transition: all 0.15s;
+      color: #555;
+    }
+    .lang-option.active {
+      background: #00ff88;
+      color: #000;
+    }
 
     .card {
       background: #111;
@@ -278,8 +302,15 @@
 >
 
   <div class="header">
-    <span class="header-title">⬡ MIRA — PC Vorstellung</span>
-    <span class="header-drag-hint">⠿ ziehen</span>
+    <div style="display:flex; align-items:center; gap:8px;">
+      <span class="header-title">⬡ MIRA — <span id="header-title">PC Vorstellung</span></span>
+      <!-- Language Toggle -->
+      <div class="lang-toggle" onclick="toggleLanguage(event)">
+        <span class="lang-option" id="lang-de" style="background:#00ff88;color:#000">DE</span>
+        <span class="lang-option" id="lang-en">EN</span>
+      </div>
+    </div>
+    <span class="header-drag-hint">⠿ <span id="drag-hint">ziehen</span></span>
   </div>
 
   <div class="card">
@@ -299,20 +330,20 @@
 
       <!-- Method Choice (für Mail/Office) -->
       <div class="method-choice" id="method-choice" style="display:none">
-        <button class="method-btn" id="method-app" onclick="selectMethod('app')">📱 Als App im Dock</button>
-        <button class="method-btn" id="method-url" onclick="selectMethod('url')">🌐 Über den Browser</button>
+        <button class="method-btn" id="method-app" onclick="selectMethod('app')"><span id="method-app-text">📱 Als App im Dock</span></button>
+        <button class="method-btn" id="method-url" onclick="selectMethod('url')"><span id="method-url-text">🌐 Über den Browser</span></button>
       </div>
 
       <!-- URL Input -->
       <div class="url-input-wrap" id="url-input-wrap">
-        <input class="url-input" id="url-input" type="text" placeholder="z.B. outlook.com oder mail.google.com" />
+        <input class="url-input" id="url-input" type="text" placeholder="" />
       </div>
 
       <!-- Click Zone -->
       <div class="click-zone" id="click-zone">
         <div class="click-dot"></div>
         <div>
-          <div class="click-text">Maus-Position</div>
+          <div class="click-text" id="click-text">Maus-Position</div>
           <div class="click-coords" id="click-coords">[—, —]</div>
         </div>
       </div>
@@ -324,31 +355,31 @@
           <div class="captured-label" id="captured-label">Position gespeichert</div>
           <div class="captured-pos" id="captured-pos">[—, —]</div>
         </div>
-        <button class="btn-next" onclick="nextQuestion()">Weiter →</button>
+        <button class="btn-next" onclick="nextQuestion()"><span id="next-btn">Weiter</span> →</button>
       </div>
 
       <!-- Action Row -->
       <div class="action-row" id="action-row">
         <button class="btn btn-capture" id="btn-capture" onclick="capturePosition()">
-          📍 Position einfrieren (Space)
+          <span id="capture-btn">📍 Position einfrieren</span> (Space)
         </button>
-        <button class="btn btn-skip" onclick="skipQuestion()">Überspringen</button>
+        <button class="btn btn-skip" onclick="skipQuestion()"><span id="skip-btn">Überspringen</span></button>
       </div>
     </div>
 
     <!-- Done State -->
     <div class="done-state" id="done-state">
       <div class="done-icon">✦</div>
-      <div class="done-title">MIRA kennt deinen PC!</div>
+      <div class="done-title" id="done-title">MIRA kennt deinen PC!</div>
       <div class="done-sub" id="done-sub">0 Elemente gespeichert</div>
     </div>
   </div>
 
   <div class="counter" id="counter">1 / 20</div>
   <div style="display:flex;gap:16px;align-items:center">
-    <div class="cancel" onclick="goBack()">← Zurück</div>
-    <div class="cancel" onclick="saveAndClose()" style="color:#00ff8880">💾 Speichern & Beenden</div>
-    <div class="cancel" onclick="cancelTraining()">Abbrechen</div>
+    <div class="cancel" onclick="goBack()"><span id="back-btn">← Zurück</span></div>
+    <div class="cancel" onclick="saveAndClose()" style="color:#00ff8880"><span id="save-btn">💾 Speichern & Beenden</span></div>
+    <div class="cancel" onclick="cancelTraining()"><span id="cancel-btn">Abbrechen</span></div>
   </div>
 
 </div><!-- #panel -->
@@ -356,60 +387,315 @@
   <script>
     const { ipcRenderer } = require('electron');
 
+    // ====================================
+    // INTERNATIONALIZATION (DE/EN)
+    // ====================================
+
+    const i18n = {
+      de: {
+        'header-title': 'PC Vorstellung',
+        'drag-hint': 'ziehen',
+        'method-app-text': '📱 Als App im Dock',
+        'method-url-text': '🌐 Über den Browser',
+        'click-text': 'Maus-Position',
+        'capture-btn': '📍 Position einfrieren',
+        'skip-btn': 'Überspringen',
+        'next-btn': 'Weiter',
+        'back-btn': '← Zurück',
+        'save-btn': '💾 Speichern & Beenden',
+        'cancel-btn': 'Abbrechen',
+        'captured-label': 'Position gespeichert',
+        'done-title': 'MIRA kennt deinen PC!',
+        'done-sub': '{count} Elemente gespeichert',
+        
+        // Questions
+        'q-browser': 'Wo ist dein Browser?',
+        'q-browser-sub': 'Klick auf das Browser-Symbol im Dock oder der Taskleiste',
+        'q-url_leiste': 'Wo ist die URL-Leiste?',
+        'q-url_leiste-sub': 'Öffne den Browser und klick in die Adresszeile oben',
+        'q-neuer_tab': 'Wo öffnest du einen neuen Tab?',
+        'q-neuer_tab-sub': 'Klick auf das + Symbol oder zeig wo du einen neuen Tab öffnest',
+        'q-zurueck_btn': 'Wo ist der Zurück-Button im Browser?',
+        'q-zurueck_btn-sub': 'Klick auf den Pfeil links oben im Browser',
+        'q-google_suche': 'Wo ist die Google Suchleiste?',
+        'q-google_suche-sub': 'Öffne google.com und klick auf das Suchfeld',
+        'q-youtube_suche': 'Wo ist die YouTube Suchleiste?',
+        'q-youtube_suche-sub': 'Öffne youtube.com und klick auf das Suchfeld',
+        'q-erstes_ergebnis': 'Wo ist das erste Suchergebnis?',
+        'q-erstes_ergebnis-sub': 'Klick auf den ersten Treffer einer Google Suche',
+        'q-erstes_video': 'Wo ist das erste YouTube Video?',
+        'q-erstes_video-sub': 'Klick auf das erste Video nach einer YouTube Suche',
+        'q-mail_öffnen': 'Wie öffnest du deine Mails?',
+        'q-mail_öffnen-sub': 'Als App (Outlook, Apple Mail) oder über den Browser?',
+        'q-posteingang': 'Wo ist dein Posteingang?',
+        'q-posteingang-sub': 'Klick auf Posteingang / Inbox in deinem Mail-Programm',
+        'q-erste_mail': 'Wo ist die erste Mail in der Liste?',
+        'q-erste_mail-sub': 'Klick auf die oberste Mail im Posteingang',
+        'q-neue_mail': 'Wo ist "Neue Mail schreiben"?',
+        'q-neue_mail-sub': 'Klick auf Verfassen / Neue Mail / Compose',
+        'q-mail_empfänger': 'Wo ist das Empfänger-Feld?',
+        'q-mail_empfänger-sub': 'Klick in das An: / To: Feld einer neuen Mail',
+        'q-mail_betreff': 'Wo ist das Betreff-Feld?',
+        'q-mail_betreff-sub': 'Klick in das Betreff / Subject Feld',
+        'q-mail_inhalt': 'Wo schreibst du den Mail-Inhalt?',
+        'q-mail_inhalt-sub': 'Klick in den Textbereich der Mail',
+        'q-mail_senden': 'Wo ist der Senden-Button?',
+        'q-mail_senden-sub': 'Klick auf Senden / Send in einer geöffneten Mail',
+        'q-mail_löschen': 'Wo ist der Löschen-Button?',
+        'q-mail_löschen-sub': 'Klick auf Löschen / Papierkorb in deinem Mail-Programm',
+        'q-mail_anhang': 'Wo hängst du eine Datei an?',
+        'q-mail_anhang-sub': 'Klick auf das Büroklammer / Anhang Symbol',
+        'q-finder': 'Wo ist dein Datei-Browser?',
+        'q-finder-sub': 'Klick auf Finder (Mac) oder Explorer (Windows) im Dock',
+        'q-desktop': 'Wo ist dein Desktop?',
+        'q-desktop-sub': 'Klick auf eine freie Stelle auf dem Desktop',
+        'q-downloads': 'Wo ist dein Downloads-Ordner?',
+        'q-downloads-sub': 'Klick auf Downloads im Dock, Finder oder Explorer',
+        'q-dokumente': 'Wo sind deine Dokumente?',
+        'q-dokumente-sub': 'Klick auf den Dokumente-Ordner',
+        'q-excel_öffnen': 'Wie öffnest du Excel oder Tabellen?',
+        'q-excel_öffnen-sub': 'Als App (Excel, Numbers) oder über den Browser (Google Sheets)?',
+        'q-word_öffnen': 'Wie öffnest du Word oder Dokumente?',
+        'q-word_öffnen-sub': 'Als App (Word, Pages) oder über den Browser (Google Docs)?',
+        'q-pdf_öffnen': 'Womit öffnest du PDFs?',
+        'q-pdf_öffnen-sub': 'Klick auf dein PDF-Programm (Preview, Acrobat, etc.)',
+        'q-speichern_dialog': 'Wo ist "Speichern unter"?',
+        'q-speichern_dialog-sub': 'Öffne den Speichern-Dialog (CMD+S oder STRG+S) und klick Speichern',
+        'q-teams_öffnen': 'Nutzt du Microsoft Teams?',
+        'q-teams_öffnen-sub': 'Als App oder über den Browser? Überspringen wenn nicht genutzt',
+        'q-zoom_öffnen': 'Nutzt du Zoom?',
+        'q-zoom_öffnen-sub': 'Als App oder über den Browser? Überspringen wenn nicht genutzt',
+        'q-whatsapp_öffnen': 'Nutzt du WhatsApp?',
+        'q-whatsapp_öffnen-sub': 'Als App oder über web.whatsapp.com? Überspringen wenn nicht genutzt',
+        'q-datev_öffnen': 'Nutzt du DATEV?',
+        'q-datev_öffnen-sub': 'Als App oder über den Browser? Überspringen wenn nicht genutzt',
+        'q-lexware_öffnen': 'Nutzt du Lexware oder ähnliches?',
+        'q-lexware_öffnen-sub': 'Als App oder über den Browser? Überspringen wenn nicht genutzt',
+        'q-onedrive_öffnen': 'Nutzt du OneDrive oder SharePoint?',
+        'q-onedrive_öffnen-sub': 'Als App oder über den Browser? Überspringen wenn nicht genutzt',
+        'q-drucker': 'Wo ist der Drucken-Button?',
+        'q-drucker-sub': 'Öffne den Drucken-Dialog (CMD+P) und klick auf Drucken',
+        'q-einstellungen': 'Wo sind die Systemeinstellungen?',
+        'q-einstellungen-sub': 'Klick auf Einstellungen / System Preferences',
+        'q-kalender': 'Wie öffnest du deinen Kalender?',
+        'q-kalender-sub': 'Als App (Kalender, Outlook) oder über den Browser?',
+
+        // Categories
+        'cat-BROWSER': 'BROWSER',
+        'cat-SUCHE': 'SUCHE',
+        'cat-MAIL': 'MAIL',
+        'cat-DATEIEN': 'DATEIEN',
+        'cat-OFFICE': 'OFFICE',
+        'cat-KOMMUNIKATION': 'KOMMUNIKATION',
+        'cat-BUSINESS': 'BUSINESS',
+        'cat-SYSTEM': 'SYSTEM',
+      },
+      en: {
+        'header-title': 'PC Introduction',
+        'drag-hint': 'drag',
+        'method-app-text': '📱 As app in dock',
+        'method-url-text': '🌐 Via browser',
+        'click-text': 'Mouse position',
+        'capture-btn': '📍 Freeze position',
+        'skip-btn': 'Skip',
+        'next-btn': 'Next',
+        'back-btn': '← Back',
+        'save-btn': '💾 Save & Close',
+        'cancel-btn': 'Cancel',
+        'captured-label': 'Position saved',
+        'done-title': 'MIRA knows your PC!',
+        'done-sub': '{count} items saved',
+        
+        // Questions
+        'q-browser': 'Where is your browser?',
+        'q-browser-sub': 'Click on the browser icon in the dock or taskbar',
+        'q-url_leiste': 'Where is the URL bar?',
+        'q-url_leiste-sub': 'Open the browser and click in the address bar',
+        'q-neuer_tab': 'Where do you open a new tab?',
+        'q-neuer_tab-sub': 'Click on the + symbol or show where you open a new tab',
+        'q-zurueck_btn': 'Where is the back button?',
+        'q-zurueck_btn-sub': 'Click on the arrow in the top left of the browser',
+        'q-google_suche': 'Where is the Google search bar?',
+        'q-google_suche-sub': 'Open google.com and click on the search field',
+        'q-youtube_suche': 'Where is the YouTube search bar?',
+        'q-youtube_suche-sub': 'Open youtube.com and click on the search field',
+        'q-erstes_ergebnis': 'Where is the first search result?',
+        'q-erstes_ergebnis-sub': 'Click on the first result of a Google search',
+        'q-erstes_video': 'Where is the first YouTube video?',
+        'q-erstes_video-sub': 'Click on the first video after a YouTube search',
+        'q-mail_öffnen': 'How do you open your emails?',
+        'q-mail_öffnen-sub': 'As app (Outlook, Apple Mail) or via browser?',
+        'q-posteingang': 'Where is your inbox?',
+        'q-posteingang-sub': 'Click on Inbox in your mail app',
+        'q-erste_mail': 'Where is the first email in the list?',
+        'q-erste_mail-sub': 'Click on the top email in your inbox',
+        'q-neue_mail': 'Where is "New email"?',
+        'q-neue_mail-sub': 'Click on Compose / New email',
+        'q-mail_empfänger': 'Where is the recipient field?',
+        'q-mail_empfänger-sub': 'Click in the To: field of a new email',
+        'q-mail_betreff': 'Where is the subject field?',
+        'q-mail_betreff-sub': 'Click in the Subject field',
+        'q-mail_inhalt': 'Where do you write the email content?',
+        'q-mail_inhalt-sub': 'Click in the message body area',
+        'q-mail_senden': 'Where is the send button?',
+        'q-mail_senden-sub': 'Click on Send in an open email',
+        'q-mail_löschen': 'Where is the delete button?',
+        'q-mail_löschen-sub': 'Click on Delete / Trash in your mail app',
+        'q-mail_anhang': 'Where do you attach a file?',
+        'q-mail_anhang-sub': 'Click on the paperclip / attachment icon',
+        'q-finder': 'Where is your file browser?',
+        'q-finder-sub': 'Click on Finder (Mac) or Explorer (Windows) in the dock',
+        'q-desktop': 'Where is your desktop?',
+        'q-desktop-sub': 'Click on an empty spot on the desktop',
+        'q-downloads': 'Where is your downloads folder?',
+        'q-downloads-sub': 'Click on Downloads in dock, Finder or Explorer',
+        'q-dokumente': 'Where are your documents?',
+        'q-dokumente-sub': 'Click on the Documents folder',
+        'q-excel_öffnen': 'How do you open Excel or spreadsheets?',
+        'q-excel_öffnen-sub': 'As app (Excel, Numbers) or via browser (Google Sheets)?',
+        'q-word_öffnen': 'How do you open Word or documents?',
+        'q-word_öffnen-sub': 'As app (Word, Pages) or via browser (Google Docs)?',
+        'q-pdf_öffnen': 'What do you use to open PDFs?',
+        'q-pdf_öffnen-sub': 'Click on your PDF app (Preview, Acrobat, etc.)',
+        'q-speichern_dialog': 'Where is "Save as"?',
+        'q-speichern_dialog-sub': 'Open the save dialog (CMD+S or CTRL+S) and click Save',
+        'q-teams_öffnen': 'Do you use Microsoft Teams?',
+        'q-teams_öffnen-sub': 'As app or via browser? Skip if not used',
+        'q-zoom_öffnen': 'Do you use Zoom?',
+        'q-zoom_öffnen-sub': 'As app or via browser? Skip if not used',
+        'q-whatsapp_öffnen': 'Do you use WhatsApp?',
+        'q-whatsapp_öffnen-sub': 'As app or via web.whatsapp.com? Skip if not used',
+        'q-datev_öffnen': 'Do you use DATEV?',
+        'q-datev_öffnen-sub': 'As app or via browser? Skip if not used',
+        'q-lexware_öffnen': 'Do you use Lexware or similar?',
+        'q-lexware_öffnen-sub': 'As app or via browser? Skip if not used',
+        'q-onedrive_öffnen': 'Do you use OneDrive or SharePoint?',
+        'q-onedrive_öffnen-sub': 'As app or via browser? Skip if not used',
+        'q-drucker': 'Where is the print button?',
+        'q-drucker-sub': 'Open the print dialog (CMD+P) and click Print',
+        'q-einstellungen': 'Where are the system settings?',
+        'q-einstellungen-sub': 'Click on Settings / System Preferences',
+        'q-kalender': 'How do you open your calendar?',
+        'q-kalender-sub': 'As app (Calendar, Outlook) or via browser?',
+
+        // Categories
+        'cat-BROWSER': 'BROWSER',
+        'cat-SUCHE': 'SEARCH',
+        'cat-MAIL': 'MAIL',
+        'cat-DATEIEN': 'FILES',
+        'cat-OFFICE': 'OFFICE',
+        'cat-KOMMUNIKATION': 'COMMUNICATION',
+        'cat-BUSINESS': 'BUSINESS',
+        'cat-SYSTEM': 'SYSTEM',
+      }
+    };
+
+    let currentLang = localStorage.getItem('mira_language') || 'de';
+
+    function toggleLanguage(event) {
+      if (event) event.stopPropagation();
+      currentLang = currentLang === 'de' ? 'en' : 'de';
+      localStorage.setItem('mira_language', currentLang);
+      updateUILanguage();
+      // Refresh current question with new language
+      if (questions[currentIndex]) {
+        updateQuestionText(currentIndex);
+      }
+    }
+
+    function updateUILanguage() {
+      // Update toggle buttons
+      document.querySelectorAll('.lang-option').forEach(el => {
+        if (el.id === 'lang-de') {
+          el.style.background = currentLang === 'de' ? '#00ff88' : 'transparent';
+          el.style.color = currentLang === 'de' ? '#000' : '#555';
+        }
+        if (el.id === 'lang-en') {
+          el.style.background = currentLang === 'en' ? '#00ff88' : 'transparent';
+          el.style.color = currentLang === 'en' ? '#000' : '#555';
+        }
+      });
+
+      // Update all static text elements
+      const elements = [
+        'header-title', 'drag-hint', 'method-app-text', 'method-url-text',
+        'click-text', 'capture-btn', 'skip-btn', 'next-btn', 'back-btn',
+        'save-btn', 'cancel-btn', 'captured-label', 'done-title'
+      ];
+
+      elements.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.textContent = i18n[currentLang][id];
+      });
+
+      // Update placeholder
+      const urlInput = document.getElementById('url-input');
+      if (urlInput) {
+        urlInput.placeholder = currentLang === 'de' ? 'z.B. outlook.com oder mail.google.com' : 'e.g. outlook.com or mail.google.com';
+      }
+    }
+
+    function updateQuestionText(index) {
+      const q = questions[index];
+      document.getElementById('question-text').textContent = i18n[currentLang][`q-${q.id}`];
+      document.getElementById('question-sub').textContent = i18n[currentLang][`q-${q.id}-sub`];
+      document.getElementById('category-label').textContent = i18n[currentLang][`cat-${q.category}`];
+    }
+
     // ═══════════════════════════════════════
     // FRAGEN DEFINIEREN
     // ═══════════════════════════════════════
     const questions = [
       // ── BROWSER ──
-      { id: 'browser',           category: 'BROWSER',     method: 'click',  question: 'Wo ist dein Browser?',                  sub: 'Klick auf das Browser-Symbol im Dock oder der Taskleiste' },
-      { id: 'url_leiste',        category: 'BROWSER',     method: 'click',  question: 'Wo ist die URL-Leiste?',                sub: 'Öffne den Browser und klick in die Adresszeile oben' },
-      { id: 'neuer_tab',         category: 'BROWSER',     method: 'click',  question: 'Wo öffnest du einen neuen Tab?',        sub: 'Klick auf das + Symbol oder zeig wo du einen neuen Tab öffnest' },
-      { id: 'zurueck_btn',       category: 'BROWSER',     method: 'click',  question: 'Wo ist der Zurück-Button im Browser?',  sub: 'Klick auf den Pfeil links oben im Browser' },
+      { id: 'browser',           category: 'BROWSER',     method: 'click',  question: '', sub: '' },
+      { id: 'url_leiste',        category: 'BROWSER',     method: 'click',  question: '', sub: '' },
+      { id: 'neuer_tab',         category: 'BROWSER',     method: 'click',  question: '', sub: '' },
+      { id: 'zurueck_btn',       category: 'BROWSER',     method: 'click',  question: '', sub: '' },
 
       // ── SUCHE ──
-      { id: 'google_suche',      category: 'SUCHE',       method: 'click',  question: 'Wo ist die Google Suchleiste?',         sub: 'Öffne google.com und klick auf das Suchfeld' },
-      { id: 'youtube_suche',     category: 'SUCHE',       method: 'click',  question: 'Wo ist die YouTube Suchleiste?',        sub: 'Öffne youtube.com und klick auf das Suchfeld' },
-      { id: 'erstes_ergebnis',   category: 'SUCHE',       method: 'click',  question: 'Wo ist das erste Suchergebnis?',        sub: 'Klick auf den ersten Treffer einer Google Suche' },
-      { id: 'erstes_video',      category: 'SUCHE',       method: 'click',  question: 'Wo ist das erste YouTube Video?',       sub: 'Klick auf das erste Video nach einer YouTube Suche' },
+      { id: 'google_suche',      category: 'SUCHE',       method: 'click',  question: '', sub: '' },
+      { id: 'youtube_suche',     category: 'SUCHE',       method: 'click',  question: '', sub: '' },
+      { id: 'erstes_ergebnis',   category: 'SUCHE',       method: 'click',  question: '', sub: '' },
+      { id: 'erstes_video',      category: 'SUCHE',       method: 'click',  question: '', sub: '' },
 
       // ── MAIL ──
-      { id: 'mail_öffnen',       category: 'MAIL',        method: 'choice', question: 'Wie öffnest du deine Mails?',           sub: 'Als App (Outlook, Apple Mail) oder über den Browser?' },
-      { id: 'posteingang',       category: 'MAIL',        method: 'click',  question: 'Wo ist dein Posteingang?',              sub: 'Klick auf Posteingang / Inbox in deinem Mail-Programm' },
-      { id: 'erste_mail',        category: 'MAIL',        method: 'click',  question: 'Wo ist die erste Mail in der Liste?',   sub: 'Klick auf die oberste Mail im Posteingang' },
-      { id: 'neue_mail',         category: 'MAIL',        method: 'click',  question: 'Wo ist "Neue Mail schreiben"?',         sub: 'Klick auf Verfassen / Neue Mail / Compose' },
-      { id: 'mail_empfänger',    category: 'MAIL',        method: 'click',  question: 'Wo ist das Empfänger-Feld?',            sub: 'Klick in das An: / To: Feld einer neuen Mail' },
-      { id: 'mail_betreff',      category: 'MAIL',        method: 'click',  question: 'Wo ist das Betreff-Feld?',              sub: 'Klick in das Betreff / Subject Feld' },
-      { id: 'mail_inhalt',       category: 'MAIL',        method: 'click',  question: 'Wo schreibst du den Mail-Inhalt?',      sub: 'Klick in den Textbereich der Mail' },
-      { id: 'mail_senden',       category: 'MAIL',        method: 'click',  question: 'Wo ist der Senden-Button?',             sub: 'Klick auf Senden / Send in einer geöffneten Mail' },
-      { id: 'mail_löschen',      category: 'MAIL',        method: 'click',  question: 'Wo ist der Löschen-Button?',            sub: 'Klick auf Löschen / Papierkorb in deinem Mail-Programm' },
-      { id: 'mail_anhang',       category: 'MAIL',        method: 'click',  question: 'Wo hängst du eine Datei an?',           sub: 'Klick auf das Büroklammer / Anhang Symbol' },
+      { id: 'mail_öffnen',       category: 'MAIL',        method: 'choice', question: '', sub: '' },
+      { id: 'posteingang',       category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'erste_mail',        category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'neue_mail',         category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'mail_empfänger',    category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'mail_betreff',      category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'mail_inhalt',       category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'mail_senden',       category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'mail_löschen',      category: 'MAIL',        method: 'click',  question: '', sub: '' },
+      { id: 'mail_anhang',       category: 'MAIL',        method: 'click',  question: '', sub: '' },
 
       // ── DATEIEN ──
-      { id: 'finder',            category: 'DATEIEN',     method: 'click',  question: 'Wo ist dein Datei-Browser?',            sub: 'Klick auf Finder (Mac) oder Explorer (Windows) im Dock' },
-      { id: 'desktop',           category: 'DATEIEN',     method: 'click',  question: 'Wo ist dein Desktop?',                  sub: 'Klick auf eine freie Stelle auf dem Desktop' },
-      { id: 'downloads',         category: 'DATEIEN',     method: 'click',  question: 'Wo ist dein Downloads-Ordner?',         sub: 'Klick auf Downloads im Dock, Finder oder Explorer' },
-      { id: 'dokumente',         category: 'DATEIEN',     method: 'click',  question: 'Wo sind deine Dokumente?',              sub: 'Klick auf den Dokumente-Ordner' },
+      { id: 'finder',            category: 'DATEIEN',     method: 'click',  question: '', sub: '' },
+      { id: 'desktop',           category: 'DATEIEN',     method: 'click',  question: '', sub: '' },
+      { id: 'downloads',         category: 'DATEIEN',     method: 'click',  question: '', sub: '' },
+      { id: 'dokumente',         category: 'DATEIEN',     method: 'click',  question: '', sub: '' },
 
       // ── OFFICE ──
-      { id: 'excel_öffnen',      category: 'OFFICE',      method: 'choice', question: 'Wie öffnest du Excel oder Tabellen?',   sub: 'Als App (Excel, Numbers) oder über den Browser (Google Sheets)?' },
-      { id: 'word_öffnen',       category: 'OFFICE',      method: 'choice', question: 'Wie öffnest du Word oder Dokumente?',   sub: 'Als App (Word, Pages) oder über den Browser (Google Docs)?' },
-      { id: 'pdf_öffnen',        category: 'OFFICE',      method: 'click',  question: 'Womit öffnest du PDFs?',                sub: 'Klick auf dein PDF-Programm (Preview, Acrobat, etc.)' },
-      { id: 'speichern_dialog',  category: 'OFFICE',      method: 'click',  question: 'Wo ist "Speichern unter"?',             sub: 'Öffne den Speichern-Dialog (CMD+S oder STRG+S) und klick Speichern' },
+      { id: 'excel_öffnen',      category: 'OFFICE',      method: 'choice', question: '', sub: '' },
+      { id: 'word_öffnen',       category: 'OFFICE',      method: 'choice', question: '', sub: '' },
+      { id: 'pdf_öffnen',        category: 'OFFICE',      method: 'click',  question: '', sub: '' },
+      { id: 'speichern_dialog',  category: 'OFFICE',      method: 'click',  question: '', sub: '' },
 
       // ── KOMMUNIKATION ──
-      { id: 'teams_öffnen',      category: 'KOMMUNIKATION', method: 'choice', question: 'Nutzt du Microsoft Teams?',           sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
-      { id: 'zoom_öffnen',       category: 'KOMMUNIKATION', method: 'choice', question: 'Nutzt du Zoom?',                     sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
-      { id: 'whatsapp_öffnen',   category: 'KOMMUNIKATION', method: 'choice', question: 'Nutzt du WhatsApp?',                 sub: 'Als App oder über web.whatsapp.com? Überspringen wenn nicht genutzt' },
+      { id: 'teams_öffnen',      category: 'KOMMUNIKATION', method: 'choice', question: '', sub: '' },
+      { id: 'zoom_öffnen',       category: 'KOMMUNIKATION', method: 'choice', question: '', sub: '' },
+      { id: 'whatsapp_öffnen',   category: 'KOMMUNIKATION', method: 'choice', question: '', sub: '' },
 
-      // ── BUCHHALTUNG / BUSINESS ──
-      { id: 'datev_öffnen',      category: 'BUSINESS',    method: 'choice', question: 'Nutzt du DATEV?',                      sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
-      { id: 'lexware_öffnen',    category: 'BUSINESS',    method: 'choice', question: 'Nutzt du Lexware oder ähnliches?',     sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
-      { id: 'onedrive_öffnen',   category: 'BUSINESS',    method: 'choice', question: 'Nutzt du OneDrive oder SharePoint?',   sub: 'Als App oder über den Browser? Überspringen wenn nicht genutzt' },
+      // ── BUSINESS ──
+      { id: 'datev_öffnen',      category: 'BUSINESS',    method: 'choice', question: '', sub: '' },
+      { id: 'lexware_öffnen',    category: 'BUSINESS',    method: 'choice', question: '', sub: '' },
+      { id: 'onedrive_öffnen',   category: 'BUSINESS',    method: 'choice', question: '', sub: '' },
 
       // ── SYSTEM ──
-      { id: 'drucker',           category: 'SYSTEM',      method: 'click',  question: 'Wo ist der Drucken-Button?',           sub: 'Öffne den Drucken-Dialog (CMD+P) und klick auf Drucken' },
-      { id: 'einstellungen',     category: 'SYSTEM',      method: 'click',  question: 'Wo sind die Systemeinstellungen?',     sub: 'Klick auf Einstellungen / System Preferences' },
-      { id: 'kalender',          category: 'SYSTEM',      method: 'choice', question: 'Wie öffnest du deinen Kalender?',      sub: 'Als App (Kalender, Outlook) oder über den Browser?' },
+      { id: 'drucker',           category: 'SYSTEM',      method: 'click',  question: '', sub: '' },
+      { id: 'einstellungen',     category: 'SYSTEM',      method: 'click',  question: '', sub: '' },
+      { id: 'kalender',          category: 'SYSTEM',      method: 'choice', question: '', sub: '' },
     ];
 
     let currentIndex = 0;
@@ -451,6 +737,7 @@
     // INIT
     // ═══════════════════════════════════════
     window.addEventListener('DOMContentLoaded', () => {
+      updateUILanguage();
       // Zentrieren
       panel.style.left = Math.max(0, (window.innerWidth  - panel.offsetWidth)  / 2) + 'px';
       panel.style.top  = Math.max(0, (window.innerHeight - panel.offsetHeight) / 2) + 'px';
@@ -488,15 +775,15 @@
       capturedPos = null;
       frozenPos = null;
       currentMethod = null;
+      
       // Button zurücksetzen
       const btnCapture = document.getElementById('btn-capture');
-      btnCapture.textContent = '📍 Position einfrieren (Space)';
+      btnCapture.textContent = i18n[currentLang]['capture-btn'] + ' (Space)';
       btnCapture.onclick = capturePosition;
 
       // Reset UI
-      document.getElementById('question-text').textContent = q.question;
-      document.getElementById('question-sub').textContent = q.sub;
-      document.getElementById('category-label').textContent = q.category;
+      updateQuestionText(index);
+      
       document.getElementById('captured-state').classList.remove('visible');
       document.getElementById('action-row').style.display = 'flex';
 
@@ -543,12 +830,12 @@
         urlWrap.classList.add('visible');
         clickZone.classList.remove('visible');
         btnCapture.disabled = false;
-        btnCapture.textContent = '💾 URL speichern';
+        btnCapture.textContent = '💾 ' + (currentLang === 'de' ? 'URL speichern' : 'Save URL');
       } else {
         urlWrap.classList.remove('visible');
         clickZone.classList.add('visible');
         btnCapture.disabled = false;
-        btnCapture.textContent = '📍 Position aufnehmen';
+        btnCapture.textContent = i18n[currentLang]['capture-btn'] + ' (Space)';
       }
     }
 
@@ -560,7 +847,7 @@
       frozenPos = pos;
       document.getElementById('click-coords').textContent = `✓ [${pos.x}, ${pos.y}]`;
       document.getElementById('click-zone').style.borderColor = '#00ff8840';
-      document.getElementById('btn-capture').textContent = '💾 Speichern';
+      document.getElementById('btn-capture').textContent = '💾 ' + (currentLang === 'de' ? 'Speichern' : 'Save');
       document.getElementById('btn-capture').onclick = savePosition;
     }
 
@@ -579,7 +866,7 @@
           position_x: null,
           position_y: null
         });
-        showCaptured(`URL: ${url}`, null);
+        showCaptured(`${currentLang === 'de' ? 'URL' : 'URL'}: ${url}`, null);
         savedCount++;
         return;
       }
@@ -598,7 +885,7 @@
         position_x: frozenPos.x,
         position_y: frozenPos.y
       });
-      showCaptured(`Gespeichert`, `[${frozenPos.x}, ${frozenPos.y}]`);
+      showCaptured(currentLang === 'de' ? 'Gespeichert' : 'Saved', `[${frozenPos.x}, ${frozenPos.y}]`);
       frozenPos = null;
       savedCount++;
     }
@@ -634,7 +921,7 @@
       document.getElementById('main-state').style.display = 'none';
       document.getElementById('done-state').classList.add('visible');
       document.getElementById('counter').textContent = '';
-      document.getElementById('done-sub').textContent = `${savedCount} Elemente gespeichert`;
+      document.getElementById('done-sub').textContent = i18n[currentLang]['done-sub'].replace('{count}', savedCount);
       setTimeout(() => window.close(), 3000);
     }
 
